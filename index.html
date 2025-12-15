@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BadgeLife</title>
+  <link rel="stylesheet" href="./styles.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  <script type="module" src="./app.js" defer></script>
+</head>
+<body>
+  <div class="page">
+    <section id="auth-view" class="panel">
+      <div class="hero">
+        <img src="./icons/badgelife-logo.svg" alt="BadgeLife" class="logo">
+        <h1>BadgeLife</h1>
+        <p>Gagne des badgelife et partage tes succès avec tes potes.</p>
+      </div>
+      <div class="card">
+        <div class="tabs small">
+          <button class="tab-button active" data-auth-tab="login">Connexion</button>
+          <button class="tab-button" data-auth-tab="signup">Créer un compte</button>
+        </div>
+        <form id="login-form" class="auth-form" autocomplete="on">
+          <label for="login-username">Pseudo</label>
+          <input id="login-username" type="text" required placeholder="Ex: LunaCoder">
+          <label for="login-password">Mot de passe</label>
+          <input id="login-password" type="password" required placeholder="••••••••">
+          <button type="submit" class="primary">Se connecter</button>
+        </form>
+        <form id="signup-form" class="auth-form hidden" autocomplete="on">
+          <label for="signup-username">Pseudo (affiché publiquement)</label>
+          <input id="signup-username" type="text" minlength="3" required placeholder="Ex: LunaCoder">
+          <label for="signup-password">Mot de passe</label>
+          <input id="signup-password" type="password" minlength="6" required placeholder="••••••••">
+          <button type="submit" class="primary">Créer mon compte</button>
+        </form>
+        <p id="auth-message" class="message"></p>
+      </div>
+    </section>
+
+    <section id="app-view" class="panel hidden">
+      <header class="topbar">
+        <div class="brand">
+          <img id="avatar-img" src="./icons/badgelife-logo.svg" alt="Avatar" class="logo small">
+          <div>
+            <p class="muted">Connecté</p>
+            <strong id="profile-username">Utilisateur</strong>
+          </div>
+        </div>
+        <div class="user-stats">
+          <div class="badge-count">
+            <span id="badge-count">0</span>
+            <small>badges</small>
+          </div>
+          <div class="mystery-count">
+            <span id="mystery-count">0</span>
+            <small>niv. mystère</small>
+          </div>
+          <button id="edit-profile-btn" class="ghost">Modifier mon profil</button>
+          <button id="logout-btn" class="ghost">Se déconnecter</button>
+        </div>
+      </header>
+
+      <section id="profile-panel" class="card hidden">
+        <h3>Profil</h3>
+        <form id="profile-form" class="auth-form">
+          <label for="profile-name">Ton pseudo</label>
+          <input id="profile-name" type="text" readonly>
+
+          <label for="profile-password">Nouveau mot de passe</label>
+          <input id="profile-password" type="password" minlength="6" placeholder="Laisse vide pour ne pas changer">
+
+          <label for="profile-avatar">Photo de profil</label>
+          <input id="profile-avatar" type="file" accept="image/*">
+          <small class="muted">Formats image, taille conseillée &lt; 3 Mo.</small>
+          <div class="avatar-preview">
+            <img id="avatar-preview-img" src="./icons/badgelife-logo.svg" alt="Aperçu" class="logo small">
+          </div>
+
+          <button type="submit" class="primary">Enregistrer</button>
+          <p id="profile-message" class="message"></p>
+        </form>
+      </section>
+
+      <div class="tabs">
+        <button class="tab-button active" data-tab="my-badges">Mes badges</button>
+        <button class="tab-button" data-tab="all-badges">Tous les badges</button>
+        <button class="tab-button" data-tab="community">Communauté</button>
+      </div>
+
+      <section id="my-badges" class="tab-content">
+        <h2>Mes badges</h2>
+        <p class="muted">Les badges que tu as déjà débloqués.</p>
+        <div id="my-badges-list" class="grid badges-grid"></div>
+      </section>
+
+      <section id="all-badges" class="tab-content hidden">
+        <h2>Tous les badges</h2>
+        <p class="muted">Réponds à la question pour gagner le badge.</p>
+        <div id="all-badges-list" class="grid"></div>
+      </section>
+
+      <section id="community" class="tab-content hidden">
+        <h2>Communauté</h2>
+        <p class="muted">Découvre les autres membres et leurs badges.</p>
+        <div id="community-list" class="list"></div>
+      </section>
+
+      <!-- Modal profil communauté -->
+      <div id="community-profile-modal" class="modal-backdrop hidden">
+        <div class="modal-card">
+          <button id="community-profile-close" class="ghost close-btn">Fermer</button>
+          <div class="profile-modal-content">
+            <img id="community-profile-avatar" src="./icons/badgelife-logo.svg" alt="Avatar" class="logo small">
+            <h3 id="community-profile-username">Utilisateur</h3>
+            <p class="muted" id="community-profile-badges">0 badge(s)</p>
+            <p class="muted" id="community-profile-mystery">0 niv. mystère</p>
+            <p class="muted">Badges débloqués</p>
+            <div id="community-profile-badges-grid" class="modal-badges-grid"></div>
+            <p class="muted" id="community-profile-answer"></p>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+</body>
+</html>
+
