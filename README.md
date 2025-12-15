@@ -48,3 +48,4 @@ Site vitrine + logique front pour un mini réseau social de badges. Tout est en 
 - Si tu vois “Aucun badge” : vérifie que tu as exécuté `supabase_setup.sql`.
 - Si l’auth ne marche pas sur GitHub Pages : ajoute bien l’URL de Pages dans Supabase (Allow List).
 
+# badgelifeapp
