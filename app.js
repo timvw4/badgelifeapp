@@ -613,9 +613,12 @@ function renderMyBadges() {
     const formattedAnswer = userAnswer ? formatUserAnswer(badge, userAnswer) : null;
     const cleanName = stripEmojis(badge.name || '');
     const hasLevel = Boolean(levelLabel);
-    const levelClass = isMysteryLevel(levelLabel)
+    let levelClass = isMysteryLevel(levelLabel)
       ? 'tag mystery'
       : (hasLevel ? 'tag success' : 'tag success');
+    if (isLowSkill) {
+      levelClass += ' low-skill';
+    }
     let levelText = formatLevelTag(true, normLevel, config);
     if (isLowSkill) {
       levelText = levelText.replace(/Skill/g, 'Low skill').replace(/skill/g, 'skill');

@@ -531,6 +531,12 @@ button {
   white-space: nowrap;
 }
 
+.my-badge-card .badge-level.low-skill {
+  background: rgba(239,68,68,0.15);
+  color: #fecaca;
+  border-color: rgba(239,68,68,0.4);
+}
+
 .card-badge.compact .badge-emoji {
   font-size: 26px;
 }
