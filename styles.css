@@ -588,8 +588,12 @@ button {
 .status-dot {
   width: 10px;
   height: 10px;
+  min-width: 10px;
+  min-height: 10px;
   border-radius: 50%;
   display: inline-flex;
+  flex-shrink: 0;
+  aspect-ratio: 1;
   background: #6b7280;
 }
 .status-dot.dot-green { background: #22c55e; }
