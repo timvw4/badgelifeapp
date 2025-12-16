@@ -160,6 +160,13 @@ button {
   cursor: pointer;
 }
 
+.ghost.icon-btn {
+  padding: 8px;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+}
+
 .hidden {
   display: none !important;
 }
@@ -189,8 +196,56 @@ button {
 
 .user-stats {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 12px;
+  flex-wrap: nowrap;
+}
+
+.settings-wrapper {
+  position: relative;
+  margin-left: auto;
+  align-self: flex-start;
+}
+
+.icon-btn {
+  padding: 8px;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  font-size: 15px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.settings-menu {
+  position: absolute;
+  top: 110%;
+  right: 0;
+  background: rgba(17, 24, 39, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 10px;
+  box-shadow: 0 12px 30px rgba(0,0,0,0.35);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 200px;
+  z-index: 20;
+}
+
+.settings-menu.hidden {
+  display: none;
+}
+
+.settings-menu .full-width {
+  width: 100%;
+  justify-content: flex-start;
+}
+
+#admin-link.full-width {
+  font-size: 12px;
+  text-align: center;
 }
 
 .badge-count {
@@ -693,8 +748,21 @@ button {
     flex-wrap: wrap;
     gap: 8px;
   }
-  .user-stats button {
+  .user-stats button, .settings-wrapper {
     width: 100%;
+    margin-left: 0;
+    align-self: stretch;
+  }
+  .settings-wrapper {
+    position: static;
+  }
+  .settings-menu {
+    position: static;
+    box-shadow: none;
+    padding: 0;
+    border: none;
+    background: transparent;
+    gap: 6px;
   }
   .tabs { flex-wrap: wrap; }
   .tab-button { flex: 1 1 120px; }

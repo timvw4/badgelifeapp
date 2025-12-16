@@ -59,9 +59,14 @@
             <span id="mystery-count">0</span>
             <small>niv. mystère</small>
           </div>
-          <a id="admin-link" class="ghost" href="./admin.html" style="display:none;">Admin</a>
-          <button id="edit-profile-btn" class="ghost">Modifier mon profil</button>
-          <button id="logout-btn" class="ghost">Se déconnecter</button>
+          <div class="settings-wrapper">
+            <button id="settings-toggle" class="ghost icon-btn" aria-label="Réglages">⚙️</button>
+            <div id="settings-menu" class="settings-menu hidden">
+              <a id="admin-link" class="ghost full-width" href="./admin.html" style="display:none;">Admin</a>
+              <button id="edit-profile-btn" class="ghost full-width">Modifier mon profil</button>
+              <button id="logout-btn" class="ghost full-width">Se déconnecter</button>
+            </div>
+          </div>
         </div>
       </header>
 

@@ -38,6 +38,7 @@ document.addEventListener('DOMContentLoaded', () => {
   attachFormListeners();
   attachNavListeners();
   attachProfileListeners();
+  attachSettingsMenuListeners();
   bootstrapSession();
 });
 
@@ -53,6 +54,8 @@ function cacheElements() {
   els.badgeCount = document.getElementById('badge-count');
   els.mysteryCount = document.getElementById('mystery-count');
   els.adminLink = document.getElementById('admin-link');
+  els.settingsToggle = document.getElementById('settings-toggle');
+  els.settingsMenu = document.getElementById('settings-menu');
   els.logoutBtn = document.getElementById('logout-btn');
   els.editProfileBtn = document.getElementById('edit-profile-btn');
   els.profilePanel = document.getElementById('profile-panel');
@@ -171,6 +174,19 @@ function attachNavListeners() {
         section.classList.toggle('hidden', key !== tab);
       });
     });
+  });
+}
+
+function attachSettingsMenuListeners() {
+  if (!els.settingsToggle || !els.settingsMenu) return;
+  els.settingsToggle.addEventListener('click', (e) => {
+    e.stopPropagation();
+    els.settingsMenu.classList.toggle('hidden');
+  });
+  document.addEventListener('click', (e) => {
+    if (els.settingsMenu.classList.contains('hidden')) return;
+    if (els.settingsMenu.contains(e.target) || els.settingsToggle.contains(e.target)) return;
+    els.settingsMenu.classList.add('hidden');
   });
 }
 
@@ -395,14 +411,11 @@ function renderAllBadges() {
     const config = parseConfig(badge.answer);
     const card = document.createElement('article');
     card.className = 'card-badge clickable compact';
-    const statusLabel = unlocked
-      ? `Débloqué${levelLabel ? ' · ' + levelLabel : ''}`
-      : 'À débloquer';
+    const statusLabel = formatLevelTag(unlocked, levelLabel, config);
     const statusClass = unlocked ? (isMysteryLevel(levelLabel) ? 'mystery' : 'success') : 'locked';
     const emoji = getBadgeEmoji(badge);
     const title = stripEmojis(badge.name || '');
     const levelCount = getLevelCount(config);
-    const levelsText = levelCount ? `${levelCount} niveaux à obtenir` : '';
     let formContent = `
       <input type="text" name="answer" placeholder="Ta réponse" required>
       <button type="submit" class="primary">Valider</button>
@@ -430,7 +443,6 @@ function renderAllBadges() {
         <div class="badge-emoji">${emoji}</div>
         <div class="badge-title">${title}</div>
       </div>
-      ${levelCount ? `<p class="muted">${levelsText}</p>` : ''}
       <div class="all-badge-details hidden">
         <p class="muted">${badge.question}</p>
         <form data-badge-id="${badge.id}">
@@ -462,6 +474,7 @@ function renderMyBadges() {
   unlockedBadges.forEach(badge => {
     const levelLabel = state.userBadgeLevels.get(badge.id);
     const normLevel = levelLabel;
+    const config = parseConfig(badge.answer);
     const card = document.createElement('article');
     // Classe supplémentaire pour cibler le style "Mes badges" sans toucher les autres listes
     card.className = 'card-badge clickable compact my-badge-card';
@@ -472,7 +485,7 @@ function renderMyBadges() {
     const levelClass = isMysteryLevel(levelLabel)
       ? 'tag mystery'
       : (hasLevel ? 'tag success' : 'tag success');
-    const levelText = hasLevel ? normLevel : 'Débloqué';
+    const levelText = formatLevelTag(true, normLevel, config);
     card.innerHTML = `
       <div class="row">
         <span class="${levelClass}">${levelText}</span>
@@ -624,6 +637,27 @@ function isMysteryLevel(label) {
   const lower = label.toLowerCase();
   // On accepte encore "secret" pour les anciennes données, mais on affichera "Niv mystère".
   return lower.includes('mystère') || lower.includes('mystere') || lower.includes('secret');
+}
+
+function formatLevelTag(unlocked, levelLabel, config) {
+  if (!unlocked) {
+    const total = getLevelCount(config);
+    if (total > 0) return `À débloquer · 0/${total}`;
+    return 'À débloquer';
+  }
+  if (isMysteryLevel(levelLabel)) return 'Débloqué · Niv mystère';
+  const total = getLevelCount(config);
+  if (total > 0) {
+    const pos = getLevelPosition(levelLabel, config);
+    if (pos) return `Débloqué · Niv ${pos}/${total}`;
+  }
+  return levelLabel ? `Débloqué · ${levelLabel}` : 'Débloqué';
+}
+
+function getLevelPosition(levelLabel, config) {
+  if (!config || !Array.isArray(config.levels) || !levelLabel) return null;
+  const idx = config.levels.findIndex(l => (l?.label || '').toLowerCase() === levelLabel.toLowerCase());
+  return idx >= 0 ? idx + 1 : null;
 }
 
 function getLevelCount(config) {
