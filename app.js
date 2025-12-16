@@ -534,7 +534,7 @@ function renderAllBadges() {
     card.className = 'card-badge clickable compact all-badge-card';
     let statusLabel = formatLevelTag(unlocked, levelLabel, config);
     if (isLowSkill) {
-      statusLabel = statusLabel.replace(/Skill/g, 'Low skill').replace(/skill/g, 'low skill');
+      statusLabel = statusLabel.replace(/Skill/g, 'Low skill').replace(/skill/g, 'skill');
     }
     const statusClass = unlocked
       ? (isMysteryLevel(levelLabel) ? 'mystery' : 'success')
