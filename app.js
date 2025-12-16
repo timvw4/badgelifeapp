@@ -487,12 +487,12 @@ function renderMyBadges() {
       : (hasLevel ? 'tag success' : 'tag success');
     const levelText = formatLevelTag(true, normLevel, config);
     card.innerHTML = `
-      <div class="row">
-        <span class="${levelClass}">${levelText}</span>
-      </div>
       <div class="badge-compact">
-        <div class="badge-emoji">${getBadgeEmoji(badge)}</div>
-        <div class="badge-title">${cleanName}</div>
+        <div class="badge-left">
+          <div class="badge-emoji">${getBadgeEmoji(badge)}</div>
+          <div class="badge-title">${cleanName}</div>
+        </div>
+        <span class="${levelClass} badge-level">${levelText}</span>
       </div>
       <div class="badge-details">
         ${formattedAnswer ? `<p class="muted">${formattedAnswer}</p>` : ''}
