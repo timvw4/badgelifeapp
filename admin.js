@@ -97,7 +97,14 @@ function bindForm() {
     if (!payload.name) return setFormMsg('Nom requis.', true);
     if (!payload.question) return setFormMsg('Question requise.', true);
     setFormMsg('Enregistrement...');
-    const { error } = await supabase.from('badges').upsert(payload);
+    let { error } = await supabase.from('badges').upsert(payload);
+    // Si la colonne emoji n'existe pas, on retente sans le champ emoji
+    if (error && error.message && error.message.toLowerCase().includes('emoji')) {
+      const payloadNoEmoji = { ...payload };
+      delete payloadNoEmoji.emoji;
+      const retry = await supabase.from('badges').upsert(payloadNoEmoji);
+      error = retry.error;
+    }
     if (error) {
       setFormMsg(error.message || 'Erreur lors de la sauvegarde.', true);
       return;
@@ -146,11 +153,24 @@ function toggleApp(isConnected) {
 }
 
 async function loadBadges() {
-  const { data, error } = await supabase.from('badges').select('id,name,description,question,answer,emoji').order('id');
+  const selectWithEmoji = 'id,name,description,question,answer,emoji';
+  const selectFallback = 'id,name,description,question,answer';
+
+  let { data, error } = await supabase.from('badges').select(selectWithEmoji).order('id');
+
   if (error) {
-    setFormMsg(error.message || 'Erreur de chargement.', true);
-    return;
+    console.warn('Colonne emoji absente ? On retente sans emoji.', error);
+    const retry = await supabase.from('badges').select(selectFallback).order('id');
+    if (retry.error) {
+      setFormMsg(retry.error.message || 'Erreur de chargement.', true);
+      return;
+    }
+    data = retry.data;
+    setFormMsg('Colonne emoji absente, affichage sans emoji.', true);
+  } else {
+    setFormMsg('');
   }
+
   state.badges = data || [];
   renderBadges();
 }
