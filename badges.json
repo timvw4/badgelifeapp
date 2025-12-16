@@ -1,0 +1,19 @@
+[
+  {
+    "id": 1,
+    "name": "Badge démo 1",
+    "description": "Exemple de badge stocké localement.",
+    "question": "Quel est ton langage préféré ?",
+    "answer": "javascript",
+    "emoji": "🚀"
+  },
+  {
+    "id": 2,
+    "name": "Badge démo 2 (multi-niveaux)",
+    "description": "Exemple avec niveaux configurables.",
+    "question": "Combien de livres as-tu lus cette année ?",
+    "answer": "{\"type\":\"range\",\"levels\":[{\"label\":\"Niv 1\",\"min\":0,\"max\":4},{\"label\":\"Niv 2\",\"min\":5,\"max\":9},{\"label\":\"Niv mystère\",\"min\":10,\"max\":999}]}",
+    "emoji": "📚"
+  }
+]
+

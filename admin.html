@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BadgeLife • Admin badges</title>
+  <link rel="stylesheet" href="./styles.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  <script type="module" src="./admin.js" defer></script>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <div class="brand">
+        <img src="./icons/badgelife-logo.svg" alt="BadgeLife" class="logo small">
+        <div>
+          <p class="muted">Admin</p>
+          <strong>Gestion des badges</strong>
+        </div>
+      </div>
+      <div>
+        <a class="ghost" href="./index.html">← Retour app</a>
+      </div>
+    </header>
+
+    <section class="card" id="admin-auth-card">
+      <h2>Connexion admin</h2>
+      <p class="muted">Entre ton pseudo et ton mot de passe admin.</p>
+      <form id="admin-login-form" class="auth-form">
+        <label for="admin-username">Pseudo</label>
+        <input id="admin-username" type="text" required placeholder="Ex: AdminMaster">
+        <label for="admin-password">Mot de passe</label>
+        <input id="admin-password" type="password" required placeholder="••••••••">
+        <button type="submit" class="primary">Se connecter</button>
+      </form>
+      <p id="admin-message" class="message"></p>
+    </section>
+
+    <section id="admin-app" class="card hidden">
+      <div class="row" style="justify-content: space-between; align-items: center;">
+        <h2>Badges</h2>
+        <button id="admin-logout" class="ghost">Se déconnecter</button>
+      </div>
+      <div class="grid" style="grid-template-columns: 1fr 1fr; gap: 20px;">
+        <div>
+          <h3>Liste</h3>
+          <div class="table">
+            <div class="table-head">
+              <span>ID</span><span>Nom</span><span>Emoji</span>
+            </div>
+            <div id="badge-list" class="table-body"></div>
+          </div>
+        </div>
+        <div>
+          <h3>Édition / création</h3>
+          <form id="badge-form" class="auth-form">
+            <label for="badge-id">ID (optionnel si auto-incr.)</label>
+            <input id="badge-id" type="number" placeholder="Laisse vide pour nouvel ID">
+
+            <label for="badge-name">Nom</label>
+            <input id="badge-name" type="text" required>
+
+            <label for="badge-emoji">Emoji</label>
+            <input id="badge-emoji" type="text" placeholder="Ex: 🚀">
+
+            <label for="badge-description">Description</label>
+            <textarea id="badge-description" rows="2"></textarea>
+
+            <label for="badge-question">Question</label>
+            <textarea id="badge-question" rows="2"></textarea>
+
+            <label for="answer-type">Type de réponse</label>
+            <select id="answer-type">
+              <option value="text">Texte exact (réponse simple)</option>
+              <option value="boolean">Oui / Non</option>
+              <option value="range">Niveaux par plage (min / max)</option>
+              <option value="multiSelect">Multi-sélection</option>
+            </select>
+
+            <div id="block-text" class="answer-block">
+              <label for="answer-text">Réponse attendue (texte)</label>
+              <input id="answer-text" type="text" placeholder="Ex: javascript">
+            </div>
+
+            <div id="block-boolean" class="answer-block hidden">
+              <label>Valeurs acceptées pour OUI (séparées par des virgules)</label>
+              <input id="bool-true" type="text" value="oui,yes,y">
+              <label>Valeurs acceptées pour NON (séparées par des virgules)</label>
+              <input id="bool-false" type="text" value="non,no,n">
+              <label>Réponse attendue</label>
+              <select id="bool-expected">
+                <option value="true">Oui</option>
+                <option value="false">Non</option>
+              </select>
+            </div>
+
+            <div id="block-range" class="answer-block hidden">
+              <label>Niveaux (un par ligne)</label>
+              <textarea id="range-levels" rows="4" placeholder="Ex:&#10;Niv 1|0|4&#10;Niv 2|5|9&#10;Niv mystère|10|999"></textarea>
+              <small class="muted">Format : label|min|max. Utilise “Niv mystère” si tu veux un niveau mystère.</small>
+            </div>
+
+            <div id="block-multi" class="answer-block hidden">
+              <label>Options (une par ligne)</label>
+              <textarea id="multi-options" rows="4" placeholder="valeur|Libellé visible"></textarea>
+              <label>Niveaux (un par ligne)</label>
+              <textarea id="multi-levels" rows="3" placeholder="Ex:&#10;Niv 1|1&#10;Niv mystère|3"></textarea>
+              <small class="muted">Format niveaux : label|min sélection. Utilise “Niv mystère” si besoin.</small>
+            </div>
+
+            <label for="display-template">Template d'affichage (optionnel)</label>
+            <input id="display-template" type="text" placeholder='Ex: "Ta réponse : {{answer}}."' >
+
+            <label for="display-suffix">Suffixe d'affichage (optionnel)</label>
+            <input id="display-suffix" type="text" placeholder="Ex: pays visités">
+
+            <div class="row" style="gap:10px; flex-wrap: wrap;">
+              <button type="submit" class="primary">Enregistrer (upsert)</button>
+              <button type="button" id="btn-delete" class="ghost">Supprimer</button>
+              <button type="button" id="btn-reset" class="ghost">Réinitialiser</button>
+            </div>
+            <p id="form-message" class="message"></p>
+          </form>
+        </div>
+      </div>
+    </section>
+  </div>
+</body>
+</html>
+

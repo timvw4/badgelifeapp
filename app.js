@@ -218,29 +218,99 @@ async function fetchProfile() {
 }
 
 async function fetchBadges() {
-  // On récupère aussi la colonne emoji pour afficher le visuel stocké en base.
-  // Si la colonne n’existe pas (schéma plus ancien), on retombe sur l’ancien select.
+  // On récupère en priorité depuis Supabase.
+  // Si on définit window.USE_LOCAL_BADGES = true, ou si Supabase échoue,
+  // on charge un fichier local badges.json (plus simple à éditer dans le code).
   const selectWithEmoji = 'id,name,description,question,answer,emoji';
   const selectFallback = 'id,name,description,question,answer';
+  const useLocalOnly = typeof window !== 'undefined' && window.USE_LOCAL_BADGES === true;
 
-  let { data, error } = await supabase.from('badges').select(selectWithEmoji);
+  if (!useLocalOnly) {
+    let { data, error } = await supabase.from('badges').select(selectWithEmoji);
 
-  if (error) {
-    console.warn('Colonne emoji absente ? On retente sans emoji.', error);
-    const retry = await supabase.from('badges').select(selectFallback);
-    if (retry.error) {
-      console.error(retry.error);
-      setMessage('Impossible de charger les badges.', true);
+    if (error) {
+      console.warn('Colonne emoji absente ? On retente sans emoji.', error);
+      const retry = await supabase.from('badges').select(selectFallback);
+      if (retry.error) {
+        console.error(retry.error);
+      } else {
+        data = retry.data;
+      }
+    }
+
+    if (data) {
+      state.badges = data;
       return;
     }
-    data = retry.data;
   }
 
-  state.badges = data ?? [];
+  // Fallback local
+  const localBadges = await loadLocalBadges();
+  if (!localBadges.length && !useLocalOnly) {
+    setMessage('Impossible de charger les badges.', true);
+  }
+  state.badges = localBadges;
+}
+
+function isLocalBadgesMode() {
+  return typeof window !== 'undefined' && window.USE_LOCAL_BADGES === true;
+}
+
+function getLocalUserId() {
+  return state.user?.id || 'local-user';
+}
+
+function loadLocalUserBadgeRows() {
+  if (typeof localStorage === 'undefined') return [];
+  const key = `localUserBadges:${getLocalUserId()}`;
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (_) {
+    return [];
+  }
+}
+
+function saveLocalUserBadgeRows(rows) {
+  if (typeof localStorage === 'undefined') return;
+  const key = `localUserBadges:${getLocalUserId()}`;
+  try {
+    localStorage.setItem(key, JSON.stringify(rows ?? []));
+  } catch (_) {
+    // stockage silencieux
+  }
+}
+
+async function loadLocalBadges() {
+  try {
+    const resp = await fetch('./badges.json', { cache: 'no-cache' });
+    if (!resp.ok) throw new Error(`badges.json introuvable (${resp.status})`);
+    const json = await resp.json();
+    if (!Array.isArray(json)) {
+      console.warn('badges.json doit contenir un tableau.');
+      return [];
+    }
+    return json;
+  } catch (err) {
+    console.error('Chargement local des badges échoué :', err);
+    return [];
+  }
 }
 
 async function fetchUserBadges() {
   if (!state.user) return;
+  if (isLocalBadgesMode()) {
+    const rows = loadLocalUserBadgeRows();
+    state.attemptedBadges = new Set(rows.map(row => row.badge_id));
+    state.userBadges = new Set(rows.filter(r => r.success !== false).map(row => row.badge_id));
+    state.userBadgeLevels = new Map(rows.filter(r => r.success !== false && r.level !== null).map(r => [r.badge_id, r.level]));
+    state.userBadgeAnswers = new Map(rows.filter(r => r.success !== false && r.user_answer).map(r => [r.badge_id, r.user_answer]));
+    await updateCounters(true);
+    return;
+  }
+
   const { data, error } = await supabase.from('user_badges').select('badge_id, level, success, user_answer').eq('user_id', state.user.id);
   if (error) {
     console.error(error);
@@ -283,7 +353,7 @@ function renderAllBadges() {
   state.badges.forEach(badge => {
     const unlocked = state.userBadges.has(badge.id);
     const levelLabelRaw = state.userBadgeLevels.get(badge.id);
-    const levelLabel = normalizeLevelLabel(levelLabelRaw, badge);
+    const levelLabel = levelLabelRaw;
     const config = parseConfig(badge.answer);
     const card = document.createElement('article');
     card.className = 'card-badge clickable compact';
@@ -353,7 +423,7 @@ function renderMyBadges() {
   els.myBadgesList.innerHTML = '';
   unlockedBadges.forEach(badge => {
     const levelLabel = state.userBadgeLevels.get(badge.id);
-    const normLevel = normalizeLevelLabel(levelLabel, badge);
+    const normLevel = levelLabel;
     const card = document.createElement('article');
     // Classe supplémentaire pour cibler le style "Mes badges" sans toucher les autres listes
     card.className = 'card-badge clickable compact my-badge-card';
@@ -421,7 +491,12 @@ function renderCommunity(profiles) {
 
 async function handleBadgeAnswer(event, badge) {
   event.preventDefault();
-  if (!state.user) return setMessage('Connecte-toi pour gagner des badges.', true);
+  const localMode = isLocalBadgesMode();
+  if (!state.user && !localMode) return setMessage('Connecte-toi pour gagner des badges.', true);
+  if (localMode && !state.user) {
+    // User local par défaut pour stocker en localStorage
+    state.user = { id: 'local-user', username: 'Local user' };
+  }
   const form = event.target;
   const config = parseConfig(badge.answer);
   const isMultiSelect = config?.type === 'multiSelect';
@@ -452,13 +527,20 @@ async function handleBadgeAnswer(event, badge) {
   const result = evaluateBadgeAnswer(badge, rawAnswer, selectedOptions);
   if (!result.ok) {
     // On enregistre aussi l'échec et on remet le badge en "À débloquer".
-    await supabase.from('user_badges').upsert({
-      user_id: state.user.id,
-      badge_id: badge.id,
-      success: false,
-      level: null,
-      user_answer: rawAnswer || null,
-    });
+    if (localMode) {
+      const rows = loadLocalUserBadgeRows();
+      const others = rows.filter(r => r.badge_id !== badge.id);
+      const updated = [...others, { badge_id: badge.id, success: false, level: null, user_answer: rawAnswer || null }];
+      saveLocalUserBadgeRows(updated);
+    } else {
+      await supabase.from('user_badges').upsert({
+        user_id: state.user.id,
+        badge_id: badge.id,
+        success: false,
+        level: null,
+        user_answer: rawAnswer || null,
+      });
+    }
     state.userBadges.delete(badge.id);
     state.userBadgeLevels.delete(badge.id);
     state.userBadgeAnswers.delete(badge.id);
@@ -470,17 +552,24 @@ async function handleBadgeAnswer(event, badge) {
     return;
   }
 
-  const { error } = await supabase.from('user_badges').upsert({
-    user_id: state.user.id,
-    badge_id: badge.id,
-    success: true,
-    level: result.level || null,
-    user_answer: rawAnswer, // on mémorise la réponse saisie
-  });
-  if (error) {
-    feedback.textContent = 'Erreur, merci de réessayer.';
-    feedback.classList.add('error');
-    return;
+  if (localMode) {
+    const rows = loadLocalUserBadgeRows();
+    const others = rows.filter(r => r.badge_id !== badge.id);
+    const updated = [...others, { badge_id: badge.id, success: true, level: result.level || null, user_answer: rawAnswer }];
+    saveLocalUserBadgeRows(updated);
+  } else {
+    const { error } = await supabase.from('user_badges').upsert({
+      user_id: state.user.id,
+      badge_id: badge.id,
+      success: true,
+      level: result.level || null,
+      user_answer: rawAnswer, // on mémorise la réponse saisie
+    });
+    if (error) {
+      feedback.textContent = 'Erreur, merci de réessayer.';
+      feedback.classList.add('error');
+      return;
+    }
   }
   state.userBadges.add(badge.id);
   if (result.level) state.userBadgeLevels.set(badge.id, result.level);
@@ -495,14 +584,8 @@ async function handleBadgeAnswer(event, badge) {
 function isMysteryLevel(label) {
   if (typeof label !== 'string') return false;
   const lower = label.toLowerCase();
+  // On accepte encore "secret" pour les anciennes données, mais on affichera "Niv mystère".
   return lower.includes('mystère') || lower.includes('mystere') || lower.includes('secret');
-}
-
-function normalizeLevelLabel(label, badge = null) {
-  const isLecteurBadge = badge && typeof badge.name === 'string' && badge.name.toLowerCase().includes('lecteur');
-  if (isLecteurBadge && isMysteryLevel(label)) return 'Niv max';
-  if (isMysteryLevel(label)) return 'Niv mystère';
-  return label;
 }
 
 function getLevelCount(config) {
@@ -537,7 +620,8 @@ function evaluateBadgeAnswer(badge, rawAnswer, selectedOptions = []) {
     const isMax = maxLevel && levelLabel === maxLevel.label;
     const finalLabel = (isLecteurBadge && isMax) ? 'Niv max'
       : (isMax && !isMysteryLevel(levelLabel) ? 'Niv max' : levelLabel);
-    return { ok: true, level: finalLabel, message: 'Bravo, badge débloqué !' };
+    const storedLabel = isMysteryLevel(finalLabel) ? 'Niv mystère' : finalLabel;
+    return { ok: true, level: storedLabel, message: 'Bravo, badge débloqué !' };
   }
 
   if (config && config.type === 'range' && Array.isArray(config.levels)) {
@@ -553,7 +637,8 @@ function evaluateBadgeAnswer(badge, rawAnswer, selectedOptions = []) {
     const isMax = level === maxLevel;
     const finalLabel = (isLecteurBadge && isMax) ? 'Niv max'
       : ((isMax && !isMysteryLevel(level.label)) ? 'Niv max' : level.label);
-    return { ok: true, level: finalLabel, message: `Bravo, niveau obtenu : ${finalLabel}` };
+    const storedLabel = isMysteryLevel(finalLabel) ? 'Niv mystère' : finalLabel;
+    return { ok: true, level: storedLabel, message: `Bravo, niveau obtenu : ${storedLabel}` };
   }
 
   if (config && config.type === 'boolean') {
@@ -666,7 +751,7 @@ function inferSuffixFromQuestion(question) {
   const q = question.toLowerCase();
   if (q.includes('pays')) return 'pays visités';
   if (q.includes('livre')) return 'livres lus';
-  if (q.includes('kilomètre') || q.includes('km')) return 'km parcouru';
+  if (q.includes('kilomètre') || q.includes('km')) return 'km/h sur l`autoroute';
   if (q.includes('heures') || q.includes('heure')) return 'heures';
   if (q.includes('service militaire') || q.includes('militaire')) return 'service militaire';
   return null;
