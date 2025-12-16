@@ -22,7 +22,6 @@ const state = {
   userBadgeLevels: new Map(),
   userBadgeAnswers: new Map(), // stocke la réponse saisie par badge
   attemptedBadges: new Set(),
-  mysteryCount: 0,
 };
 
 const els = {};
@@ -61,7 +60,6 @@ function cacheElements() {
   els.avatarPreviewImg = document.getElementById('avatar-preview-img');
   els.badgeCount = document.getElementById('badge-count');
   els.skillCount = document.getElementById('skill-count');
-  els.mysteryCount = document.getElementById('mystery-count');
   els.adminLink = document.getElementById('admin-link');
   els.settingsToggle = document.getElementById('settings-toggle');
   els.settingsMenu = document.getElementById('settings-menu');
@@ -285,7 +283,6 @@ function resetState() {
   state.userBadgeLevels = new Map();
   state.userBadgeAnswers = new Map();
   state.attemptedBadges = new Set();
-  state.mysteryCount = 0;
   els.myBadgesList.innerHTML = '';
   els.allBadgesList.innerHTML = '';
   els.communityList.innerHTML = '';
@@ -656,7 +653,7 @@ function renderCommunity(profiles) {
   }
   els.communityList.innerHTML = '';
   profiles.forEach(profile => {
-    const avatarUrl = profile.avatar_url || './icons/badgelife-logo.svg';
+    const avatarUrl = profile.avatar_url || './icons/logobl.png';
     const item = document.createElement('div');
     item.className = 'list-item';
     item.dataset.userId = profile.id || '';
@@ -1117,7 +1114,7 @@ function attachProfileListeners() {
       } else if (state.profile?.avatar_url) {
         els.avatarPreviewImg.src = state.profile.avatar_url;
       } else {
-        els.avatarPreviewImg.src = './icons/badgelife-logo.svg';
+        els.avatarPreviewImg.src = './icons/logobl.png';
       }
     });
   }
@@ -1199,7 +1196,7 @@ function setProfileMessage(text, isError = false) {
 }
 
 function updateAvatar(url) {
-  const finalUrl = url || './icons/badgelife-logo.svg';
+  const finalUrl = url || './icons/logobl.png';
   if (els.avatarImg) {
     els.avatarImg.src = finalUrl;
     els.avatarImg.style.objectFit = 'cover';
@@ -1213,7 +1210,7 @@ function updateAvatar(url) {
 // Affichage profil communauté (modal)
 function showCommunityProfile(data) {
   if (!els.communityProfileModal) return;
-  els.communityProfileAvatar.src = data.avatar || './icons/badgelife-logo.svg';
+  els.communityProfileAvatar.src = data.avatar || './icons/logobl.png';
   els.communityProfileUsername.textContent = data.username || 'Utilisateur';
   els.communityProfileBadges.textContent = `${data.badges || 0} badge(s)`;
   els.communityProfileMystery.textContent = `${data.mystery || 0} skill(s) mystère`;
@@ -1341,10 +1338,8 @@ async function updateCounters(syncProfile = false) {
   state.userBadgeLevels.forEach((lvl, badgeId) => {
     totalSkillPoints += getSkillPointsForBadge(badgeId, lvl);
   });
-  state.mysteryCount = Array.from(state.userBadgeLevels.values()).filter(isMysteryLevel).length;
   if (els.badgeCount) els.badgeCount.textContent = `${badgeCount}`;
   if (els.skillCount) els.skillCount.textContent = `${totalSkillPoints}`;
-  if (els.mysteryCount) els.mysteryCount.textContent = state.mysteryCount;
   if (state.profile) {
     state.profile.badge_count = badgeCount;
     if (syncProfile) {
