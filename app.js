@@ -410,9 +410,12 @@ function renderAllBadges() {
     const levelLabel = levelLabelRaw;
     const config = parseConfig(badge.answer);
     const card = document.createElement('article');
-    card.className = 'card-badge clickable compact';
+    card.className = 'card-badge clickable compact all-badge-card';
     const statusLabel = formatLevelTag(unlocked, levelLabel, config);
     const statusClass = unlocked ? (isMysteryLevel(levelLabel) ? 'mystery' : 'success') : 'locked';
+    const statusDotClass = unlocked
+      ? (isMysteryLevel(levelLabel) ? 'dot-purple' : 'dot-green')
+      : 'dot-red';
     const emoji = getBadgeEmoji(badge);
     const title = stripEmojis(badge.name || '');
     const levelCount = getLevelCount(config);
@@ -436,10 +439,11 @@ function renderAllBadges() {
       `;
     }
     card.innerHTML = `
-      <div class="row">
+      <div class="row level-row">
         <span class="tag ${statusClass}">${statusLabel}</span>
       </div>
       <div class="badge-compact">
+        <span class="status-dot ${statusDotClass}"></span>
         <div class="badge-emoji">${emoji}</div>
         <div class="badge-title">${title}</div>
       </div>

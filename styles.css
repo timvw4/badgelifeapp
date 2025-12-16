@@ -310,7 +310,7 @@ button {
 }
 
 .badges-grid .card-badge {
-  min-height: 160px;
+  min-height: 110px;
 }
 
 #my-badges-list.list-mode {
@@ -373,9 +373,9 @@ button {
   background: rgba(255,255,255,0.03);
   border: 1px solid var(--border);
   border-radius: 14px;
-  padding: 14px;
+  padding: 10px 12px;
   display: grid;
-  gap: 8px;
+  gap: 6px;
   position: relative;
   overflow: hidden;
 }
@@ -383,9 +383,9 @@ button {
 .card-badge.compact {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 12px 14px;
-  min-height: 120px;
+  gap: 8px;
+  padding: 10px 12px;
+  min-height: 105px;
 }
 
 .card-badge.compact .badge-compact {
@@ -447,6 +447,25 @@ button {
   gap: 6px;
   cursor: pointer;
 }
+
+.all-badge-card .level-row .tag {
+  display: none;
+}
+
+.all-badge-card.expanded .level-row .tag {
+  display: inline-flex;
+}
+
+.status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-flex;
+  background: #6b7280;
+}
+.status-dot.dot-green { background: #22c55e; }
+.status-dot.dot-red { background: #ef4444; }
+.status-dot.dot-purple { background: #a855f7; }
 
 .badge-emoji {
   font-size: 32px;
@@ -802,6 +821,21 @@ button {
     border: 1px solid rgba(255, 255, 255, 0.08);
     background: rgba(17, 24, 39, 0.96);
     gap: 8px;
+  }
+  /* Admin (mobile portrait) : une colonne + table compacte */
+  #admin-app .grid {
+    grid-template-columns: 1fr !important;
+    gap: 14px !important;
+  }
+  #admin-app .table-head {
+    display: grid !important;
+    grid-template-columns: 0.4fr 1fr 1fr !important;
+    gap: 6px !important;
+  }
+  #admin-app .table-row {
+    display: grid !important;
+    grid-template-columns: 0.4fr 1fr 1fr !important;
+    gap: 6px !important;
   }
   /* Modal communauté : stack + grille plus dense */
   .profile-modal-content.two-col {
