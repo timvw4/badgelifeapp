@@ -448,6 +448,19 @@ button {
   cursor: pointer;
 }
 
+.all-badge-card .badge-title {
+  text-align: center;
+  justify-self: center;
+}
+
+.all-badge-card .badge-compact {
+  grid-template-columns: auto auto auto;
+  align-items: center;
+  justify-content: center;
+  justify-items: center;
+  gap: 8px;
+}
+
 .all-badge-card .level-row .tag {
   display: none;
 }
