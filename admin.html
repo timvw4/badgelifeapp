@@ -47,8 +47,8 @@
         <div>
           <h3>Liste</h3>
           <div class="table">
-            <div class="table-head">
-              <span>ID</span><span>Nom</span><span>Emoji</span>
+            <div class="table-head" style="display:grid; grid-template-columns: 0.35fr minmax(180px, 1fr) 1fr; gap:8px;">
+              <span>Emoji</span><span>Nom</span><span>Statut niveaux</span>
             </div>
             <div id="badge-list" class="table-body"></div>
           </div>
@@ -57,7 +57,7 @@
           <h3>Édition / création</h3>
           <form id="badge-form" class="auth-form">
             <label for="badge-id">ID (optionnel si auto-incr.)</label>
-            <input id="badge-id" type="number" placeholder="Laisse vide pour nouvel ID">
+            <input id="badge-id" type="text" placeholder="Laisse vide pour nouvel ID">
 
             <label for="badge-name">Nom</label>
             <input id="badge-name" type="text" required>

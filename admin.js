@@ -1,6 +1,6 @@
 // Admin badges - gestion CRUD via Supabase
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm';
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
+import { SUPABASE_URL, SUPABASE_ANON_KEY, ADMIN_USER_IDS } from './config.js';
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
@@ -76,6 +76,11 @@ function bindAuth() {
       setAuthMsg(error.message || 'Connexion impossible.', true);
       return;
     }
+    if (!isAdminUser(data.user)) {
+      setAuthMsg('Accès refusé : compte non autorisé pour l’admin.', true);
+      await supabase.auth.signOut();
+      return;
+    }
     state.session = data.session;
     setAuthMsg('Connecté.');
     await enterApp();
@@ -115,10 +120,11 @@ function bindForm() {
   });
 
   els.btnDelete.addEventListener('click', async () => {
-    const id = Number(els.id.value);
-    if (!id) return setFormMsg('ID requis pour supprimer.', true);
+    const rawId = els.id.value.trim();
+    if (!rawId) return setFormMsg('ID requis pour supprimer.', true);
+    const idValue = Number.isNaN(Number(rawId)) ? rawId : Number(rawId);
     setFormMsg('Suppression...');
-    const { error } = await supabase.from('badges').delete().eq('id', id);
+    const { error } = await supabase.from('badges').delete().eq('id', idValue);
     if (error) {
       setFormMsg(error.message || 'Erreur lors de la suppression.', true);
       return;
@@ -134,6 +140,12 @@ function bindForm() {
 async function bootstrapSession() {
   const { data } = await supabase.auth.getSession();
   if (data.session) {
+    if (!isAdminUser(data.session.user)) {
+      await supabase.auth.signOut();
+      toggleApp(false);
+      setAuthMsg('Accès refusé : compte non autorisé.');
+      return;
+    }
     state.session = data.session;
     await enterApp();
   } else {
@@ -150,6 +162,11 @@ async function enterApp() {
 function toggleApp(isConnected) {
   els.authCard.classList.toggle('hidden', isConnected);
   els.app.classList.toggle('hidden', !isConnected);
+}
+
+function isAdminUser(user) {
+  if (!user || !user.id) return false;
+  return Array.isArray(ADMIN_USER_IDS) && ADMIN_USER_IDS.includes(user.id);
 }
 
 async function loadBadges() {
@@ -184,14 +201,75 @@ function renderBadges() {
   state.badges.forEach(b => {
     const row = document.createElement('div');
     row.className = 'table-row clickable';
+    row.style.display = 'grid';
+    row.style.gridTemplateColumns = '0.35fr minmax(180px, 1fr) 1fr';
+    row.style.gap = '8px';
     row.innerHTML = `
-      <span>${b.id ?? '—'}</span>
-      <span>${b.name || ''}</span>
       <span>${b.emoji || ''}</span>
+      <span>${b.name || ''}</span>
+      <span class="muted" style="font-size:12px;">${getLevelSummary(b.answer)}</span>
     `;
     row.addEventListener('click', () => fillForm(b));
     els.badgeList.appendChild(row);
   });
+}
+
+function getLevelSummary(answer) {
+  if (!answer) return '—';
+  let parsed = null;
+  if (typeof answer === 'string') {
+    try { parsed = JSON.parse(answer); } catch (_) { parsed = null; }
+  }
+  if (!parsed || typeof parsed !== 'object' || !parsed.type) {
+    return 'Sans niveaux'; // réponse simple
+  }
+  if (parsed.type === 'range' && Array.isArray(parsed.levels)) {
+    const levels = parsed.levels;
+    const hasMystery = levels.some(l => isMysteryLevel(l.label));
+    const top = pickHighestLevel(levels, 'max');
+    const topLabel = top?.label || '—';
+    if (hasMystery) return `Mystère (max: ${topLabel})`;
+    return `Max: ${topLabel}`;
+  }
+  if (parsed.type === 'multiSelect' && Array.isArray(parsed.levels)) {
+    const levels = parsed.levels;
+    const hasMystery = levels.some(l => isMysteryLevel(l.label));
+    const top = pickHighestLevel(levels, 'min');
+    const topLabel = top?.label || '—';
+    if (hasMystery) return `Mystère (max: ${topLabel})`;
+    return `Max: ${topLabel}`;
+  }
+  if (parsed.type === 'boolean') {
+    return 'Sans niveaux';
+  }
+  return 'Sans niveaux';
+}
+
+function isMysteryLevel(label) {
+  if (typeof label !== 'string') return false;
+  const lower = label.toLowerCase();
+  return lower.includes('mystère') || lower.includes('mystere') || lower.includes('secret');
+}
+
+function pickHighestLevel(levels, field) {
+  if (!Array.isArray(levels) || !levels.length) return null;
+  let best = null;
+  levels.forEach(l => {
+    const val = Number(l?.[field]);
+    if (Number.isNaN(val)) {
+      if (!best) best = l;
+      return;
+    }
+    if (!best) {
+      best = l;
+      return;
+    }
+    const bestVal = Number(best?.[field]);
+    if (Number.isNaN(bestVal) || val >= bestVal) {
+      best = l;
+    }
+  });
+  return best;
 }
 
 function fillForm(b) {
@@ -245,7 +323,12 @@ function buildPayloadFromForm() {
     question: els.q.value.trim(),
     emoji: els.emoji.value.trim(),
   };
-  if (!Number.isNaN(idVal) && els.id.value.trim()) payload.id = idVal;
+  const rawId = els.id.value.trim();
+  // On accepte soit un nombre (auto-incr.), soit un texte (UUID).
+  if (rawId) {
+    const numeric = Number(rawId);
+    payload.id = Number.isNaN(numeric) ? rawId : numeric;
+  }
 
   const type = els.answerType.value;
   const displayTemplate = els.displayTemplate.value.trim();

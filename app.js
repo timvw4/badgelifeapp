@@ -1,7 +1,7 @@
 // App front-end de BadgeLife
 // Utilise Supabase (base de données + auth) et une UI 100% front.
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm';
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
+import { SUPABASE_URL, SUPABASE_ANON_KEY, ADMIN_USER_IDS } from './config.js';
 
 // Nom du bucket d'avatars dans Supabase Storage
 const AVATAR_BUCKET = 'avatars';
@@ -52,6 +52,7 @@ function cacheElements() {
   els.avatarPreviewImg = document.getElementById('avatar-preview-img');
   els.badgeCount = document.getElementById('badge-count');
   els.mysteryCount = document.getElementById('mystery-count');
+  els.adminLink = document.getElementById('admin-link');
   els.logoutBtn = document.getElementById('logout-btn');
   els.editProfileBtn = document.getElementById('edit-profile-btn');
   els.profilePanel = document.getElementById('profile-panel');
@@ -115,6 +116,7 @@ function attachFormListeners() {
     }
     state.session = data.session;
     state.user = data.user;
+    toggleAdminLink(isAdminUser(state.user));
     await loadAppData();
   });
 
@@ -146,6 +148,7 @@ function attachFormListeners() {
     }
     state.session = data.session;
     state.user = data.user;
+    toggleAdminLink(isAdminUser(state.user));
     await loadAppData();
   });
 
@@ -153,6 +156,7 @@ function attachFormListeners() {
     await supabase.auth.signOut();
     resetState();
     toggleViews(false);
+    toggleAdminLink(false);
     setMessage('Déconnecté. Connecte-toi pour continuer.');
   });
 }
@@ -175,9 +179,11 @@ async function bootstrapSession() {
   if (data.session) {
     state.session = data.session;
     state.user = data.session.user;
+    toggleAdminLink(isAdminUser(state.user));
     await loadAppData();
   } else {
     toggleViews(false);
+    toggleAdminLink(false);
   }
 }
 
@@ -325,12 +331,44 @@ async function fetchUserBadges() {
 }
 
 async function fetchCommunity() {
-  const { data, error } = await supabase.from('profiles').select('id,username,badge_count,avatar_url').order('badge_count', { ascending: false }).limit(50);
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id,username,badge_count,avatar_url')
+    .order('badge_count', { ascending: false })
+    .limit(50);
   if (error) {
     console.error(error);
     return;
   }
-  renderCommunity(data ?? []);
+
+  const profiles = data ?? [];
+  const ids = profiles.map(p => p.id).filter(Boolean);
+
+  if (ids.length) {
+    // Recalcule les compteurs via user_badges pour avoir des chiffres à jour (success != false).
+    const { data: rows, error: errBadges } = await supabase
+      .from('user_badges')
+      .select('user_id, level, success')
+      .in('user_id', ids);
+    if (!errBadges && Array.isArray(rows)) {
+      const countMap = new Map();
+      const mysteryMap = new Map();
+      rows.forEach(r => {
+        if (r.success === false) return;
+        const uid = r.user_id;
+        countMap.set(uid, (countMap.get(uid) || 0) + 1);
+        if (isMysteryLevel(r.level)) {
+          mysteryMap.set(uid, (mysteryMap.get(uid) || 0) + 1);
+        }
+      });
+      profiles.forEach(p => {
+        p.badge_count = countMap.get(p.id) || 0;
+        p.mystery_count = mysteryMap.get(p.id) || 0;
+      });
+    }
+  }
+
+  renderCommunity(profiles);
 }
 
 function render() {
@@ -980,6 +1018,16 @@ function renderCommunityBadgeGridMessage(msg) {
 function toggleViews(authenticated) {
   els.authView.classList.toggle('hidden', authenticated);
   els.appView.classList.toggle('hidden', !authenticated);
+}
+
+function toggleAdminLink(show) {
+  if (!els.adminLink) return;
+  els.adminLink.style.display = show ? 'inline-flex' : 'none';
+}
+
+function isAdminUser(user) {
+  if (!user || !user.id) return false;
+  return Array.isArray(ADMIN_USER_IDS) && ADMIN_USER_IDS.includes(user.id);
 }
 
 function setMessage(text, isError = false) {
