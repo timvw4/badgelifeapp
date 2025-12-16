@@ -1132,10 +1132,10 @@ async function handleProfileUpdate(e) {
 
   // Upload avatar si fourni
   if (avatarFile) {
-    // Optionnel : validation de taille (plafond porté à ~5 Mo)
-    const MAX_AVATAR_BYTES = 5 * 1024 * 1024;
+    // Optionnel : validation de taille (plafond porté à ~10 Mo)
+    const MAX_AVATAR_BYTES = 10 * 1024 * 1024;
     if (avatarFile.size > MAX_AVATAR_BYTES) {
-      return setProfileMessage('Image trop lourde (max ~5 Mo).', true);
+      return setProfileMessage('Image trop lourde (max ~10 Mo).', true);
     }
 
     const path = `${state.user.id}/${Date.now()}-${avatarFile.name}`;
@@ -1213,7 +1213,7 @@ function showCommunityProfile(data) {
   els.communityProfileAvatar.src = data.avatar || './icons/logobl.png';
   els.communityProfileUsername.textContent = data.username || 'Utilisateur';
   els.communityProfileBadges.textContent = `${data.badges || 0} badge(s)`;
-  els.communityProfileMystery.textContent = `${data.mystery || 0} skill(s) mystère`;
+  els.communityProfileMystery.textContent = `${data.skills || 0} skill(s)`;
   renderCommunityBadgeGrid([]);
   els.communityProfileModal.classList.remove('hidden');
   if (data.userId) {
@@ -1248,9 +1248,17 @@ async function fetchCommunityUserStats(userId) {
     }
     const unlocked = rows.filter(r => r.success !== false);
     const badgeCount = unlocked.length;
-    const mystery = unlocked.filter(r => isMysteryLevel(r.level)).length;
+    
+    // Calculer le total de skills
+    let totalSkills = 0;
+    unlocked.forEach(row => {
+      if (row.badge_id && row.level) {
+        totalSkills += getSkillPointsForBadge(row.badge_id, row.level);
+      }
+    });
+    
     els.communityProfileBadges.textContent = `${badgeCount} badge(s)`;
-    els.communityProfileMystery.textContent = `${mystery} skill(s) mystère`;
+    els.communityProfileMystery.textContent = `${totalSkills} skill(s)`;
     renderCommunityBadgeGrid(unlocked);
   } catch (_) {
     renderCommunityBadgeGridMessage('Badges non visibles');
