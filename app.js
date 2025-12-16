@@ -13,9 +13,11 @@ const state = {
   user: null,
   profile: null,
   badges: [],
+  badgeById: new Map(),
   communityProfiles: [],
   ideas: [],
   ideaVotes: new Map(), // idea_id -> { likes, dislikes, myVote }
+  lowSkillBadges: new Set(), // ids des badges low skill
   userBadges: new Set(),
   userBadgeLevels: new Map(),
   userBadgeAnswers: new Map(), // stocke la réponse saisie par badge
@@ -58,6 +60,7 @@ function cacheElements() {
   els.avatarImg = document.getElementById('avatar-img');
   els.avatarPreviewImg = document.getElementById('avatar-preview-img');
   els.badgeCount = document.getElementById('badge-count');
+  els.skillCount = document.getElementById('skill-count');
   els.mysteryCount = document.getElementById('mystery-count');
   els.adminLink = document.getElementById('admin-link');
   els.settingsToggle = document.getElementById('settings-toggle');
@@ -318,7 +321,7 @@ async function fetchBadges() {
   // On récupère en priorité depuis Supabase.
   // Si on définit window.USE_LOCAL_BADGES = true, ou si Supabase échoue,
   // on charge un fichier local badges.json (plus simple à éditer dans le code).
-  const selectWithEmoji = 'id,name,description,question,answer,emoji';
+  const selectWithEmoji = 'id,name,description,question,answer,emoji,low_skill';
   const selectFallback = 'id,name,description,question,answer';
   const useLocalOnly = typeof window !== 'undefined' && window.USE_LOCAL_BADGES === true;
 
@@ -337,6 +340,7 @@ async function fetchBadges() {
 
     if (data) {
       state.badges = data;
+      buildBadgeMaps();
       return;
     }
   }
@@ -347,6 +351,7 @@ async function fetchBadges() {
     setMessage('Impossible de charger les badges.', true);
   }
   state.badges = localBadges;
+  buildBadgeMaps();
 }
 
 function isLocalBadgesMode() {
@@ -516,16 +521,27 @@ function renderAllBadges() {
     els.allBadgesList.innerHTML = '<p class="muted">Aucun badge pour le moment.</p>';
     return;
   }
+  const total = state.badges.length;
   els.allBadgesList.innerHTML = '';
+  const header = document.createElement('div');
+  header.className = 'section-subtitle';
+  header.textContent = `${total} badge(s) à collecter`;
+  els.allBadgesList.appendChild(header);
   state.badges.forEach(badge => {
     const unlocked = state.userBadges.has(badge.id);
+    const isLowSkill = state.lowSkillBadges.has(badge.id);
     const levelLabelRaw = state.userBadgeLevels.get(badge.id);
     const levelLabel = levelLabelRaw;
     const config = parseConfig(badge.answer);
     const card = document.createElement('article');
     card.className = 'card-badge clickable compact all-badge-card';
-    const statusLabel = formatLevelTag(unlocked, levelLabel, config);
-    const statusClass = unlocked ? (isMysteryLevel(levelLabel) ? 'mystery' : 'success') : 'locked';
+    let statusLabel = formatLevelTag(unlocked, levelLabel, config);
+    if (isLowSkill) {
+      statusLabel = statusLabel.replace(/Skill/g, 'Low skill').replace(/skill/g, 'low skill');
+    }
+    const statusClass = unlocked
+      ? (isMysteryLevel(levelLabel) ? 'mystery' : 'success')
+      : 'locked';
     const statusDotClass = unlocked
       ? (isMysteryLevel(levelLabel) ? 'dot-purple' : 'dot-green')
       : 'dot-red';
@@ -592,6 +608,7 @@ function renderMyBadges() {
     const levelLabel = state.userBadgeLevels.get(badge.id);
     const normLevel = levelLabel;
     const config = parseConfig(badge.answer);
+    const isLowSkill = state.lowSkillBadges.has(badge.id);
     const card = document.createElement('article');
     // Classe supplémentaire pour cibler le style "Mes badges" sans toucher les autres listes
     card.className = 'card-badge clickable compact my-badge-card';
@@ -602,7 +619,12 @@ function renderMyBadges() {
     const levelClass = isMysteryLevel(levelLabel)
       ? 'tag mystery'
       : (hasLevel ? 'tag success' : 'tag success');
-    const levelText = formatLevelTag(true, normLevel, config);
+    let levelText = formatLevelTag(true, normLevel, config);
+    if (isLowSkill) {
+      levelText = levelText.replace(/Skill/g, 'Low skill').replace(/skill/g, 'skill');
+    }
+    // On retire le préfixe "Débloqué ·" pour un affichage plus court
+    levelText = levelText.replace(/^Débloqué ·\s*/, '');
     card.innerHTML = `
       <div class="badge-compact">
         <div class="badge-left">
@@ -848,23 +870,23 @@ async function handleBadgeAnswer(event, badge) {
 function isMysteryLevel(label) {
   if (typeof label !== 'string') return false;
   const lower = label.toLowerCase();
-  // On accepte encore "secret" pour les anciennes données, mais on affichera "Niv mystère".
+  // On accepte encore "secret" pour les anciennes données, mais on affichera "Skill mystère".
   return lower.includes('mystère') || lower.includes('mystere') || lower.includes('secret');
 }
 
 function formatLevelTag(unlocked, levelLabel, config) {
   if (!unlocked) {
     const total = getLevelCount(config);
-    if (total > 0) return `À débloquer · 0/${total}`;
-    return 'À débloquer';
+    if (total > 0) return `À débloquer · Skill 0/${total}`;
+    return 'Skill à débloquer';
   }
-  if (isMysteryLevel(levelLabel)) return 'Débloqué · Niv mystère';
+  if (isMysteryLevel(levelLabel)) return 'Débloqué · Skill mystère';
   const total = getLevelCount(config);
   if (total > 0) {
     const pos = getLevelPosition(levelLabel, config);
-    if (pos) return `Débloqué · Niv ${pos}/${total}`;
+    if (pos) return `Débloqué · Skill ${pos}/${total}`;
   }
-  return levelLabel ? `Débloqué · ${levelLabel}` : 'Débloqué';
+  return levelLabel ? `Débloqué · ${levelLabel}` : 'Skill débloqué';
 }
 
 function getLevelPosition(levelLabel, config) {
@@ -877,6 +899,36 @@ function getLevelCount(config) {
   if (!config) return 0;
   if (Array.isArray(config.levels)) return config.levels.length;
   return 0;
+}
+
+function buildBadgeMaps() {
+  state.badgeById = new Map(state.badges.map(b => [b.id, b]));
+  state.lowSkillBadges = new Set(state.badges.filter(b => b.low_skill === true).map(b => b.id));
+}
+
+function getBadgeById(id) {
+  return state.badgeById?.get(id);
+}
+
+function getSkillPointsForBadge(badgeId, levelLabel) {
+  const badge = getBadgeById(badgeId);
+  if (!badge) return 0;
+  const config = parseConfig(badge.answer);
+  const pos = getLevelPosition(levelLabel, config);
+  let points = pos || 1;
+  if (state.lowSkillBadges.has(badgeId)) {
+    points *= -1;
+  }
+  return points;
+}
+
+function countLowSkillUnlocked() {
+  if (!state.lowSkillBadges || !state.lowSkillBadges.size) return 0;
+  let count = 0;
+  state.lowSkillBadges.forEach(id => {
+    if (state.userBadges.has(id)) count += 1;
+  });
+  return count;
 }
 
 function parseConfig(answer) {
@@ -903,9 +955,9 @@ function evaluateBadgeAnswer(badge, rawAnswer, selectedOptions = []) {
     const maxLevel = levels.length ? levels[0] : null;
     const levelLabel = level?.label ?? null;
     const isMax = maxLevel && levelLabel === maxLevel.label;
-    const finalLabel = (isLecteurBadge && isMax) ? 'Niv max'
-      : (isMax && !isMysteryLevel(levelLabel) ? 'Niv max' : levelLabel);
-    const storedLabel = isMysteryLevel(finalLabel) ? 'Niv mystère' : finalLabel;
+    const finalLabel = (isLecteurBadge && isMax) ? 'Skill max'
+      : (isMax && !isMysteryLevel(levelLabel) ? 'Skill max' : levelLabel);
+    const storedLabel = isMysteryLevel(finalLabel) ? 'Skill mystère' : finalLabel;
     return { ok: true, level: storedLabel, message: 'Bravo, badge débloqué !' };
   }
 
@@ -916,14 +968,14 @@ function evaluateBadgeAnswer(badge, rawAnswer, selectedOptions = []) {
     }
     const level = config.levels.find(l => value >= (l.min ?? -Infinity) && value <= (l.max ?? Infinity));
     if (!level) {
-      return { ok: false, message: 'Valeur hors des niveaux.' };
+      return { ok: false, message: 'Valeur hors des skills.' };
     }
     const maxLevel = config.levels[config.levels.length - 1];
     const isMax = level === maxLevel;
-    const finalLabel = (isLecteurBadge && isMax) ? 'Niv max'
-      : ((isMax && !isMysteryLevel(level.label)) ? 'Niv max' : level.label);
-    const storedLabel = isMysteryLevel(finalLabel) ? 'Niv mystère' : finalLabel;
-    return { ok: true, level: storedLabel, message: `Bravo, niveau obtenu : ${storedLabel}` };
+    const finalLabel = (isLecteurBadge && isMax) ? 'Skill max'
+      : ((isMax && !isMysteryLevel(level.label)) ? 'Skill max' : level.label);
+    const storedLabel = isMysteryLevel(finalLabel) ? 'Skill mystère' : finalLabel;
+    return { ok: true, level: storedLabel, message: `Bravo, skill obtenu : ${storedLabel}` };
   }
 
   if (config && config.type === 'boolean') {
@@ -1164,7 +1216,7 @@ function showCommunityProfile(data) {
   els.communityProfileAvatar.src = data.avatar || './icons/badgelife-logo.svg';
   els.communityProfileUsername.textContent = data.username || 'Utilisateur';
   els.communityProfileBadges.textContent = `${data.badges || 0} badge(s)`;
-  els.communityProfileMystery.textContent = `${data.mystery || 0} niv. mystère`;
+  els.communityProfileMystery.textContent = `${data.mystery || 0} skill(s) mystère`;
   renderCommunityBadgeGrid([]);
   els.communityProfileModal.classList.remove('hidden');
   if (data.userId) {
@@ -1201,7 +1253,7 @@ async function fetchCommunityUserStats(userId) {
     const badgeCount = unlocked.length;
     const mystery = unlocked.filter(r => isMysteryLevel(r.level)).length;
     els.communityProfileBadges.textContent = `${badgeCount} badge(s)`;
-    els.communityProfileMystery.textContent = `${mystery} niv. mystère`;
+    els.communityProfileMystery.textContent = `${mystery} skill(s) mystère`;
     renderCommunityBadgeGrid(unlocked);
   } catch (_) {
     renderCommunityBadgeGridMessage('Badges non visibles');
@@ -1285,8 +1337,13 @@ function setMessage(text, isError = false) {
 async function updateCounters(syncProfile = false) {
   const badgeCount = state.userBadges.size;
   const totalBadges = state.badges?.length ?? 0;
+  let totalSkillPoints = 0;
+  state.userBadgeLevels.forEach((lvl, badgeId) => {
+    totalSkillPoints += getSkillPointsForBadge(badgeId, lvl);
+  });
   state.mysteryCount = Array.from(state.userBadgeLevels.values()).filter(isMysteryLevel).length;
-  if (els.badgeCount) els.badgeCount.textContent = `${badgeCount}/${totalBadges}`;
+  if (els.badgeCount) els.badgeCount.textContent = `${badgeCount}`;
+  if (els.skillCount) els.skillCount.textContent = `${totalSkillPoints}`;
   if (els.mysteryCount) els.mysteryCount.textContent = state.mysteryCount;
   if (state.profile) {
     state.profile.badge_count = badgeCount;

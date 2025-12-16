@@ -9,6 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
   <script type="module" src="./app.js" defer></script>
+  <link rel="apple-touch-icon" href="/icons/badgelife-512.png">
 </head>
 <body>
   <div class="page">
@@ -55,9 +56,13 @@
             <span id="badge-count">0</span>
             <small>badges</small>
           </div>
+          <div class="skill-count">
+            <span id="skill-count">0</span>
+            <small>skills</small>
+          </div>
           <div class="mystery-count">
             <span id="mystery-count">0</span>
-            <small>niv. mystère</small>
+            <small>skills mystère</small>
           </div>
           <div class="settings-wrapper">
             <button id="settings-toggle" class="ghost icon-btn" aria-label="Réglages">⚙️</button>
@@ -116,7 +121,7 @@
           <button class="subtab-button" data-community-tab="ideas">Idées</button>
         </div>
         <div id="community-profiles-panel">
-          <p class="muted" style="margin-bottom:10px;">Découvre les membres, leurs badges et leurs niveaux mystère.</p>
+          <p class="muted" style="margin-bottom:10px;">Découvre les membres, leurs badges et leurs skills mystère.</p>
           <div class="search-bar">
             <input id="community-search" type="search" placeholder="Rechercher un utilisateur..." aria-label="Rechercher un utilisateur">
           </div>
@@ -148,7 +153,7 @@
               <img id="community-profile-avatar" src="./icons/badgelife-logo.svg" alt="Avatar" class="logo medium">
               <h3 id="community-profile-username">Utilisateur</h3>
               <p class="muted" id="community-profile-badges">0 badge(s)</p>
-              <p class="muted" id="community-profile-mystery">0 niv. mystère</p>
+              <p class="muted" id="community-profile-mystery">0 skill(s) mystère</p>
             </div>
             <div class="profile-col-right">
               <p class="muted">Badges débloqués</p>

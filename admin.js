@@ -52,6 +52,8 @@ function cacheEls() {
   els.multiLevels = document.getElementById('multi-levels');
   els.displayTemplate = document.getElementById('display-template');
   els.displaySuffix = document.getElementById('display-suffix');
+  els.lowSkillHidden = document.getElementById('badge-low-skill');
+  els.lowSkillToggle = document.getElementById('badge-low-skill-toggle');
   els.btnDelete = document.getElementById('btn-delete');
   els.btnReset = document.getElementById('btn-reset');
   els.blocks = {
@@ -95,6 +97,10 @@ function bindAuth() {
 
 function bindForm() {
   els.answerType.addEventListener('change', () => showBlock(els.answerType.value));
+
+  if (els.lowSkillToggle) {
+    els.lowSkillToggle.addEventListener('click', () => toggleLowSkill());
+  }
 
   els.badgeForm.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -170,7 +176,7 @@ function isAdminUser(user) {
 }
 
 async function loadBadges() {
-  const selectWithEmoji = 'id,name,description,question,answer,emoji';
+  const selectWithEmoji = 'id,name,description,question,answer,emoji,low_skill';
   const selectFallback = 'id,name,description,question,answer';
 
   let { data, error } = await supabase.from('badges').select(selectWithEmoji).order('id');
@@ -207,7 +213,7 @@ function renderBadges() {
     row.innerHTML = `
       <span>${b.emoji || ''}</span>
       <span>${b.name || ''}</span>
-      <span class="muted" style="font-size:12px;">${getLevelSummary(b.answer)}</span>
+      <span class="muted" style="font-size:12px;">${getLevelSummary(b.answer)}${b.low_skill ? ' · Low skill' : ''}</span>
     `;
     row.addEventListener('click', () => fillForm(b));
     els.badgeList.appendChild(row);
@@ -221,7 +227,7 @@ function getLevelSummary(answer) {
     try { parsed = JSON.parse(answer); } catch (_) { parsed = null; }
   }
   if (!parsed || typeof parsed !== 'object' || !parsed.type) {
-    return 'Sans niveaux'; // réponse simple
+    return 'Sans skills'; // réponse simple
   }
   if (parsed.type === 'range' && Array.isArray(parsed.levels)) {
     const levels = parsed.levels;
@@ -240,9 +246,9 @@ function getLevelSummary(answer) {
     return `Max: ${topLabel}`;
   }
   if (parsed.type === 'boolean') {
-    return 'Sans niveaux';
+    return 'Sans skills';
   }
-  return 'Sans niveaux';
+  return 'Sans skills';
 }
 
 function isMysteryLevel(label) {
@@ -278,6 +284,7 @@ function fillForm(b) {
   els.emoji.value = b.emoji ?? '';
   els.desc.value = b.description ?? '';
   els.q.value = b.question ?? '';
+  setLowSkillState(Boolean(b.low_skill));
   els.displayTemplate.value = '';
   els.displaySuffix.value = '';
   // Parse answer
@@ -322,6 +329,7 @@ function buildPayloadFromForm() {
     description: els.desc.value.trim(),
     question: els.q.value.trim(),
     emoji: els.emoji.value.trim(),
+    low_skill: Boolean(Number(els.lowSkillHidden?.value || '0')),
   };
   const rawId = els.id.value.trim();
   // On accepte soit un nombre (auto-incr.), soit un texte (UUID).
@@ -430,6 +438,7 @@ function resetForm() {
   els.answerType.value = 'text';
   showBlock('text');
   els.formMsg.textContent = '';
+  setLowSkillState(false);
 }
 
 function setAuthMsg(msg, error = false) {
@@ -440,5 +449,18 @@ function setAuthMsg(msg, error = false) {
 function setFormMsg(msg, error = false) {
   els.formMsg.textContent = msg || '';
   els.formMsg.classList.toggle('error', error);
+}
+
+function setLowSkillState(isLow) {
+  if (els.lowSkillHidden) els.lowSkillHidden.value = isLow ? '1' : '0';
+  if (els.lowSkillToggle) {
+    els.lowSkillToggle.textContent = isLow ? 'Low skill : activé' : 'Low skill : désactivé';
+    els.lowSkillToggle.classList.toggle('active', isLow);
+  }
+}
+
+function toggleLowSkill() {
+  const current = Boolean(Number(els.lowSkillHidden?.value || '0'));
+  setLowSkillState(!current);
 }
 
