@@ -54,6 +54,10 @@ function cacheEls() {
   els.displaySuffix = document.getElementById('display-suffix');
   els.lowSkillHidden = document.getElementById('badge-low-skill');
   els.lowSkillToggle = document.getElementById('badge-low-skill-toggle');
+  els.ghostHidden = document.getElementById('badge-ghost');
+  els.ghostToggle = document.getElementById('badge-ghost-toggle');
+  els.ghostRequiredBadges = document.getElementById('ghost-required-badges');
+  els.ghostBlock = document.getElementById('block-ghost');
   els.btnDelete = document.getElementById('btn-delete');
   els.btnReset = document.getElementById('btn-reset');
   els.blocks = {
@@ -100,6 +104,10 @@ function bindForm() {
 
   if (els.lowSkillToggle) {
     els.lowSkillToggle.addEventListener('click', () => toggleLowSkill());
+  }
+
+  if (els.ghostToggle) {
+    els.ghostToggle.addEventListener('click', () => toggleGhost());
   }
 
   els.badgeForm.addEventListener('submit', async (e) => {
@@ -292,6 +300,18 @@ function fillForm(b) {
   if (typeof b.answer === 'string') {
     try { parsed = JSON.parse(b.answer); } catch (_) { parsed = null; }
   }
+  
+  // Charger les informations de badge fantôme
+  const isGhost = parsed?.isGhost === true;
+  setGhostState(isGhost);
+  if (isGhost && parsed?.requiredBadges) {
+    els.ghostRequiredBadges.value = Array.isArray(parsed.requiredBadges) 
+      ? parsed.requiredBadges.join(', ') 
+      : parsed.requiredBadges;
+  } else {
+    els.ghostRequiredBadges.value = '';
+  }
+  
   if (!parsed || typeof parsed !== 'object' || !parsed.type) {
     // Réponse texte simple
     els.answerType.value = 'text';
@@ -341,9 +361,33 @@ function buildPayloadFromForm() {
   const type = els.answerType.value;
   const displayTemplate = els.displayTemplate.value.trim();
   const displaySuffix = els.displaySuffix.value.trim();
+  const isGhost = Boolean(Number(els.ghostHidden?.value || '0'));
+  const requiredBadges = isGhost 
+    ? splitCsv(els.ghostRequiredBadges?.value || '').filter(Boolean)
+    : [];
+
+  // Fonction helper pour ajouter les propriétés fantômes si nécessaire
+  const addGhostProps = (obj) => {
+    if (isGhost && requiredBadges.length > 0) {
+      obj.isGhost = true;
+      obj.requiredBadges = requiredBadges;
+    }
+    return obj;
+  };
 
   if (type === 'text') {
-    payload.answer = els.answerText.value.trim();
+    if (isGhost && requiredBadges.length > 0) {
+      payload.answer = JSON.stringify({
+        type: 'text',
+        answer: els.answerText.value.trim(),
+        isGhost: true,
+        requiredBadges,
+        ...(displayTemplate ? { displayTemplate } : {}),
+        ...(displaySuffix ? { displaySuffix } : {}),
+      });
+    } else {
+      payload.answer = els.answerText.value.trim();
+    }
     return payload;
   }
 
@@ -351,38 +395,38 @@ function buildPayloadFromForm() {
     const trueLabels = splitCsv(els.boolTrue.value);
     const falseLabels = splitCsv(els.boolFalse.value);
     const expected = els.boolExpected.value === 'true';
-    payload.answer = JSON.stringify({
+    payload.answer = JSON.stringify(addGhostProps({
       type: 'boolean',
       trueLabels,
       falseLabels,
       expected,
       ...(displayTemplate ? { displayTemplate } : {}),
       ...(displaySuffix ? { displaySuffix } : {}),
-    });
+    }));
     return payload;
   }
 
   if (type === 'range') {
     const levels = parseRangeLevels(els.rangeLevels.value);
-    payload.answer = JSON.stringify({
+    payload.answer = JSON.stringify(addGhostProps({
       type: 'range',
       levels,
       ...(displayTemplate ? { displayTemplate } : {}),
       ...(displaySuffix ? { displaySuffix } : {}),
-    });
+    }));
     return payload;
   }
 
   if (type === 'multiSelect') {
     const options = parseOptions(els.multiOptions.value);
     const levels = parseMultiLevels(els.multiLevels.value);
-    payload.answer = JSON.stringify({
+    payload.answer = JSON.stringify(addGhostProps({
       type: 'multiSelect',
       options,
       levels,
       ...(displayTemplate ? { displayTemplate } : {}),
       ...(displaySuffix ? { displaySuffix } : {}),
-    });
+    }));
     return payload;
   }
 
@@ -439,6 +483,7 @@ function resetForm() {
   showBlock('text');
   els.formMsg.textContent = '';
   setLowSkillState(false);
+  setGhostState(false);
 }
 
 function setAuthMsg(msg, error = false) {
@@ -462,5 +507,21 @@ function setLowSkillState(isLow) {
 function toggleLowSkill() {
   const current = Boolean(Number(els.lowSkillHidden?.value || '0'));
   setLowSkillState(!current);
+}
+
+function setGhostState(isGhost) {
+  if (els.ghostHidden) els.ghostHidden.value = isGhost ? '1' : '0';
+  if (els.ghostToggle) {
+    els.ghostToggle.textContent = isGhost ? 'Badge fantôme : activé' : 'Badge fantôme : désactivé';
+    els.ghostToggle.classList.toggle('active', isGhost);
+  }
+  if (els.ghostBlock) {
+    els.ghostBlock.classList.toggle('hidden', !isGhost);
+  }
+}
+
+function toggleGhost() {
+  const current = Boolean(Number(els.ghostHidden?.value || '0'));
+  setGhostState(!current);
 }
 

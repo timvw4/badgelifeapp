@@ -70,6 +70,17 @@
               <input id="badge-low-skill" type="hidden" value="0">
             </div>
 
+            <div class="row" style="gap:10px; align-items:center;">
+              <button type="button" id="badge-ghost-toggle" class="ghost">Badge fantôme : désactivé</button>
+              <input id="badge-ghost" type="hidden" value="0">
+            </div>
+
+            <div id="block-ghost" class="answer-block hidden">
+              <label for="ghost-required-badges">Badges requis (IDs séparés par des virgules)</label>
+              <input id="ghost-required-badges" type="text" placeholder="Ex: 11111111-1111-1111-1111-111111111111, 22222222-2222-2222-2222-222222222222">
+              <small class="muted">Ce badge sera débloqué automatiquement quand tous les badges requis sont débloqués. Il n'apparaîtra pas dans "Tous les badges".</small>
+            </div>
+
             <label for="badge-description">Description</label>
             <textarea id="badge-description" rows="2"></textarea>
 
