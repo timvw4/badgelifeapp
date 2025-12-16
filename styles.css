@@ -107,6 +107,95 @@ p {
   box-shadow: 0 8px 25px rgba(6,182,212,0.35);
 }
 
+.subtabs {
+  display: flex;
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.subtab-button {
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: rgba(255,255,255,0.03);
+  color: var(--text);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.subtab-button.active {
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  color: #0b1120;
+  border-color: transparent;
+}
+
+#community-ideas-panel .list {
+  margin-top: 10px;
+}
+
+.idea-card {
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px 14px;
+  display: grid;
+  gap: 6px;
+}
+
+.idea-card header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.idea-title {
+  font-weight: 700;
+}
+
+.idea-meta {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.idea-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.idea-delete {
+  background: transparent;
+  border: 1px solid rgba(239,68,68,0.4);
+  color: #ef4444;
+  border-radius: 8px;
+  padding: 6px 10px;
+  cursor: pointer;
+}
+
+.idea-votes {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.idea-vote-btn {
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.08);
+  color: #fff;
+  border-radius: 10px;
+  padding: 6px 10px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.idea-vote-btn.active {
+  background: rgba(99, 102, 241, 0.16);
+  border-color: rgba(99, 102, 241, 0.6);
+}
+
 .auth-form {
   display: grid;
   gap: 10px;

@@ -13,6 +13,9 @@ const state = {
   user: null,
   profile: null,
   badges: [],
+  communityProfiles: [],
+  ideas: [],
+  ideaVotes: new Map(), // idea_id -> { likes, dislikes, myVote }
   userBadges: new Set(),
   userBadgeLevels: new Map(),
   userBadgeAnswers: new Map(), // stocke la réponse saisie par badge
@@ -39,6 +42,9 @@ document.addEventListener('DOMContentLoaded', () => {
   attachNavListeners();
   attachProfileListeners();
   attachSettingsMenuListeners();
+  attachCommunitySearchListener();
+  attachCommunitySubtabs();
+  attachIdeaListeners();
   bootstrapSession();
 });
 
@@ -81,6 +87,15 @@ function cacheElements() {
   els.communityProfileMystery = document.getElementById('community-profile-mystery');
   els.communityProfileBadgesGrid = document.getElementById('community-profile-badges-grid');
   els.communityProfileAnswer = document.getElementById('community-profile-answer');
+  els.communitySearch = document.getElementById('community-search');
+  els.communityProfilesPanel = document.getElementById('community-profiles-panel');
+  els.communityIdeasPanel = document.getElementById('community-ideas-panel');
+  els.communitySubtabs = document.querySelectorAll('.subtab-button[data-community-tab]');
+  els.ideaForm = document.getElementById('idea-form');
+  els.ideaTitle = document.getElementById('idea-title');
+  els.ideaDescription = document.getElementById('idea-description');
+  els.ideaMessage = document.getElementById('idea-message');
+  els.ideaList = document.getElementById('idea-list');
 }
 
 function attachAuthTabListeners() {
@@ -190,6 +205,61 @@ function attachSettingsMenuListeners() {
   });
 }
 
+function attachCommunitySearchListener() {
+  if (!els.communitySearch) return;
+  els.communitySearch.addEventListener('input', (e) => {
+    renderCommunityFiltered(e.target.value || '');
+  });
+}
+
+function attachCommunitySubtabs() {
+  if (!els.communitySubtabs) return;
+  els.communitySubtabs.forEach(btn => {
+    btn.addEventListener('click', () => {
+      els.communitySubtabs.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      const tab = btn.dataset.communityTab;
+      if (els.communityProfilesPanel) els.communityProfilesPanel.classList.toggle('hidden', tab !== 'profiles');
+      if (els.communityIdeasPanel) els.communityIdeasPanel.classList.toggle('hidden', tab !== 'ideas');
+    });
+  });
+}
+
+function attachIdeaListeners() {
+  if (els.ideaForm) {
+    els.ideaForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      submitIdea();
+    });
+  }
+}
+
+function getIdeaStats(ideaId) {
+  return state.ideaVotes.get(ideaId) || { likes: 0, dislikes: 0, myVote: null };
+}
+
+async function voteIdea(ideaId, vote) {
+  if (!state.user) {
+    if (els.ideaMessage) {
+      els.ideaMessage.textContent = 'Connecte-toi pour voter.';
+      els.ideaMessage.classList.add('error');
+    }
+    return;
+  }
+  const current = getIdeaStats(ideaId).myVote;
+  try {
+    if (current === vote) {
+      // retirer le vote
+      await supabase.from('idea_votes').delete().eq('idea_id', ideaId).eq('user_id', state.user.id);
+    } else {
+      await supabase.from('idea_votes').upsert({ idea_id: ideaId, user_id: state.user.id, vote });
+    }
+    await fetchIdeaVotes();
+  } catch (err) {
+    console.error('voteIdea error:', err);
+  }
+}
+
 async function bootstrapSession() {
   const { data } = await supabase.auth.getSession();
   if (data.session) {
@@ -220,7 +290,12 @@ function resetState() {
 
 async function loadAppData() {
   toggleViews(true);
-  await Promise.all([fetchProfile(), fetchBadges(), fetchUserBadges(), fetchCommunity()]);
+  try { await fetchProfile(); } catch (e) { console.error(e); }
+  try { await fetchBadges(); } catch (e) { console.error(e); }
+  try { await fetchUserBadges(); } catch (e) { console.error(e); }
+  try { await fetchCommunity(); } catch (e) { console.error(e); }
+  try { await fetchIdeas(); } catch (e) { console.error(e); }
+  try { await fetchIdeaVotes(); } catch (e) { console.error(e); }
   render();
 }
 
@@ -384,9 +459,47 @@ async function fetchCommunity() {
     }
   }
 
-  renderCommunity(profiles);
+  state.communityProfiles = profiles;
+  renderCommunityFiltered('');
 }
 
+async function fetchIdeaVotes() {
+  try {
+    const { data, error } = await supabase
+      .from('idea_votes')
+      .select('idea_id, vote, user_id');
+    if (error) throw error;
+    const stats = new Map();
+    const currentUserId = state.user?.id;
+    data.forEach(row => {
+      const s = stats.get(row.idea_id) || { likes: 0, dislikes: 0, myVote: null };
+      if (row.vote > 0) s.likes += 1;
+      if (row.vote < 0) s.dislikes += 1;
+      if (currentUserId && row.user_id === currentUserId) {
+        s.myVote = row.vote;
+      }
+      stats.set(row.idea_id, s);
+    });
+    state.ideaVotes = stats;
+    renderIdeas();
+  } catch (err) {
+    console.error('fetchIdeaVotes error:', err);
+  }
+}
+
+async function fetchIdeas() {
+  try {
+    const { data, error } = await supabase
+      .from('ideas')
+      .select('id,title,description,user_id,created_at')
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    state.ideas = data || [];
+    renderIdeas();
+  } catch (err) {
+    console.error('fetchIdeas error:', err);
+  }
+}
 function render() {
   if (state.profile) {
     els.profileUsername.textContent = state.profile.username;
@@ -542,6 +655,102 @@ function renderCommunity(profiles) {
     item.addEventListener('click', () => showCommunityProfile(item.dataset));
     els.communityList.appendChild(item);
   });
+}
+
+function renderCommunityFiltered(term = '') {
+  const lower = term.trim().toLowerCase();
+  const list = state.communityProfiles || [];
+  const filtered = lower
+    ? list.filter(p => (p.username || '').toLowerCase().includes(lower))
+    : list;
+  renderCommunity(filtered);
+}
+
+function renderIdeas() {
+  if (!els.ideaList) return;
+  if (!state.ideas.length) {
+    els.ideaList.innerHTML = '<p class="muted">Aucune idée proposée pour le moment.</p>';
+    return;
+  }
+  const uid = state.user?.id;
+  const nameMap = new Map(state.communityProfiles.map(p => [p.id, p.username || '']));
+  els.ideaList.innerHTML = '';
+  state.ideas.forEach(idea => {
+    const canDelete = uid && idea.user_id === uid;
+    const authorName = nameMap.get(idea.user_id) || idea.user_id || 'Anonyme';
+    const stats = getIdeaStats(idea.id);
+    const card = document.createElement('article');
+    card.className = 'idea-card';
+    card.innerHTML = `
+      <header>
+        <div>
+          <div class="idea-title">${idea.title || ''}</div>
+          <div class="idea-meta">par ${authorName}</div>
+        </div>
+        ${canDelete ? `<div class="idea-actions"><button class="idea-delete" data-id="${idea.id}">✕</button></div>` : ''}
+      </header>
+      <div class="idea-description muted">${idea.description || ''}</div>
+      <div class="idea-votes">
+        <button class="idea-vote-btn ${stats.myVote === 1 ? 'active' : ''}" data-id="${idea.id}" data-vote="1">👍 <span>${stats.likes}</span></button>
+        <button class="idea-vote-btn ${stats.myVote === -1 ? 'active' : ''}" data-id="${idea.id}" data-vote="-1">👎 <span>${stats.dislikes}</span></button>
+      </div>
+    `;
+    if (canDelete) {
+      const btn = card.querySelector('.idea-delete');
+      btn.addEventListener('click', () => deleteIdea(idea.id));
+    }
+    card.querySelectorAll('.idea-vote-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const ideaId = btn.dataset.id;
+        const vote = Number(btn.dataset.vote);
+        voteIdea(ideaId, vote);
+      });
+    });
+    els.ideaList.appendChild(card);
+  });
+}
+
+async function submitIdea() {
+  if (!els.ideaTitle || !els.ideaDescription || !els.ideaMessage) return;
+  const title = els.ideaTitle.value.trim();
+  const description = els.ideaDescription.value.trim();
+  if (!title || !description) {
+    els.ideaMessage.textContent = 'Nom et description requis.';
+    els.ideaMessage.classList.add('error');
+    return;
+  }
+  const userId = state.user?.id || null;
+  const { data, error } = await supabase
+    .from('ideas')
+    .insert({ title, description, user_id: userId })
+    .select();
+  if (error) {
+    els.ideaMessage.textContent = 'Erreur, idée non envoyée.';
+    els.ideaMessage.classList.add('error');
+    return;
+  }
+  els.ideaMessage.textContent = 'Idée envoyée, merci !';
+  els.ideaMessage.classList.remove('error');
+  els.ideaTitle.value = '';
+  els.ideaDescription.value = '';
+  if (data && data.length) {
+    state.ideas = [data[0], ...state.ideas];
+    renderIdeas();
+  } else {
+    await fetchIdeas();
+  }
+}
+
+async function deleteIdea(id) {
+  if (!state.user) return;
+  const { error } = await supabase.from('ideas').delete().eq('id', id);
+  if (error) {
+    console.error(error);
+    return;
+  }
+  state.ideas = state.ideas.filter(i => i.id !== id);
+  renderIdeas();
 }
 
 async function handleBadgeAnswer(event, badge) {

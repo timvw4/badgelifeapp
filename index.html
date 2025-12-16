@@ -111,8 +111,32 @@
 
       <section id="community" class="tab-content hidden">
         <h2>Communauté</h2>
-        <p class="muted">Découvre les autres membres et leurs badges.</p>
-        <div id="community-list" class="list"></div>
+        <div class="subtabs">
+          <button class="subtab-button active" data-community-tab="profiles">Profils</button>
+          <button class="subtab-button" data-community-tab="ideas">Idées</button>
+        </div>
+        <div id="community-profiles-panel">
+          <p class="muted" style="margin-bottom:10px;">Découvre les membres, leurs badges et leurs niveaux mystère.</p>
+          <div class="search-bar">
+            <input id="community-search" type="search" placeholder="Rechercher un utilisateur..." aria-label="Rechercher un utilisateur">
+          </div>
+          <div id="community-list" class="list"></div>
+        </div>
+        <div id="community-ideas-panel" class="hidden">
+          <div class="row" style="justify-content: space-between; align-items: center;">
+            <h3>Idées de badges</h3>
+          </div>
+          <p class="muted" style="margin-bottom:10px;">Propose une idée de badge, ta suggestion sera peut-être ajoutée à la collection.</p>
+          <form id="idea-form" class="auth-form" style="margin-bottom:12px;">
+            <label for="idea-title">Nom du badge</label>
+            <input id="idea-title" type="text" maxlength="80" required placeholder="Ex: Explorateur nocturne">
+            <label for="idea-description">Description</label>
+            <textarea id="idea-description" rows="2" maxlength="300" required placeholder="Décris l’idée en quelques lignes."></textarea>
+            <button type="submit" class="primary">Proposer</button>
+            <p id="idea-message" class="message"></p>
+          </form>
+          <div id="idea-list" class="list"></div>
+        </div>
       </section>
 
       <!-- Modal profil communauté -->
