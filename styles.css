@@ -803,6 +803,20 @@ button {
     background: rgba(17, 24, 39, 0.96);
     gap: 8px;
   }
+  /* Modal communauté : stack + grille plus dense */
+  .profile-modal-content.two-col {
+    grid-template-columns: 1fr;
+    justify-items: center;
+  }
+  .modal-badges-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px;
+    justify-items: center;
+  }
+  .modal-badge-emoji {
+    font-size: 28px;
+    padding: 8px;
+  }
   .tabs { flex-wrap: wrap; }
   .tab-button { flex: 1 1 120px; }
 
