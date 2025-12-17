@@ -34,6 +34,7 @@ function cacheEls() {
   els.loginForm = document.getElementById('admin-login-form');
   els.loginMsg = document.getElementById('admin-message');
   els.logoutBtn = document.getElementById('admin-logout');
+  els.badgeTotal = document.getElementById('admin-badge-total');
   els.badgeList = document.getElementById('badge-list');
   els.badgeForm = document.getElementById('badge-form');
   els.formMsg = document.getElementById('form-message');
@@ -63,7 +64,11 @@ function cacheEls() {
   els.lowSkillToggle = document.getElementById('badge-low-skill-toggle');
   els.ghostHidden = document.getElementById('badge-ghost');
   els.ghostToggle = document.getElementById('badge-ghost-toggle');
-  els.ghostRequiredBadges = document.getElementById('ghost-required-badges');
+  els.ghostRequiredBadgesSelect = document.getElementById('ghost-required-badges-select');
+  els.ghostPrereqMode = document.getElementById('ghost-prereq-mode');
+  els.ghostMinBadges = document.getElementById('ghost-min-badges');
+  els.ghostMinSkills = document.getElementById('ghost-min-skills');
+  els.ghostMinRank = document.getElementById('ghost-min-rank');
   els.ghostDisplayText = document.getElementById('ghost-display-text');
   els.ghostBlock = document.getElementById('block-ghost');
   els.btnDelete = document.getElementById('btn-delete');
@@ -221,10 +226,42 @@ async function loadBadges() {
 
   state.badges = data || [];
   renderBadges();
+  renderGhostBadgesSelectOptions();
+}
+
+function renderGhostBadgesSelectOptions() {
+  if (!els.ghostRequiredBadgesSelect) return;
+  const selected = new Set(getGhostSelectedIds());
+  els.ghostRequiredBadgesSelect.innerHTML = '';
+  (state.badges || []).forEach(b => {
+    const id = b?.id;
+    if (id === undefined || id === null) return;
+    const opt = document.createElement('option');
+    opt.value = String(id);
+    opt.textContent = `${b.emoji || ''} ${b.name || ''}`.trim() || String(id);
+    opt.selected = selected.has(opt.value);
+    els.ghostRequiredBadgesSelect.appendChild(opt);
+  });
+}
+
+function getGhostSelectedIds() {
+  if (!els.ghostRequiredBadgesSelect) return [];
+  return Array.from(els.ghostRequiredBadgesSelect.selectedOptions || []).map(o => o.value).filter(Boolean);
+}
+
+function setGhostSelectedIds(ids) {
+  if (!els.ghostRequiredBadgesSelect) return;
+  const set = new Set((ids || []).map(String));
+  Array.from(els.ghostRequiredBadgesSelect.options || []).forEach(o => {
+    o.selected = set.has(String(o.value));
+  });
 }
 
 function renderBadges() {
   els.badgeList.innerHTML = '';
+  if (els.badgeTotal) {
+    els.badgeTotal.textContent = `Total : ${state.badges.length || 0}`;
+  }
   if (!state.badges.length) {
     els.badgeList.innerHTML = '<div class="muted">Aucun badge.</div>';
     return;
@@ -336,15 +373,20 @@ function fillForm(b) {
   const isGhost = parsed?.isGhost === true;
   setGhostState(isGhost);
   if (isGhost && parsed?.requiredBadges) {
-    els.ghostRequiredBadges.value = Array.isArray(parsed.requiredBadges) 
-      ? parsed.requiredBadges.join(', ') 
-      : parsed.requiredBadges;
+    const req = Array.isArray(parsed.requiredBadges) ? parsed.requiredBadges : [];
+    renderGhostBadgesSelectOptions();
+    setGhostSelectedIds(req);
   } else {
-    els.ghostRequiredBadges.value = '';
+    renderGhostBadgesSelectOptions();
+    setGhostSelectedIds([]);
   }
   if (els.ghostDisplayText) {
     els.ghostDisplayText.value = isGhost ? (parsed?.ghostDisplayText ?? '') : '';
   }
+  if (els.ghostPrereqMode) els.ghostPrereqMode.value = isGhost ? String(parsed?.prereqMode ?? 'all') : 'all';
+  if (els.ghostMinBadges) els.ghostMinBadges.value = isGhost ? String(parsed?.minBadges ?? '') : '';
+  if (els.ghostMinSkills) els.ghostMinSkills.value = isGhost ? String(parsed?.minSkills ?? '') : '';
+  if (els.ghostMinRank) els.ghostMinRank.value = isGhost ? String(parsed?.minRank ?? '') : '';
   
   if (!parsed || typeof parsed !== 'object' || !parsed.type) {
     // Réponse texte simple
@@ -411,16 +453,30 @@ function buildPayloadFromForm() {
   const multiDisplayMode = Boolean(Number(els.multiDisplayListHidden?.value || '0')) ? 'list' : 'count';
   const isGhost = Boolean(Number(els.ghostHidden?.value || '0'));
   const requiredBadges = isGhost 
-    ? splitCsv(els.ghostRequiredBadges?.value || '').filter(Boolean)
+    ? getGhostSelectedIds().filter(Boolean)
     : [];
   const ghostDisplayText = isGhost ? (els.ghostDisplayText?.value || '').trim() : '';
+  const minBadges = isGhost ? Number(els.ghostMinBadges?.value || 0) : 0;
+  const minSkills = isGhost ? Number(els.ghostMinSkills?.value || 0) : 0;
+  const minRank = isGhost ? String(els.ghostMinRank?.value || '') : '';
+  const prereqMode = isGhost ? String(els.ghostPrereqMode?.value || 'all') : 'all';
 
   // Fonction helper pour ajouter les propriétés fantômes si nécessaire
   const addGhostProps = (obj) => {
-    if (isGhost && requiredBadges.length > 0) {
+    const hasAnyPrereq =
+      (requiredBadges.length > 0) ||
+      (Number.isFinite(minBadges) && minBadges > 0) ||
+      (Number.isFinite(minSkills) && minSkills > 0) ||
+      (minRank && minRank.trim().length > 0);
+
+    if (isGhost && hasAnyPrereq) {
       obj.isGhost = true;
       obj.requiredBadges = requiredBadges;
       if (ghostDisplayText) obj.ghostDisplayText = ghostDisplayText;
+      if (prereqMode === 'any') obj.prereqMode = 'any';
+      if (Number.isFinite(minBadges) && minBadges > 0) obj.minBadges = minBadges;
+      if (Number.isFinite(minSkills) && minSkills > 0) obj.minSkills = minSkills;
+      if (minRank && minRank.trim().length > 0) obj.minRank = minRank.trim();
     }
     return obj;
   };
@@ -474,7 +530,9 @@ function buildPayloadFromForm() {
   if (type === 'multiSelect') {
     const options = parseOptions(els.multiOptions.value);
     const multiSkillMode = Boolean(Number(els.multiSkillByOptionHidden?.value || '0')) ? 'option' : 'count';
-    const optionSkills = (multiSkillMode === 'option') ? parseSingleSkills(els.multiOptionSkills?.value || '') : null;
+    // On garde toujours optionSkills: même si "skills par option" est désactivé,
+    // on peut s'en servir pour le mot-clé "bloquer".
+    const optionSkills = parseSingleSkills(els.multiOptionSkills?.value || '');
     // En mode "option", on génère automatiquement la liste de niveaux à partir des skills
     const levels = (multiSkillMode === 'option') ? uniqueSkillLevelsFromOptionSkills(optionSkills) : parseMultiLevels(els.multiLevels.value);
     payload.answer = JSON.stringify(addGhostProps({
@@ -553,8 +611,13 @@ function parseSingleSkills(text) {
       const v = value.trim();
       const sRaw = skill.trim();
       if (!v) return;
-      // "aucun"/"none"/vide => pas de skill pour cette option
+      // "bloquer" => cette option bloque le déblocage du badge
       const sLower = sRaw.toLowerCase();
+      if (sLower === 'bloquer') {
+        map[v] = 'bloquer';
+        return;
+      }
+      // "aucun"/"none"/vide => pas de skill pour cette option
       if (!sRaw || sLower === 'aucun' || sLower === 'none' || sLower === 'no' || sLower === '0' || sLower === '-') {
         return;
       }
@@ -618,8 +681,13 @@ function resetForm() {
   els.formMsg.textContent = '';
   setLowSkillState(false);
   setGhostState(false);
-  if (els.ghostRequiredBadges) els.ghostRequiredBadges.value = '';
+  renderGhostBadgesSelectOptions();
+  setGhostSelectedIds([]);
   if (els.ghostDisplayText) els.ghostDisplayText.value = '';
+  if (els.ghostPrereqMode) els.ghostPrereqMode.value = 'all';
+  if (els.ghostMinBadges) els.ghostMinBadges.value = '';
+  if (els.ghostMinSkills) els.ghostMinSkills.value = '';
+  if (els.ghostMinRank) els.ghostMinRank.value = '';
   setMultiDisplayListState(false);
   setMultiSkillByOptionState(false);
   if (els.multiOptionSkills) els.multiOptionSkills.value = '';

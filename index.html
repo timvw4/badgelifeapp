@@ -49,7 +49,10 @@
           <div>
             <p class="muted">Connecté</p>
             <strong id="profile-username">Utilisateur</strong>
-            <p id="profile-rank" class="muted" style="margin-top:2px;">—</p>
+            <div style="position:relative; display:inline-block;">
+              <button id="profile-rank" type="button" class="muted ghost" style="margin-top:2px; padding:0; border:0; background:transparent; cursor:pointer;">—</button>
+              <div id="rank-tooltip" class="rank-tooltip hidden" role="dialog" aria-label="Rangs de skills"></div>
+            </div>
           </div>
         </div>
         <div class="user-stats">
@@ -59,9 +62,10 @@
           </div>
           <div class="skill-count">
             <span id="skill-count">0</span>
-            <small>points de skill</small>
+            <small>skills</small>
           </div>
           <div class="settings-wrapper">
+            <button id="refresh-btn" class="ghost icon-btn" aria-label="Rafraîchir">⟳</button>
             <button id="settings-toggle" class="ghost icon-btn" aria-label="Réglages">⚙️</button>
             <div id="settings-menu" class="settings-menu hidden">
               <a id="admin-link" class="ghost full-width" href="./admin.html" style="display:none;">Admin</a>
@@ -101,7 +105,7 @@
 
       <section id="my-badges" class="tab-content">
         <h2>Mes badges</h2>
-        <p class="muted">Les badges que tu as déjà débloqués.</p>
+        <p class="muted">Les badges que tu as débloqués.</p>
         <div id="my-badges-list" class="grid badges-grid"></div>
       </section>
 

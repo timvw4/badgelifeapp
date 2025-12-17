@@ -140,6 +140,11 @@ p {
 .my-badges-catalog > .section-subtitle {
   grid-column: 1 / -1;
 }
+
+/* Mes badges (catalogue) : thème entièrement non débloqué => titre flouté */
+.my-badges-catalog > .section-subtitle.theme-locked {
+  opacity: 0.85;
+}
 .my-catalog-card.locked {
   opacity: 0.55;
   filter: grayscale(1);
@@ -149,13 +154,15 @@ p {
   filter: blur(1px);
 }
 
-/* Tous les badges : flouter uniquement le nom + l'emoji si non débloqué,
-   mais laisser la question + le formulaire utilisables. */
-.all-badge-card.locked .badge-emoji,
-.all-badge-card.locked .badge-title {
+/* Mes badges : badges fantômes non débloqués = flou plus fort */
+.my-catalog-card.ghost-locked .badge-emoji,
+.my-catalog-card.ghost-locked .badge-title {
   filter: blur(6px);
   opacity: 0.65;
 }
+
+/* Tous les badges : mode Pokédex
+   Le nom + emoji sont masqués côté JS (❓ / ?????), mais l'utilisateur peut répondre. */
 
 .subtabs {
   display: flex;
@@ -379,6 +386,37 @@ button {
 .rank-color-3 { color: #c084fc !important; text-shadow: 0 0 10px rgba(192,132,252,0.35); } /* violet */
 .rank-color-4 { color: #fbbf24 !important; text-shadow: 0 0 12px rgba(251,191,36,0.40); } /* or */
 
+/* Infobulle rangs */
+.rank-tooltip {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  z-index: 50;
+  min-width: 220px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.10);
+  background: rgba(17, 24, 39, 0.98);
+  box-shadow: 0 14px 38px rgba(0,0,0,0.45);
+}
+.rank-tooltip-title {
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+.rank-tooltip-list {
+  display: grid;
+  gap: 6px;
+}
+.rank-tooltip-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.rank-tooltip-rank {
+  font-weight: 700;
+}
+
 .user-stats {
   display: flex;
   align-items: center;
@@ -391,6 +429,9 @@ button {
   position: relative;
   margin-left: auto;
   align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .icon-btn {
@@ -402,6 +443,11 @@ button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+}
+
+/* Bouton refresh : icône un peu plus grande */
+#refresh-btn {
+  font-size: 30px;
 }
 
 .settings-menu {
@@ -812,6 +858,16 @@ button {
   border: 2px solid rgba(255,255,255,0.2);
 }
 
+/* Modal communauté : rapprocher le rang du nom */
+#community-profile-username {
+  margin: 6px 0 2px;
+  line-height: 1.1;
+}
+#community-profile-rank {
+  margin: 0 0 6px;
+  line-height: 1.15;
+}
+
 .profile-col-right {
   width: 100%;
   display: flex;
@@ -996,6 +1052,7 @@ button {
     flex-direction: column;
     align-items: flex-start;
     gap: 12px;
+    position: relative; /* pour ancrer le bouton réglage */
   }
   .user-stats {
     width: 100%;
@@ -1009,9 +1066,11 @@ button {
     align-self: auto;
   }
   .settings-wrapper {
-    position: relative;
+    position: absolute; /* fixe en haut à droite en portrait */
+    top: 6px;
+    right: 6px;
     width: auto;
-    margin-left: auto;
+    margin-left: 0;
     align-self: flex-start;
   }
   #profile-username {

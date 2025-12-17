@@ -45,7 +45,10 @@
       </div>
       <div class="grid" style="grid-template-columns: 1fr 1fr; gap: 20px;">
         <div>
-          <h3>Liste</h3>
+          <div class="row" style="justify-content: space-between; align-items: baseline;">
+            <h3>Liste</h3>
+            <small id="admin-badge-total" class="muted">Total : 0</small>
+          </div>
           <div class="table">
             <div class="table-head" style="display:grid; grid-template-columns: 0.35fr minmax(180px, 1fr) 1fr; gap:8px;">
               <span>Emoji</span><span>Nom</span><span>Statut skills</span>
@@ -89,7 +92,6 @@
               <option value="Travail"></option>
               <option value="Loisir"></option>
               <option value="Technologie"></option>
-              <option value="Jeux"></option>
               <option value="Santé"></option>
               <option value="Lifestyle"></option>
               <option value="Cuisine"></option>
@@ -97,11 +99,43 @@
               <option value="Nature"></option>
               <option value="Réseaux sociaux"></option>
               <option value="Autres"></option>
+              <option value="Badges cachés"></option>
             </datalist>
 
             <div id="block-ghost" class="answer-block hidden">
-              <label for="ghost-required-badges">Badges requis (IDs séparés par des virgules)</label>
-              <input id="ghost-required-badges" type="text" placeholder="Ex: 11111111-1111-1111-1111-111111111111, 22222222-2222-2222-2222-222222222222">
+              <label>Badges requis</label>
+              <select id="ghost-required-badges-select" class="select-multi" multiple size="8"></select>
+              <small class="muted">Tu peux sélectionner plusieurs badges (Ctrl/Cmd + clic).</small>
+              
+              <label style="margin-top:10px;">Pré-requis</label>
+              <div style="margin: 6px 0 10px;">
+                <label for="ghost-prereq-mode" class="muted" style="display:block; margin-bottom:4px;">Mode de prérequis</label>
+                <select id="ghost-prereq-mode">
+                  <option value="all">ET (tous les prérequis doivent être vrais)</option>
+                  <option value="any">OU (au moins un prérequis doit être vrai)</option>
+                </select>
+              </div>
+              <div class="row" style="gap:10px; flex-wrap:wrap;">
+                <div style="min-width:160px; flex: 1 1 160px;">
+                  <label for="ghost-min-badges" class="muted" style="display:block; margin-bottom:4px;">Badges débloqués (min)</label>
+                  <input id="ghost-min-badges" type="number" min="0" step="1" placeholder="Ex: 2">
+                </div>
+                <div style="min-width:160px; flex: 1 1 160px;">
+                  <label for="ghost-min-skills" class="muted" style="display:block; margin-bottom:4px;">Points de skills (min)</label>
+                  <input id="ghost-min-skills" type="number" min="0" step="1" placeholder="Ex: 3">
+                </div>
+                <div style="min-width:160px; flex: 1 1 160px;">
+                  <label for="ghost-min-rank" class="muted" style="display:block; margin-bottom:4px;">Rang minimum</label>
+                  <select id="ghost-min-rank">
+                    <option value="">Aucun</option>
+                    <option value="Débutant">Débutant</option>
+                    <option value="Apprenti">Polyvalent</option>
+                    <option value="Confirmé">Compétent</option>
+                    <option value="Spécialiste">Accompli</option>
+                    <option value="Légende">Multiskills</option>
+                  </select>
+                </div>
+              </div>
               <label for="ghost-display-text" style="margin-top:10px;">Remplace la réponse</label>
               <textarea id="ghost-display-text" rows="2" placeholder="Ex: Débloqué automatiquement"></textarea>
               <small class="muted">Ce badge sera débloqué automatiquement quand tous les badges requis sont débloqués. Il n'apparaîtra pas dans "Tous les badges".</small>
@@ -137,7 +171,7 @@
             </div>
 
             <div id="block-multi" class="answer-block hidden non-ghost-only">
-              <label>Options (une par ligne)</label>
+              <label>Les choix de réponses</label>
               <textarea id="multi-options" rows="4" placeholder="valeur|Libellé"></textarea>
               <label>Niveaux (un par ligne)</label>
               <textarea id="multi-levels" rows="3" placeholder="Ex:&#10;Skill 1|1&#10;Skill mystère|3"></textarea>
@@ -159,7 +193,7 @@
             </div>
 
             <div id="block-single" class="answer-block hidden non-ghost-only">
-              <label>Options (une par ligne)</label>
+              <label>Choix de réponses</label>
               <textarea id="single-options" rows="4" placeholder="valeur|Libellé"></textarea>
               <label style="margin-top:10px;">Skills par option (une par ligne)</label>
               <textarea id="single-skills" rows="3" placeholder="valeur|Skill 1&#10;valeur2|aucun&#10;valeur3|Skill mystère"></textarea>
