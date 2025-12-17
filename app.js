@@ -118,9 +118,9 @@ function getRankMeta(skillPoints) {
   // Du plus bas au plus haut
   const ranks = [
     { min: 0, name: 'Débutant', fontClass: 'rank-font-0', colorClass: 'rank-color-0' },
-    { min: 10, name: 'Apprenti', fontClass: 'rank-font-1', colorClass: 'rank-color-1' },
-    { min: 25, name: 'Confirmé', fontClass: 'rank-font-2', colorClass: 'rank-color-2' },
-    { min: 50, name: 'Expert', fontClass: 'rank-font-3', colorClass: 'rank-color-3' },
+    { min: 15, name: 'Apprenti', fontClass: 'rank-font-1', colorClass: 'rank-color-1' },
+    { min: 30, name: 'Confirmé', fontClass: 'rank-font-2', colorClass: 'rank-color-2' },
+    { min: 60, name: 'Spécialiste', fontClass: 'rank-font-3', colorClass: 'rank-color-3' },
     { min: 100, name: 'Légende', fontClass: 'rank-font-4', colorClass: 'rank-color-4' },
   ];
   let current = ranks[0];
@@ -1263,6 +1263,33 @@ function evaluateBadgeAnswer(badge, rawAnswer, selectedOptions = []) {
     if (!count) {
       return { ok: false, message: 'Choisis au moins une option.' };
     }
+
+    // Mode 1 (nouveau) : le niveau dépend des options cochées
+    if (config.multiSkillMode === 'option' && config.optionSkills && typeof config.optionSkills === 'object') {
+      const levels = Array.isArray(config.levels) ? config.levels.map(l => l?.label).filter(Boolean) : [];
+      const labelToPos = new Map(levels.map((lbl, idx) => [String(lbl), idx + 1]));
+      let bestLabel = null;
+      let bestPos = -1;
+      selectedOptions.forEach(val => {
+        const raw = config.optionSkills[String(val)];
+        const lbl = (raw ?? '').toString().trim();
+        if (!lbl) return;
+        if (isMysteryLevel(lbl)) {
+          bestLabel = 'Expert';
+          bestPos = Number.POSITIVE_INFINITY;
+          return;
+        }
+        const pos = labelToPos.get(lbl) ?? -1;
+        if (pos > bestPos) {
+          bestPos = pos;
+          bestLabel = lbl;
+        }
+      });
+      const storedLabel = bestLabel ? (isMysteryLevel(bestLabel) ? 'Expert' : bestLabel) : null;
+      return { ok: true, level: storedLabel, message: 'Bravo, badge débloqué !' };
+    }
+
+    // Mode 2 (ancien) : le niveau dépend du nombre de coches
     const levels = Array.isArray(config.levels) ? [...config.levels] : [];
     levels.sort((a, b) => (b.min ?? 0) - (a.min ?? 0));
     const level = levels.find(l => count >= (l.min ?? 0));

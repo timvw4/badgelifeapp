@@ -49,6 +49,10 @@ function cacheEls() {
   els.rangeLevels = document.getElementById('range-levels');
   els.multiOptions = document.getElementById('multi-options');
   els.multiLevels = document.getElementById('multi-levels');
+  els.multiSkillByOptionHidden = document.getElementById('multi-skill-by-option');
+  els.multiSkillByOptionToggle = document.getElementById('multi-skill-by-option-toggle');
+  els.multiOptionSkills = document.getElementById('multi-option-skills');
+  els.multiSkillByOptionBlock = document.getElementById('multi-skill-by-option-block');
   els.singleOptions = document.getElementById('single-options');
   els.singleSkills = document.getElementById('single-skills');
   els.multiDisplayListHidden = document.getElementById('multi-display-list');
@@ -117,6 +121,9 @@ function bindForm() {
   }
   if (els.multiDisplayListToggle) {
     els.multiDisplayListToggle.addEventListener('click', () => toggleMultiDisplayList());
+  }
+  if (els.multiSkillByOptionToggle) {
+    els.multiSkillByOptionToggle.addEventListener('click', () => toggleMultiSkillByOption());
   }
 
   els.badgeForm.addEventListener('submit', async (e) => {
@@ -316,6 +323,8 @@ function fillForm(b) {
   els.displaySuffix.value = '';
   if (els.boolDisplayText) els.boolDisplayText.value = '';
   setMultiDisplayListState(false);
+  setMultiSkillByOptionState(false);
+  if (els.multiOptionSkills) els.multiOptionSkills.value = '';
   if (els.singleSkills) els.singleSkills.value = '';
   // Parse answer
   let parsed = null;
@@ -361,6 +370,11 @@ function fillForm(b) {
     els.multiOptions.value = optLines;
     els.multiLevels.value = lvlLines;
     setMultiDisplayListState(parsed.multiDisplayMode === 'list');
+    setMultiSkillByOptionState(parsed.multiSkillMode === 'option');
+    if (els.multiOptionSkills) {
+      const entries = parsed.optionSkills && typeof parsed.optionSkills === 'object' ? Object.entries(parsed.optionSkills) : [];
+      els.multiOptionSkills.value = entries.map(([val, skillLabel]) => `${val}|${skillLabel}`).join('\n');
+    }
   } else if (type === 'singleSelect') {
     const optLines = (parsed.options || []).map(o => `${o.value || ''}|${o.label || ''}`).join('\n');
     if (els.singleOptions) els.singleOptions.value = optLines;
@@ -459,11 +473,16 @@ function buildPayloadFromForm() {
 
   if (type === 'multiSelect') {
     const options = parseOptions(els.multiOptions.value);
-    const levels = parseMultiLevels(els.multiLevels.value);
+    const multiSkillMode = Boolean(Number(els.multiSkillByOptionHidden?.value || '0')) ? 'option' : 'count';
+    const optionSkills = (multiSkillMode === 'option') ? parseSingleSkills(els.multiOptionSkills?.value || '') : null;
+    // En mode "option", on génère automatiquement la liste de niveaux à partir des skills
+    const levels = (multiSkillMode === 'option') ? uniqueSkillLevelsFromOptionSkills(optionSkills) : parseMultiLevels(els.multiLevels.value);
     payload.answer = JSON.stringify(addGhostProps({
       type: 'multiSelect',
       options,
       levels,
+      multiSkillMode,
+      ...(optionSkills ? { optionSkills } : {}),
       multiDisplayMode,
       ...(displayPrefix ? { displayPrefix } : {}),
       ...(displaySuffix ? { displaySuffix } : {}),
@@ -602,6 +621,8 @@ function resetForm() {
   if (els.ghostRequiredBadges) els.ghostRequiredBadges.value = '';
   if (els.ghostDisplayText) els.ghostDisplayText.value = '';
   setMultiDisplayListState(false);
+  setMultiSkillByOptionState(false);
+  if (els.multiOptionSkills) els.multiOptionSkills.value = '';
   if (els.theme) els.theme.value = '';
 }
 
@@ -616,6 +637,26 @@ function setMultiDisplayListState(isList) {
 function toggleMultiDisplayList() {
   const current = Boolean(Number(els.multiDisplayListHidden?.value || '0'));
   setMultiDisplayListState(!current);
+}
+
+function setMultiSkillByOptionState(enabled) {
+  if (els.multiSkillByOptionHidden) els.multiSkillByOptionHidden.value = enabled ? '1' : '0';
+  if (els.multiSkillByOptionToggle) {
+    els.multiSkillByOptionToggle.textContent = enabled ? 'Skills par option : activé' : 'Skills par option : désactivé';
+    els.multiSkillByOptionToggle.classList.toggle('active', enabled);
+  }
+  if (els.multiSkillByOptionBlock) {
+    els.multiSkillByOptionBlock.classList.toggle('hidden', !enabled);
+  }
+  // Quand activé, les niveaux par nombre de coches ne servent plus
+  if (els.multiLevels) {
+    els.multiLevels.classList.toggle('hidden', enabled);
+  }
+}
+
+function toggleMultiSkillByOption() {
+  const current = Boolean(Number(els.multiSkillByOptionHidden?.value || '0'));
+  setMultiSkillByOptionState(!current);
 }
 
 function setAuthMsg(msg, error = false) {

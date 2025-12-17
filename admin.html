@@ -143,6 +143,15 @@
               <textarea id="multi-levels" rows="3" placeholder="Ex:&#10;Skill 1|1&#10;Skill mystère|3"></textarea>
               <small class="muted">Format skills : label|min sélection. Utilise “Skills mystère” si besoin.</small>
               <div class="row" style="gap:10px; align-items:center; margin-top:10px;">
+                <button type="button" id="multi-skill-by-option-toggle" class="ghost">Skills par option : désactivé</button>
+                <input id="multi-skill-by-option" type="hidden" value="0">
+              </div>
+              <div id="multi-skill-by-option-block" class="hidden" style="margin-top:10px;">
+                <label>Skills par option (une par ligne)</label>
+                <textarea id="multi-option-skills" rows="4" placeholder="valeur|Skill 1&#10;valeur2|Expert&#10;valeur3|aucun"></textarea>
+                <small class="muted">Quand activé : le niveau dépend des options cochées (pas du nombre). Mets vide après le | pour “aucun skill”.</small>
+              </div>
+              <div class="row" style="gap:10px; align-items:center; margin-top:10px;">
                 <button type="button" id="multi-display-list-toggle" class="ghost">Liste : désactivée</button>
                 <input id="multi-display-list" type="hidden" value="0">
               </div>
