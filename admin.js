@@ -41,22 +41,26 @@ function cacheEls() {
   els.name = document.getElementById('badge-name');
   els.emoji = document.getElementById('badge-emoji');
   els.desc = document.getElementById('badge-description');
+  els.theme = document.getElementById('badge-theme');
   els.q = document.getElementById('badge-question');
   els.answerType = document.getElementById('answer-type');
   els.answerText = document.getElementById('answer-text');
-  els.boolTrue = document.getElementById('bool-true');
-  els.boolFalse = document.getElementById('bool-false');
-  els.boolExpected = document.getElementById('bool-expected');
+  els.boolDisplayText = document.getElementById('bool-display-text');
   els.rangeLevels = document.getElementById('range-levels');
   els.multiOptions = document.getElementById('multi-options');
   els.multiLevels = document.getElementById('multi-levels');
-  els.displayTemplate = document.getElementById('display-template');
+  els.singleOptions = document.getElementById('single-options');
+  els.singleSkills = document.getElementById('single-skills');
+  els.multiDisplayListHidden = document.getElementById('multi-display-list');
+  els.multiDisplayListToggle = document.getElementById('multi-display-list-toggle');
+  els.displayPrefix = document.getElementById('display-prefix');
   els.displaySuffix = document.getElementById('display-suffix');
   els.lowSkillHidden = document.getElementById('badge-low-skill');
   els.lowSkillToggle = document.getElementById('badge-low-skill-toggle');
   els.ghostHidden = document.getElementById('badge-ghost');
   els.ghostToggle = document.getElementById('badge-ghost-toggle');
   els.ghostRequiredBadges = document.getElementById('ghost-required-badges');
+  els.ghostDisplayText = document.getElementById('ghost-display-text');
   els.ghostBlock = document.getElementById('block-ghost');
   els.btnDelete = document.getElementById('btn-delete');
   els.btnReset = document.getElementById('btn-reset');
@@ -65,7 +69,9 @@ function cacheEls() {
     boolean: document.getElementById('block-boolean'),
     range: document.getElementById('block-range'),
     multiSelect: document.getElementById('block-multi'),
+    singleSelect: document.getElementById('block-single'),
   };
+  els.nonGhostOnly = Array.from(document.querySelectorAll('.non-ghost-only'));
 }
 
 function bindAuth() {
@@ -109,12 +115,16 @@ function bindForm() {
   if (els.ghostToggle) {
     els.ghostToggle.addEventListener('click', () => toggleGhost());
   }
+  if (els.multiDisplayListToggle) {
+    els.multiDisplayListToggle.addEventListener('click', () => toggleMultiDisplayList());
+  }
 
   els.badgeForm.addEventListener('submit', async (e) => {
     e.preventDefault();
+    const isGhost = Boolean(Number(els.ghostHidden?.value || '0'));
     const payload = buildPayloadFromForm();
     if (!payload.name) return setFormMsg('Nom requis.', true);
-    if (!payload.question) return setFormMsg('Question requise.', true);
+    if (!isGhost && !payload.question) return setFormMsg('Question requise.', true);
     setFormMsg('Enregistrement...');
     let { error } = await supabase.from('badges').upsert(payload);
     // Si la colonne emoji n'existe pas, on retente sans le champ emoji
@@ -184,8 +194,8 @@ function isAdminUser(user) {
 }
 
 async function loadBadges() {
-  const selectWithEmoji = 'id,name,description,question,answer,emoji,low_skill';
-  const selectFallback = 'id,name,description,question,answer';
+  const selectWithEmoji = 'id,name,description,question,answer,emoji,low_skill,theme';
+  const selectFallback = 'id,name,description,question,answer,theme';
 
   let { data, error } = await supabase.from('badges').select(selectWithEmoji).order('id');
 
@@ -253,6 +263,14 @@ function getLevelSummary(answer) {
     if (hasMystery) return `Mystère (max: ${topLabel})`;
     return `Max: ${topLabel}`;
   }
+  if (parsed.type === 'singleSelect') {
+    const levels = Array.isArray(parsed.levels) ? parsed.levels : [];
+    if (!levels.length) return 'Sans skills';
+    const hasMystery = levels.some(l => isMysteryLevel(l.label));
+    const topLabel = levels[levels.length - 1]?.label || '—';
+    if (hasMystery) return `Mystère (max: ${topLabel})`;
+    return `Max: ${topLabel}`;
+  }
   if (parsed.type === 'boolean') {
     return 'Sans skills';
   }
@@ -291,10 +309,14 @@ function fillForm(b) {
   els.name.value = b.name ?? '';
   els.emoji.value = b.emoji ?? '';
   els.desc.value = b.description ?? '';
+  if (els.theme) els.theme.value = b.theme ?? '';
   els.q.value = b.question ?? '';
   setLowSkillState(Boolean(b.low_skill));
-  els.displayTemplate.value = '';
+  if (els.displayPrefix) els.displayPrefix.value = '';
   els.displaySuffix.value = '';
+  if (els.boolDisplayText) els.boolDisplayText.value = '';
+  setMultiDisplayListState(false);
+  if (els.singleSkills) els.singleSkills.value = '';
   // Parse answer
   let parsed = null;
   if (typeof b.answer === 'string') {
@@ -311,6 +333,9 @@ function fillForm(b) {
   } else {
     els.ghostRequiredBadges.value = '';
   }
+  if (els.ghostDisplayText) {
+    els.ghostDisplayText.value = isGhost ? (parsed?.ghostDisplayText ?? '') : '';
+  }
   
   if (!parsed || typeof parsed !== 'object' || !parsed.type) {
     // Réponse texte simple
@@ -319,15 +344,14 @@ function fillForm(b) {
     els.answerText.value = b.answer ?? '';
     return;
   }
-  els.displayTemplate.value = parsed.displayTemplate ?? '';
+  if (els.displayPrefix) els.displayPrefix.value = parsed.displayPrefix ?? '';
+  // Ancien displaySuffix: on continue de le lire pour compat
   els.displaySuffix.value = parsed.displaySuffix ?? '';
   const type = parsed.type;
   els.answerType.value = type;
   showBlock(type);
   if (type === 'boolean') {
-    els.boolTrue.value = (parsed.trueLabels || []).join(',');
-    els.boolFalse.value = (parsed.falseLabels || []).join(',');
-    els.boolExpected.value = parsed.expected === false ? 'false' : 'true';
+    if (els.boolDisplayText) els.boolDisplayText.value = parsed.booleanDisplayText ?? '';
   } else if (type === 'range') {
     const lines = (parsed.levels || []).map(l => `${l.label || ''}|${l.min ?? ''}|${l.max ?? ''}`).join('\n');
     els.rangeLevels.value = lines;
@@ -336,6 +360,14 @@ function fillForm(b) {
     const lvlLines = (parsed.levels || []).map(l => `${l.label || ''}|${l.min ?? ''}`).join('\n');
     els.multiOptions.value = optLines;
     els.multiLevels.value = lvlLines;
+    setMultiDisplayListState(parsed.multiDisplayMode === 'list');
+  } else if (type === 'singleSelect') {
+    const optLines = (parsed.options || []).map(o => `${o.value || ''}|${o.label || ''}`).join('\n');
+    if (els.singleOptions) els.singleOptions.value = optLines;
+    if (els.singleSkills) {
+      const entries = parsed.optionSkills && typeof parsed.optionSkills === 'object' ? Object.entries(parsed.optionSkills) : [];
+      els.singleSkills.value = entries.map(([val, skillLabel]) => `${val}|${skillLabel}`).join('\n');
+    }
   } else {
     // fallback texte
     els.answerText.value = b.answer ?? '';
@@ -347,6 +379,7 @@ function buildPayloadFromForm() {
   const payload = {
     name: els.name.value.trim(),
     description: els.desc.value.trim(),
+    theme: (els.theme?.value || '').trim() || null,
     question: els.q.value.trim(),
     emoji: els.emoji.value.trim(),
     low_skill: Boolean(Number(els.lowSkillHidden?.value || '0')),
@@ -359,21 +392,29 @@ function buildPayloadFromForm() {
   }
 
   const type = els.answerType.value;
-  const displayTemplate = els.displayTemplate.value.trim();
-  const displaySuffix = els.displaySuffix.value.trim();
+  const displayPrefix = (els.displayPrefix?.value || '').trim();
+  const displaySuffix = (els.displaySuffix?.value || '').trim();
+  const multiDisplayMode = Boolean(Number(els.multiDisplayListHidden?.value || '0')) ? 'list' : 'count';
   const isGhost = Boolean(Number(els.ghostHidden?.value || '0'));
   const requiredBadges = isGhost 
     ? splitCsv(els.ghostRequiredBadges?.value || '').filter(Boolean)
     : [];
+  const ghostDisplayText = isGhost ? (els.ghostDisplayText?.value || '').trim() : '';
 
   // Fonction helper pour ajouter les propriétés fantômes si nécessaire
   const addGhostProps = (obj) => {
     if (isGhost && requiredBadges.length > 0) {
       obj.isGhost = true;
       obj.requiredBadges = requiredBadges;
+      if (ghostDisplayText) obj.ghostDisplayText = ghostDisplayText;
     }
     return obj;
   };
+
+  // Si c'est un badge fantôme, la question n'est pas utilisée (on la garde non vide pour éviter des contraintes DB)
+  if (isGhost && !payload.question) {
+    payload.question = 'Badge fantôme';
+  }
 
   if (type === 'text') {
     if (isGhost && requiredBadges.length > 0) {
@@ -382,7 +423,8 @@ function buildPayloadFromForm() {
         answer: els.answerText.value.trim(),
         isGhost: true,
         requiredBadges,
-        ...(displayTemplate ? { displayTemplate } : {}),
+        ...(ghostDisplayText ? { ghostDisplayText } : {}),
+        ...(displayPrefix ? { displayPrefix } : {}),
         ...(displaySuffix ? { displaySuffix } : {}),
       });
     } else {
@@ -392,16 +434,14 @@ function buildPayloadFromForm() {
   }
 
   if (type === 'boolean') {
-    const trueLabels = splitCsv(els.boolTrue.value);
-    const falseLabels = splitCsv(els.boolFalse.value);
-    const expected = els.boolExpected.value === 'true';
     payload.answer = JSON.stringify(addGhostProps({
       type: 'boolean',
-      trueLabels,
-      falseLabels,
-      expected,
-      ...(displayTemplate ? { displayTemplate } : {}),
-      ...(displaySuffix ? { displaySuffix } : {}),
+      // L’utilisateur choisit via boutons Oui / Non dans l’app
+      trueLabels: ['oui'],
+      falseLabels: ['non'],
+      // Par défaut, on débloque si l’utilisateur répond "oui"
+      expected: true,
+      ...(els.boolDisplayText?.value?.trim() ? { booleanDisplayText: els.boolDisplayText.value.trim() } : {}),
     }));
     return payload;
   }
@@ -411,7 +451,7 @@ function buildPayloadFromForm() {
     payload.answer = JSON.stringify(addGhostProps({
       type: 'range',
       levels,
-      ...(displayTemplate ? { displayTemplate } : {}),
+      ...(displayPrefix ? { displayPrefix } : {}),
       ...(displaySuffix ? { displaySuffix } : {}),
     }));
     return payload;
@@ -424,7 +464,23 @@ function buildPayloadFromForm() {
       type: 'multiSelect',
       options,
       levels,
-      ...(displayTemplate ? { displayTemplate } : {}),
+      multiDisplayMode,
+      ...(displayPrefix ? { displayPrefix } : {}),
+      ...(displaySuffix ? { displaySuffix } : {}),
+    }));
+    return payload;
+  }
+
+  if (type === 'singleSelect') {
+    const options = parseOptions(els.singleOptions?.value || '');
+    const optionSkills = parseSingleSkills(els.singleSkills?.value || '');
+    const levels = uniqueSkillLevelsFromOptionSkills(optionSkills);
+    payload.answer = JSON.stringify(addGhostProps({
+      type: 'singleSelect',
+      options,
+      optionSkills,
+      levels,
+      ...(displayPrefix ? { displayPrefix } : {}),
       ...(displaySuffix ? { displaySuffix } : {}),
     }));
     return payload;
@@ -467,6 +523,61 @@ function parseMultiLevels(text) {
     .filter(l => l.label && !Number.isNaN(l.min));
 }
 
+function parseSingleSkills(text) {
+  // Format: valeur|Skill 1
+  const map = {};
+  text.split('\n')
+    .map(l => l.trim())
+    .filter(Boolean)
+    .forEach(line => {
+      const [value = '', skill = ''] = line.split('|');
+      const v = value.trim();
+      const sRaw = skill.trim();
+      if (!v) return;
+      // "aucun"/"none"/vide => pas de skill pour cette option
+      const sLower = sRaw.toLowerCase();
+      if (!sRaw || sLower === 'aucun' || sLower === 'none' || sLower === 'no' || sLower === '0' || sLower === '-') {
+        return;
+      }
+      map[v] = sRaw;
+    });
+  return map;
+}
+
+function uniqueSkillLevelsFromOptionSkills(optionSkills) {
+  const labels = [];
+  const seen = new Set();
+  if (!optionSkills || typeof optionSkills !== 'object') return [];
+  Object.values(optionSkills).forEach(label => {
+    const l = (label ?? '').toString().trim();
+    if (!l || seen.has(l)) return;
+    seen.add(l);
+    labels.push(l);
+  });
+  // Trier pour que les points soient cohérents:
+  // Skill 1, Skill 2, Skill 3... puis "Skill mystère" à la fin.
+  labels.sort((a, b) => {
+    const am = isMysteryLevel(a) ? 1 : 0;
+    const bm = isMysteryLevel(b) ? 1 : 0;
+    if (am !== bm) return am - bm; // non-mystère d'abord
+    const an = extractSkillNumber(a);
+    const bn = extractSkillNumber(b);
+    if (an !== null && bn !== null) return an - bn;
+    if (an !== null) return -1;
+    if (bn !== null) return 1;
+    return a.localeCompare(b);
+  });
+  return labels.map(label => ({ label }));
+}
+
+function extractSkillNumber(label) {
+  if (typeof label !== 'string') return null;
+  const m = label.toLowerCase().match(/skill\s*(\d+)/);
+  if (!m) return null;
+  const n = Number(m[1]);
+  return Number.isFinite(n) ? n : null;
+}
+
 function splitCsv(val) {
   return val.split(',').map(s => s.trim()).filter(Boolean);
 }
@@ -475,6 +586,10 @@ function showBlock(type) {
   Object.keys(els.blocks).forEach(key => {
     els.blocks[key].classList.toggle('hidden', key !== type);
   });
+  // Pour le type Oui/Non: on cache template + suffixe (ils n’ont plus de sens)
+  const isBoolean = type === 'boolean';
+  const nonBooleanEls = Array.from(document.querySelectorAll('.non-boolean-only'));
+  nonBooleanEls.forEach(el => el.classList.toggle('hidden', isBoolean));
 }
 
 function resetForm() {
@@ -484,6 +599,23 @@ function resetForm() {
   els.formMsg.textContent = '';
   setLowSkillState(false);
   setGhostState(false);
+  if (els.ghostRequiredBadges) els.ghostRequiredBadges.value = '';
+  if (els.ghostDisplayText) els.ghostDisplayText.value = '';
+  setMultiDisplayListState(false);
+  if (els.theme) els.theme.value = '';
+}
+
+function setMultiDisplayListState(isList) {
+  if (els.multiDisplayListHidden) els.multiDisplayListHidden.value = isList ? '1' : '0';
+  if (els.multiDisplayListToggle) {
+    els.multiDisplayListToggle.textContent = isList ? 'Liste : activée' : 'Liste : désactivée';
+    els.multiDisplayListToggle.classList.toggle('active', isList);
+  }
+}
+
+function toggleMultiDisplayList() {
+  const current = Boolean(Number(els.multiDisplayListHidden?.value || '0'));
+  setMultiDisplayListState(!current);
 }
 
 function setAuthMsg(msg, error = false) {
@@ -517,6 +649,12 @@ function setGhostState(isGhost) {
   }
   if (els.ghostBlock) {
     els.ghostBlock.classList.toggle('hidden', !isGhost);
+  }
+  // Cacher les champs "question/réponse" quand le badge est fantôme
+  if (Array.isArray(els.nonGhostOnly) && els.nonGhostOnly.length) {
+    els.nonGhostOnly.forEach(el => {
+      el.classList.toggle('hidden', isGhost);
+    });
   }
 }
 

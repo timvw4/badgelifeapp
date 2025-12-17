@@ -119,6 +119,44 @@ p {
   box-shadow: 0 8px 25px rgba(6,182,212,0.35);
 }
 
+/* Filtres "Tous les badges" */
+.badge-filters .ghost.active {
+  background: rgba(255,255,255,0.08);
+  border-color: rgba(255,255,255,0.18);
+}
+
+/* Panneau thèmes */
+#themes-panel .ghost.active {
+  background: rgba(255,255,255,0.08);
+  border-color: rgba(255,255,255,0.18);
+}
+
+/* Mes badges : mode catalogue (Pokédex) */
+.my-badges-catalog {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 14px;
+}
+.my-badges-catalog > .section-subtitle {
+  grid-column: 1 / -1;
+}
+.my-catalog-card.locked {
+  opacity: 0.55;
+  filter: grayscale(1);
+}
+.my-catalog-card.locked .badge-emoji,
+.my-catalog-card.locked .badge-title {
+  filter: blur(1px);
+}
+
+/* Tous les badges : flouter uniquement le nom + l'emoji si non débloqué,
+   mais laisser la question + le formulaire utilisables. */
+.all-badge-card.locked .badge-emoji,
+.all-badge-card.locked .badge-title {
+  filter: blur(6px);
+  opacity: 0.65;
+}
+
 .subtabs {
   display: flex;
   gap: 8px;
@@ -327,6 +365,20 @@ button {
   text-overflow: ellipsis;
 }
 
+/* Rangs (polices de plus en plus stylées) */
+.rank-font-0 { font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif; }
+.rank-font-1 { font-family: 'Poppins', 'Inter', system-ui, sans-serif; letter-spacing: 0.2px; }
+.rank-font-2 { font-family: 'Orbitron', 'Inter', system-ui, sans-serif; letter-spacing: 0.6px; }
+.rank-font-3 { font-family: 'Cinzel', 'Inter', system-ui, sans-serif; letter-spacing: 0.4px; }
+.rank-font-4 { font-family: 'Pacifico', 'Inter', system-ui, sans-serif; letter-spacing: 0.2px; }
+
+/* Couleurs de rang */
+.rank-color-0 { color: #94a3b8 !important; } /* gris doux */
+.rank-color-1 { color: #67e8f9 !important; text-shadow: 0 0 10px rgba(103,232,249,0.35); } /* cyan */
+.rank-color-2 { color: #22c55e !important; text-shadow: 0 0 10px rgba(34,197,94,0.35); } /* vert */
+.rank-color-3 { color: #c084fc !important; text-shadow: 0 0 10px rgba(192,132,252,0.35); } /* violet */
+.rank-color-4 { color: #fbbf24 !important; text-shadow: 0 0 12px rgba(251,191,36,0.40); } /* or */
+
 .user-stats {
   display: flex;
   align-items: center;
@@ -426,7 +478,7 @@ button {
 }
 
 .badges-grid .card-badge {
-  min-height: 110px;
+  min-height: auto;
 }
 
 #my-badges-list.list-mode {
@@ -437,11 +489,11 @@ button {
 
 #my-badges-list.list-mode .card-badge.compact {
   width: 100%;
-  min-height: 90px;
+  min-height: auto;
   flex-direction: row;
   align-items: center;
   gap: 12px;
-  padding: 12px 14px;
+  padding: 10px 12px;
 }
 
 #my-badges-list.list-mode .row {
@@ -499,9 +551,10 @@ button {
 .card-badge.compact {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 10px 12px;
-  min-height: 105px;
+  gap: 6px;
+  /* padding équilibré haut/bas pour éviter un gros vide sous le texte */
+  padding: 8px 12px;
+  min-height: auto;
 }
 
 .card-badge.compact .badge-compact {
@@ -544,6 +597,7 @@ button {
 .card-badge.compact .badge-title {
   font-size: 16px;
   font-weight: 700;
+  line-height: 1.2;
 }
 
 .card-badge.compact .row {
@@ -925,6 +979,18 @@ button {
   color: var(--danger);
 }
 
+/* Oui/Non : boutons côte à côte avec peu d’espace */
+.bool-buttons {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: nowrap;
+}
+.bool-btn {
+  padding: 8px 12px;
+  min-width: 74px;
+}
+
 @media (max-width: 640px) {
   .topbar {
     flex-direction: column;
@@ -1006,8 +1072,13 @@ button {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  /* Mes badges catalogue : forcer 2 colonnes sur mobile */
+  #my-badges-list.my-badges-catalog {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .card-badge.compact {
-    min-height: 100px;
+    min-height: auto;
   }
 
   .modal-card {

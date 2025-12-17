@@ -22,6 +22,9 @@ const state = {
   userBadgeLevels: new Map(),
   userBadgeAnswers: new Map(), // stocke la réponse saisie par badge
   attemptedBadges: new Set(),
+  allBadgesFilter: 'all', // all | unlocked | locked
+  themesEnabled: false,
+  selectedThemes: null, // null => aucun thème sélectionné (pas de filtre). Set non-vide => filtre.
 };
 
 const els = {};
@@ -38,6 +41,8 @@ function pseudoToEmail(pseudo) {
 
 document.addEventListener('DOMContentLoaded', () => {
   cacheElements();
+  bindAllBadgesFilters();
+  bindThemeFilters();
   attachAuthTabListeners();
   attachFormListeners();
   attachNavListeners();
@@ -56,6 +61,7 @@ function cacheElements() {
   els.loginForm = document.getElementById('login-form');
   els.signupForm = document.getElementById('signup-form');
   els.profileUsername = document.getElementById('profile-username');
+  els.profileRank = document.getElementById('profile-rank');
   els.avatarImg = document.getElementById('avatar-img');
   els.avatarPreviewImg = document.getElementById('avatar-preview-img');
   els.badgeCount = document.getElementById('badge-count');
@@ -79,11 +85,19 @@ function cacheElements() {
   };
   els.myBadgesList = document.getElementById('my-badges-list');
   els.allBadgesList = document.getElementById('all-badges-list');
+  els.filterAll = document.getElementById('filter-all');
+  els.filterUnlocked = document.getElementById('filter-unlocked');
+  els.filterLocked = document.getElementById('filter-locked');
+  els.themesToggle = document.getElementById('themes-toggle');
+  els.themesPanel = document.getElementById('themes-panel');
+  els.themesAll = document.getElementById('themes-all');
+  els.themesList = document.getElementById('themes-list');
   els.communityList = document.getElementById('community-list');
   els.communityProfileModal = document.getElementById('community-profile-modal');
   els.communityProfileClose = document.getElementById('community-profile-close');
   els.communityProfileAvatar = document.getElementById('community-profile-avatar');
   els.communityProfileUsername = document.getElementById('community-profile-username');
+  els.communityProfileRank = document.getElementById('community-profile-rank');
   els.communityProfileBadges = document.getElementById('community-profile-badges');
   els.communityProfileMystery = document.getElementById('community-profile-mystery');
   els.communityProfileBadgesGrid = document.getElementById('community-profile-badges-grid');
@@ -97,6 +111,103 @@ function cacheElements() {
   els.ideaDescription = document.getElementById('idea-description');
   els.ideaMessage = document.getElementById('idea-message');
   els.ideaList = document.getElementById('idea-list');
+}
+
+function getRankMeta(skillPoints) {
+  const pts = Number(skillPoints) || 0;
+  // Du plus bas au plus haut
+  const ranks = [
+    { min: 0, name: 'Débutant', fontClass: 'rank-font-0', colorClass: 'rank-color-0' },
+    { min: 10, name: 'Apprenti', fontClass: 'rank-font-1', colorClass: 'rank-color-1' },
+    { min: 25, name: 'Confirmé', fontClass: 'rank-font-2', colorClass: 'rank-color-2' },
+    { min: 50, name: 'Expert', fontClass: 'rank-font-3', colorClass: 'rank-color-3' },
+    { min: 100, name: 'Légende', fontClass: 'rank-font-4', colorClass: 'rank-color-4' },
+  ];
+  let current = ranks[0];
+  ranks.forEach(r => {
+    if (pts >= r.min) current = r;
+  });
+  return { ...current, points: pts };
+}
+
+function applyRankToElement(el, rankMeta) {
+  if (!el || !rankMeta) return;
+  const classes = ['rank-font-0', 'rank-font-1', 'rank-font-2', 'rank-font-3', 'rank-font-4'];
+  classes.forEach(c => el.classList.remove(c));
+  el.classList.add(rankMeta.fontClass);
+}
+
+function applyRankColor(el, rankMeta) {
+  if (!el || !rankMeta) return;
+  const classes = ['rank-color-0', 'rank-color-1', 'rank-color-2', 'rank-color-3', 'rank-color-4'];
+  classes.forEach(c => el.classList.remove(c));
+  if (rankMeta.colorClass) el.classList.add(rankMeta.colorClass);
+}
+
+function bindAllBadgesFilters() {
+  if (!els.filterAll || !els.filterUnlocked || !els.filterLocked) return;
+  const apply = (mode) => {
+    state.allBadgesFilter = mode;
+    els.filterAll.classList.toggle('active', mode === 'all');
+    els.filterUnlocked.classList.toggle('active', mode === 'unlocked');
+    els.filterLocked.classList.toggle('active', mode === 'locked');
+    renderAllBadges();
+  };
+  els.filterAll.addEventListener('click', () => apply('all'));
+  els.filterUnlocked.addEventListener('click', () => apply('unlocked'));
+  els.filterLocked.addEventListener('click', () => apply('locked'));
+}
+
+function bindThemeFilters() {
+  if (!els.themesToggle || !els.themesPanel || !els.themesAll || !els.themesList) return;
+
+  els.themesToggle.addEventListener('click', () => {
+    state.themesEnabled = !state.themesEnabled;
+    els.themesPanel.classList.toggle('hidden', !state.themesEnabled);
+    els.themesToggle.classList.toggle('active', state.themesEnabled);
+    renderAllBadges();
+  });
+
+  els.themesAll.addEventListener('click', () => {
+    state.selectedThemes = null; // pas de sélection => pas de filtre
+    renderThemesPanel();
+    renderAllBadges();
+  });
+}
+
+function getAllThemeNames() {
+  const names = new Set();
+  (state.badges || []).forEach(b => {
+    const t = (b?.theme && String(b.theme).trim()) ? String(b.theme).trim() : '';
+    if (t) names.add(t);
+  });
+  return Array.from(names).sort((a, b) => a.localeCompare(b, 'fr', { sensitivity: 'base' }));
+}
+
+function renderThemesPanel() {
+  if (!els.themesAll || !els.themesList) return;
+  const themes = getAllThemeNames();
+  const noneSelected = state.selectedThemes === null;
+  els.themesAll.classList.toggle('active', noneSelected);
+  els.themesList.innerHTML = '';
+
+  themes.forEach(theme => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'ghost';
+    const isActive = (!noneSelected && state.selectedThemes && state.selectedThemes.has(theme));
+    btn.classList.toggle('active', isActive);
+    btn.textContent = theme;
+    btn.addEventListener('click', () => {
+      // Si aucun thème n'était sélectionné, on démarre une sélection explicite
+      if (state.selectedThemes === null) state.selectedThemes = new Set();
+      if (state.selectedThemes.has(theme)) state.selectedThemes.delete(theme);
+      else state.selectedThemes.add(theme);
+      renderThemesPanel();
+      renderAllBadges();
+    });
+    els.themesList.appendChild(btn);
+  });
 }
 
 function attachAuthTabListeners() {
@@ -163,7 +274,7 @@ function attachFormListeners() {
     if (error) return setMessage(error.message, true);
     const userId = data.user?.id;
     if (userId) {
-      await supabase.from('profiles').upsert({ id: userId, username, badge_count: 0 });
+      await supabase.from('profiles').upsert({ id: userId, username, badge_count: 0, skill_points: 0, rank: 'Débutant' });
     }
     state.session = data.session;
     state.user = data.user;
@@ -301,14 +412,14 @@ async function loadAppData() {
 
 async function fetchProfile() {
   if (!state.user) return;
-  const { data, error } = await supabase.from('profiles').select('username, badge_count, avatar_url').eq('id', state.user.id).single();
+  const { data, error } = await supabase.from('profiles').select('username, badge_count, avatar_url, skill_points, rank').eq('id', state.user.id).single();
   if (error && error.code !== 'PGRST116') {
     console.error(error);
     return;
   }
   if (!data) {
-    await supabase.from('profiles').insert({ id: state.user.id, username: 'Invité', badge_count: 0, avatar_url: null });
-    state.profile = { username: 'Invité', badge_count: 0, avatar_url: null };
+    await supabase.from('profiles').insert({ id: state.user.id, username: 'Invité', badge_count: 0, avatar_url: null, skill_points: 0, rank: 'Débutant' });
+    state.profile = { username: 'Invité', badge_count: 0, avatar_url: null, skill_points: 0, rank: 'Débutant' };
   } else {
     state.profile = data;
   }
@@ -318,8 +429,8 @@ async function fetchBadges() {
   // On récupère en priorité depuis Supabase.
   // Si on définit window.USE_LOCAL_BADGES = true, ou si Supabase échoue,
   // on charge un fichier local badges.json (plus simple à éditer dans le code).
-  const selectWithEmoji = 'id,name,description,question,answer,emoji,low_skill';
-  const selectFallback = 'id,name,description,question,answer';
+  const selectWithEmoji = 'id,name,description,question,answer,emoji,low_skill,theme';
+  const selectFallback = 'id,name,description,question,answer,theme';
   const useLocalOnly = typeof window !== 'undefined' && window.USE_LOCAL_BADGES === true;
 
   if (!useLocalOnly) {
@@ -338,6 +449,7 @@ async function fetchBadges() {
     if (data) {
       state.badges = data;
       buildBadgeMaps();
+      renderThemesPanel();
       return;
     }
   }
@@ -349,6 +461,7 @@ async function fetchBadges() {
   }
   state.badges = localBadges;
   buildBadgeMaps();
+  renderThemesPanel();
 }
 
 function isLocalBadgesMode() {
@@ -430,7 +543,7 @@ async function fetchUserBadges() {
 async function fetchCommunity() {
   const { data, error } = await supabase
     .from('profiles')
-    .select('id,username,badge_count,avatar_url')
+    .select('id,username,badge_count,avatar_url,skill_points,rank')
     .order('badge_count', { ascending: false })
     .limit(50);
   if (error) {
@@ -573,7 +686,22 @@ async function checkAndUnlockGhostBadges() {
 
 function renderAllBadges() {
   // Filtrer les badges fantômes
-  const visibleBadges = state.badges.filter(badge => !isGhostBadge(badge));
+  let visibleBadges = state.badges.filter(badge => !isGhostBadge(badge));
+  
+  // Appliquer le filtre (Tous / Débloqués / À débloquer)
+  if (state.allBadgesFilter === 'unlocked') {
+    visibleBadges = visibleBadges.filter(b => state.userBadges.has(b.id));
+  } else if (state.allBadgesFilter === 'locked') {
+    visibleBadges = visibleBadges.filter(b => !state.userBadges.has(b.id));
+  }
+
+  // Filtre par thèmes (uniquement si activé)
+  if (state.themesEnabled && state.selectedThemes instanceof Set && state.selectedThemes.size > 0) {
+    visibleBadges = visibleBadges.filter(b => {
+      const t = (b?.theme && String(b.theme).trim()) ? String(b.theme).trim() : '';
+      return state.selectedThemes.has(t);
+    });
+  }
   
   if (!visibleBadges.length) {
     els.allBadgesList.innerHTML = '<p class="muted">Aucun badge pour le moment.</p>';
@@ -583,16 +711,20 @@ function renderAllBadges() {
   els.allBadgesList.innerHTML = '';
   const header = document.createElement('div');
   header.className = 'section-subtitle';
-  header.textContent = `${total} badge(s) à collecter`;
+  const suffix =
+    state.allBadgesFilter === 'unlocked'
+      ? 'badges débloqués'
+      : (state.allBadgesFilter === 'locked' ? 'badges à débloquer' : 'badges à collecter');
+  header.textContent = `${total} ${suffix}`;
   els.allBadgesList.appendChild(header);
-  visibleBadges.forEach(badge => {
+  const renderBadgeCard = (badge) => {
     const unlocked = state.userBadges.has(badge.id);
     const isLowSkill = state.lowSkillBadges.has(badge.id);
     const levelLabelRaw = state.userBadgeLevels.get(badge.id);
     const levelLabel = levelLabelRaw;
     const config = parseConfig(badge.answer);
     const card = document.createElement('article');
-    card.className = 'card-badge clickable compact all-badge-card';
+    card.className = `card-badge clickable compact all-badge-card${unlocked ? '' : ' locked'}`;
     let statusLabel = formatLevelTag(unlocked, levelLabel, config);
     if (isLowSkill) {
       statusLabel = statusLabel.replace(/Skill/g, 'Low skill').replace(/skill/g, 'skill');
@@ -605,12 +737,35 @@ function renderAllBadges() {
       : 'dot-red';
     const emoji = getBadgeEmoji(badge);
     const title = stripEmojis(badge.name || '');
-    const levelCount = getLevelCount(config);
     let formContent = `
       <input type="text" name="answer" placeholder="Ta réponse" required>
       <button type="submit" class="primary">Valider</button>
       <p class="message small"></p>
     `;
+    // Oui/Non : l’utilisateur clique sur un bouton au lieu d’écrire
+    if (config?.type === 'boolean') {
+      formContent = `
+        <input type="hidden" name="answer" value="">
+        <div class="bool-buttons">
+          <button type="button" class="ghost bool-btn" data-bool="oui">Oui</button>
+          <button type="button" class="ghost bool-btn" data-bool="non">Non</button>
+        </div>
+        <p class="message small"></p>
+      `;
+    }
+    if (config?.type === 'singleSelect' && Array.isArray(config.options)) {
+      const optionsMarkup = config.options.map(opt => `
+        <option value="${opt.value}">${opt.label}</option>
+      `).join('');
+      formContent = `
+        <select name="answer-single" class="select-multi">
+          <option value="">Choisis une option</option>
+          ${optionsMarkup}
+        </select>
+        <button type="submit" class="primary">Valider</button>
+        <p class="message small"></p>
+      `;
+    }
     if (config?.type === 'multiSelect' && Array.isArray(config.options)) {
       const optionsMarkup = config.options.map(opt => `
         <option value="${opt.value}">${opt.label}</option>
@@ -620,7 +775,7 @@ function renderAllBadges() {
         <select name="answer-select" class="select-multi" multiple size="${size}">
           ${optionsMarkup}
         </select>
-        <small class="muted">Tu peux sélectionner plusieurs options (Ctrl/Cmd + clic).</small>
+        <small class="muted">Tu peux sélectionner plusieurs options.</small>
         <button type="submit" class="primary">Valider</button>
         <p class="message small"></p>
       `;
@@ -643,6 +798,17 @@ function renderAllBadges() {
     `;
     const form = card.querySelector('form');
     form.addEventListener('submit', (e) => handleBadgeAnswer(e, badge));
+    // Binding boutons Oui/Non
+    if (config?.type === 'boolean') {
+      const hidden = form.querySelector('input[name="answer"]');
+      const btns = form.querySelectorAll('button[data-bool]');
+      btns.forEach(btn => {
+        btn.addEventListener('click', () => {
+          if (hidden) hidden.value = btn.getAttribute('data-bool') || '';
+          form.requestSubmit();
+        });
+      });
+    }
     const details = card.querySelector('.all-badge-details');
     card.addEventListener('click', (e) => {
       const tag = e.target.tagName.toLowerCase();
@@ -650,63 +816,121 @@ function renderAllBadges() {
       details.classList.toggle('hidden');
       card.classList.toggle('expanded');
     });
-    els.allBadgesList.appendChild(card);
-  });
+    return card;
+  };
+  
+  // Par défaut: pas de titres de thèmes.
+  // Si le panneau Thèmes est activé: on regroupe par thème avec titres.
+  if (state.themesEnabled) {
+    const themeName = (b) => (b.theme && String(b.theme).trim()) ? String(b.theme).trim() : 'Autres';
+    const groups = new Map();
+    visibleBadges.forEach(b => {
+      const t = themeName(b);
+      if (!groups.has(t)) groups.set(t, []);
+      groups.get(t).push(b);
+    });
+    const themes = Array.from(groups.keys()).sort((a, b) => {
+      if (a === 'Autres') return 1;
+      if (b === 'Autres') return -1;
+      return a.localeCompare(b, 'fr', { sensitivity: 'base' });
+    });
+    themes.forEach(t => {
+      const title = document.createElement('div');
+      title.className = 'section-subtitle';
+      title.textContent = t;
+      els.allBadgesList.appendChild(title);
+      groups.get(t).forEach(b => els.allBadgesList.appendChild(renderBadgeCard(b)));
+    });
+  } else {
+    visibleBadges.forEach(b => els.allBadgesList.appendChild(renderBadgeCard(b)));
+  }
 }
 
 function renderMyBadges() {
-  const unlockedBadges = state.badges.filter(b => state.userBadges.has(b.id));
-  if (!unlockedBadges.length) {
-    els.myBadgesList.innerHTML = '<p class="muted">Aucun badge débloqué pour l’instant.</p>';
+  // Mode "Pokédex" : on affiche le catalogue complet (hors fantômes),
+  // avec les badges non débloqués grisés et masqués, mais à leur place.
+  const visibleBadges = state.badges.filter(b => !isGhostBadge(b));
+  if (!visibleBadges.length) {
+    els.myBadgesList.innerHTML = '<p class="muted">Aucun badge pour le moment.</p>';
     return;
   }
-  els.myBadgesList.classList.add('list-mode');
-  els.myBadgesList.innerHTML = '';
-  unlockedBadges.forEach(badge => {
-    const levelLabel = state.userBadgeLevels.get(badge.id);
-    const normLevel = levelLabel;
-    const config = parseConfig(badge.answer);
-    const isLowSkill = state.lowSkillBadges.has(badge.id);
-    const card = document.createElement('article');
-    // Classe supplémentaire pour cibler le style "Mes badges" sans toucher les autres listes
-    card.className = 'card-badge clickable compact my-badge-card';
-    const userAnswer = state.userBadgeAnswers.get(badge.id);
-    const formattedAnswer = userAnswer ? formatUserAnswer(badge, userAnswer) : null;
-    const cleanName = stripEmojis(badge.name || '');
-    const hasLevel = Boolean(levelLabel);
-    let levelClass = isMysteryLevel(levelLabel)
-      ? 'tag mystery'
-      : (hasLevel ? 'tag success' : 'tag success');
-    if (isLowSkill) {
-      levelClass += ' low-skill';
-    }
-    let levelText = formatLevelTag(true, normLevel, config);
-    if (isLowSkill) {
-      levelText = levelText.replace(/Skill/g, 'Low skill').replace(/skill/g, 'skill');
-    }
-    // On retire le préfixe "Débloqué ·" pour un affichage plus court
-    levelText = levelText.replace(/^Débloqué ·\s*/, '');
-    card.innerHTML = `
-      <div class="badge-compact">
-        <div class="badge-left">
-          <div class="badge-emoji">${getBadgeEmoji(badge)}</div>
-          <div class="badge-title">${cleanName}</div>
-        </div>
-        <span class="${levelClass} badge-level">${levelText}</span>
-      </div>
-      <div class="badge-details">
-        ${formattedAnswer ? `<p class="muted">${formattedAnswer}</p>` : ''}
-      </div>
-    `;
 
-    const details = card.querySelector('.badge-details');
-    card.addEventListener('click', (e) => {
-      const tag = e.target.tagName.toLowerCase();
-      if (tag === 'input' || tag === 'button' || e.target.closest('form')) return;
-      // On ne change pas la forme du badge : on affiche seulement la réponse.
-      card.classList.toggle('show-details');
+  els.myBadgesList.classList.remove('list-mode');
+  els.myBadgesList.classList.add('my-badges-catalog');
+  els.myBadgesList.innerHTML = '';
+
+  // Regrouper par thème pour garder des emplacements stables
+  const themeName = (b) => (b.theme && String(b.theme).trim()) ? String(b.theme).trim() : 'Autres';
+  const groups = new Map();
+  visibleBadges.forEach(b => {
+    const t = themeName(b);
+    if (!groups.has(t)) groups.set(t, []);
+    groups.get(t).push(b);
+  });
+  const themes = Array.from(groups.keys()).sort((a, b) => {
+    if (a === 'Autres') return 1;
+    if (b === 'Autres') return -1;
+    return a.localeCompare(b, 'fr', { sensitivity: 'base' });
+  });
+  // Trier les badges dans un thème par ID (numérique ou texte)
+  const sortById = (a, b) => String(a.id).localeCompare(String(b.id), 'fr', { numeric: true, sensitivity: 'base' });
+
+  themes.forEach(t => {
+    const title = document.createElement('div');
+    title.className = 'section-subtitle';
+    title.textContent = t;
+    els.myBadgesList.appendChild(title);
+
+    groups.get(t).sort(sortById).forEach(badge => {
+      const unlocked = state.userBadges.has(badge.id);
+      const isLowSkill = state.lowSkillBadges.has(badge.id);
+      const levelLabel = state.userBadgeLevels.get(badge.id);
+      const config = parseConfig(badge.answer);
+
+      const card = document.createElement('article');
+      card.className = `card-badge clickable compact all-badge-card my-catalog-card${unlocked ? '' : ' locked'}`;
+
+      const safeEmoji = unlocked ? getBadgeEmoji(badge) : '❓';
+      const safeTitle = unlocked ? stripEmojis(badge.name || '') : '?????';
+
+      let statusLabel = formatLevelTag(unlocked, levelLabel, config);
+      if (isLowSkill) statusLabel = statusLabel.replace(/Skill/g, 'Low skill').replace(/skill/g, 'skill');
+
+      const statusClass = unlocked
+        ? (isMysteryLevel(levelLabel) ? 'mystery' : 'success')
+        : 'locked';
+      const statusDotClass = unlocked
+        ? (isMysteryLevel(levelLabel) ? 'dot-purple' : 'dot-green')
+        : 'dot-red';
+
+      const userAnswer = state.userBadgeAnswers.get(badge.id);
+      const formattedAnswer = unlocked && userAnswer ? formatUserAnswer(badge, userAnswer) : null;
+      const displayText = formattedAnswer || (unlocked ? '' : 'Badge non débloqué');
+
+      card.innerHTML = `
+        <div class="row level-row">
+          <span class="tag ${statusClass}">${statusLabel}</span>
+        </div>
+        <div class="badge-compact">
+          <span class="status-dot ${statusDotClass}"></span>
+          <div class="badge-emoji">${safeEmoji}</div>
+          <div class="badge-title">${safeTitle}</div>
+        </div>
+        <div class="all-badge-details hidden">
+          <p class="muted">${displayText || ''}</p>
+        </div>
+      `;
+
+      const details = card.querySelector('.all-badge-details');
+      card.addEventListener('click', (e) => {
+        const tag = e.target.tagName.toLowerCase();
+        if (tag === 'input' || tag === 'button' || e.target.closest('form')) return;
+        details.classList.toggle('hidden');
+        card.classList.toggle('expanded');
+      });
+
+      els.myBadgesList.appendChild(card);
     });
-    els.myBadgesList.appendChild(card);
   });
 }
 
@@ -725,12 +949,15 @@ function renderCommunity(profiles) {
     item.dataset.avatar = avatarUrl;
     item.dataset.badges = profile.badge_count ?? 0;
     item.dataset.mystery = profile.mystery_count ?? 0;
+    item.dataset.skillPoints = profile.skill_points ?? 0;
+    item.dataset.rank = profile.rank ?? '';
+    const rankMeta = getRankMeta(profile.skill_points ?? 0);
     item.innerHTML = `
       <div style="display:flex; align-items:center; gap:10px;">
         <img src="${avatarUrl}" alt="Avatar" class="logo small" style="width:36px;height:36px;border-radius:50%;object-fit:cover;">
         <div>
-          <strong>${profile.username}</strong>
-          <p class="muted">Membre BadgeLife</p>
+          <strong class="${rankMeta.fontClass}">${profile.username}</strong>
+          <p class="muted ${rankMeta.colorClass}">${profile.rank || rankMeta.name}</p>
         </div>
       </div>
       <span class="pill">${profile.badge_count ?? 0} badge(s)</span>
@@ -847,9 +1074,11 @@ async function handleBadgeAnswer(event, badge) {
   const form = event.target;
   const config = parseConfig(badge.answer);
   const isMultiSelect = config?.type === 'multiSelect';
+  const isSingleSelect = config?.type === 'singleSelect';
   const selectInput = isMultiSelect ? form.querySelector('select[name="answer-select"]') : null;
   const checkboxInputs = isMultiSelect ? form.querySelectorAll('input[name="answer-option"]:checked') : null;
-  const answerInput = isMultiSelect ? null : form.querySelector('input[name="answer"]');
+  const singleSelectInput = isSingleSelect ? form.querySelector('select[name="answer-single"]') : null;
+  const answerInput = (isMultiSelect || isSingleSelect) ? null : form.querySelector('input[name="answer"]');
   const selectedOptions = isMultiSelect
     ? (
         selectInput
@@ -859,13 +1088,20 @@ async function handleBadgeAnswer(event, badge) {
     : [];
   const feedback = form.querySelector('.message');
   feedback.textContent = '';
-  const rawAnswer = isMultiSelect ? selectedOptions.join(', ') : (answerInput?.value.trim() || '');
+  const rawAnswer = isMultiSelect
+    ? selectedOptions.join(', ')
+    : (isSingleSelect ? (singleSelectInput?.value || '') : (answerInput?.value.trim() || ''));
   if (isMultiSelect && !selectedOptions.length) {
     feedback.textContent = 'Choisis au moins une option.';
     feedback.classList.add('error');
     return;
   }
-  if (!isMultiSelect && !rawAnswer) {
+  if (isSingleSelect && !rawAnswer) {
+    feedback.textContent = 'Choisis une option.';
+    feedback.classList.add('error');
+    return;
+  }
+  if (!isMultiSelect && !isSingleSelect && !rawAnswer) {
     feedback.textContent = 'Réponse vide.';
     feedback.classList.add('error');
     return;
@@ -933,23 +1169,33 @@ async function handleBadgeAnswer(event, badge) {
 function isMysteryLevel(label) {
   if (typeof label !== 'string') return false;
   const lower = label.toLowerCase();
-  // On accepte encore "secret" pour les anciennes données, mais on affichera "Skill mystère".
-  return lower.includes('mystère') || lower.includes('mystere') || lower.includes('secret');
+  // Compat anciennes données: "mystère/mystere/secret" + nouveau libellé "expert"
+  return lower.includes('mystère') || lower.includes('mystere') || lower.includes('secret') || lower.includes('expert');
 }
 
 function formatLevelTag(unlocked, levelLabel, config) {
+  const normalizeSkillText = (text) => {
+    if (typeof text !== 'string') return text;
+    // Remplace les anciens libellés "niv"/"niveau" par "Skill"
+    // Ex: "niv 3/5" -> "Skill 3/5"
+    return text
+      .replace(/\bniv\b/gi, 'Skill')
+      .replace(/\bniveau\b/gi, 'Skill')
+      .replace(/\bniveaux\b/gi, 'Skills');
+  };
+
   if (!unlocked) {
     const total = getLevelCount(config);
     if (total > 0) return `À débloquer · Skill 0/${total}`;
     return 'Skill à débloquer';
   }
-  if (isMysteryLevel(levelLabel)) return 'Débloqué · Skill mystère';
+  if (isMysteryLevel(levelLabel)) return 'Débloqué · Expert';
   const total = getLevelCount(config);
   if (total > 0) {
     const pos = getLevelPosition(levelLabel, config);
     if (pos) return `Débloqué · Skill ${pos}/${total}`;
   }
-  return levelLabel ? `Débloqué · ${levelLabel}` : 'Skill débloqué';
+  return levelLabel ? normalizeSkillText(`Débloqué · ${levelLabel}`) : 'Skill débloqué';
 }
 
 function getLevelPosition(levelLabel, config) {
@@ -977,12 +1223,17 @@ function getSkillPointsForBadge(badgeId, levelLabel) {
   const badge = getBadgeById(badgeId);
   if (!badge) return 0;
   const config = parseConfig(badge.answer);
-  const pos = getLevelPosition(levelLabel, config);
-  let points = pos || 1;
+  // Base points:
+  // - Expert (ancien mystère/secret) = 10 points
+  // - sinon = position du skill (Skill 1 => 1, Skill 3 => 3, etc.)
+  const basePoints = isMysteryLevel(levelLabel) ? 10 : (getLevelPosition(levelLabel, config) || 1);
+
+  // Low skills: on perd des points, et la valeur est x2
+  // Ex: Skill 1 => -2, Skill 3 => -6, Expert => -20
   if (state.lowSkillBadges.has(badgeId)) {
-    points *= -1;
+    return -Math.abs(basePoints) * 2;
   }
-  return points;
+  return basePoints;
 }
 
 function countLowSkillUnlocked() {
@@ -1020,7 +1271,21 @@ function evaluateBadgeAnswer(badge, rawAnswer, selectedOptions = []) {
     const isMax = maxLevel && levelLabel === maxLevel.label;
     const finalLabel = (isLecteurBadge && isMax) ? 'Skill max'
       : (isMax && !isMysteryLevel(levelLabel) ? 'Skill max' : levelLabel);
-    const storedLabel = isMysteryLevel(finalLabel) ? 'Skill mystère' : finalLabel;
+    const storedLabel = isMysteryLevel(finalLabel) ? 'Expert' : finalLabel;
+    return { ok: true, level: storedLabel, message: 'Bravo, badge débloqué !' };
+  }
+
+  if (config && config.type === 'singleSelect') {
+    const value = (rawAnswer || '').trim();
+    if (!value) return { ok: false, message: 'Choisis une option.' };
+    const options = Array.isArray(config.options) ? config.options : [];
+    const isValid = options.some(o => String(o.value) === String(value));
+    if (!isValid) return { ok: false, message: 'Option invalide.' };
+    const skillLabelRaw = (config.optionSkills && typeof config.optionSkills === 'object')
+      ? config.optionSkills[String(value)]
+      : null;
+    const skillLabel = (skillLabelRaw ?? '').toString().trim();
+    const storedLabel = skillLabel ? (isMysteryLevel(skillLabel) ? 'Expert' : skillLabel) : null;
     return { ok: true, level: storedLabel, message: 'Bravo, badge débloqué !' };
   }
 
@@ -1037,7 +1302,7 @@ function evaluateBadgeAnswer(badge, rawAnswer, selectedOptions = []) {
     const isMax = level === maxLevel;
     const finalLabel = (isLecteurBadge && isMax) ? 'Skill max'
       : ((isMax && !isMysteryLevel(level.label)) ? 'Skill max' : level.label);
-    const storedLabel = isMysteryLevel(finalLabel) ? 'Skill mystère' : finalLabel;
+    const storedLabel = isMysteryLevel(finalLabel) ? 'Expert' : finalLabel;
     return { ok: true, level: storedLabel, message: `Bravo, skill obtenu : ${storedLabel}` };
   }
 
@@ -1067,79 +1332,58 @@ function evaluateBadgeAnswer(badge, rawAnswer, selectedOptions = []) {
 // Si aucun template n'est fourni, on affiche simplement la valeur.
 function formatUserAnswer(badge, answer) {
   const config = parseConfig(badge.answer);
-  const template = config?.displayTemplate; // ex: "Ta réponse : {{answer}} pays visités."
   const suffix = config?.displaySuffix;     // ex: "pays visités"
-  const questionSuffix = inferSuffixFromQuestion(badge.question);
-  const lowerAns = answer?.trim().toLowerCase();
-
-  // Cas particulier : question de type "sauvé une vie" (boolean)
-  if (config?.type === 'boolean' && badge.question?.toLowerCase().includes('sauvé une vie')) {
-    if (lowerAns === 'oui' || lowerAns === 'yes' || lowerAns === 'y') {
-      return 'A déjà sauvé une vie';
-    }
-    if (lowerAns === 'non' || lowerAns === 'no' || lowerAns === 'n') {
-      return 'N’a pas encore sauvé de vie';
-    }
-  }
-  // Cas particulier : service militaire (boolean)
-  if (config?.type === 'boolean' && badge.question?.toLowerCase().includes('service militaire')) {
-    if (lowerAns === 'oui' || lowerAns === 'yes' || lowerAns === 'y') {
-      return 'A fait son service militaire';
-    }
-    if (lowerAns === 'non' || lowerAns === 'no' || lowerAns === 'n') {
-      return 'N’a pas encore fait son service militaire';
-    }
+  const prefix = config?.displayPrefix;     // texte avant
+  // On ne transforme plus la réponse selon le nom/question du badge.
+  // (Plus de "cas spéciaux" : l’admin contrôle via "Texte réponse" si besoin.)
+  
+  // Badges fantômes : en communauté aussi, on affiche le texte fantôme (car pas de réponse utilisateur)
+  if (isGhostBadge(badge) && typeof config?.ghostDisplayText === 'string' && config.ghostDisplayText.trim()) {
+    return config.ghostDisplayText.trim();
   }
 
-  // Cas particulier : badge Amoureux/se (boolean)
-  if (config?.type === 'boolean' && badge.name?.toLowerCase().includes('amoureux')) {
-    if (lowerAns === 'oui' || lowerAns === 'yes' || lowerAns === 'y') {
-      return 'A été amoureux/se';
-    }
-    if (lowerAns === 'non' || lowerAns === 'no' || lowerAns === 'n') {
-      return 'N’a jamais été amoureux/se';
-    }
+  // Si l’admin a défini un texte “remplacement” pour Oui/Non, on l’affiche directement.
+  if (config?.type === 'boolean' && typeof config?.booleanDisplayText === 'string' && config.booleanDisplayText.trim()) {
+    return config.booleanDisplayText.trim();
   }
+
+  // Helper: applique "avant/après" si défini
+  const wrap = (value) => {
+    const v = (value ?? '').toString();
+    if (!v) return v;
+    const pre = (typeof prefix === 'string' && prefix.trim()) ? prefix.trim() : '';
+    const suf = (typeof suffix === 'string' && suffix.trim()) ? suffix.trim() : '';
+    return `${pre ? pre + ' ' : ''}${v}${suf ? ' ' + suf : ''}`.trim();
+  };
 
   if (config?.type === 'multiSelect') {
-    // Pour les badges multiSelect, on affiche le nombre de coches sélectionnées
+    // Pour les badges multiSelect:
+    // - mode "count" (défaut) : afficher uniquement le nombre
+    // - mode "list" : afficher la liste des choix cochés
     if (answer && typeof answer === 'string') {
-      const selectedCount = answer.split(',').filter(v => v.trim().length > 0).length;
-      
-      // Si un template est défini, l'utiliser avec le nombre de coches
-      if (typeof template === 'string' && template.includes('{{answer}}')) {
-        return template.replace('{{answer}}', selectedCount);
+      const rawValues = answer.split(',').map(v => v.trim()).filter(Boolean);
+      const mode = config?.multiDisplayMode === 'list' ? 'list' : 'count';
+      if (mode === 'list') {
+        const options = Array.isArray(config?.options) ? config.options : [];
+        const labelByValue = new Map(options.map(o => [String(o.value), String(o.label || o.value)]));
+        const labels = rawValues.map(v => labelByValue.get(String(v)) || v);
+        // On affiche une liste simple, séparée par virgules
+        return wrap(labels.join(', '));
       }
-      
-      // Par défaut : afficher "X coche(s)"
-      return `${selectedCount} coche${selectedCount > 1 ? 's' : ''}`;
+      const selectedCount = rawValues.length;
+      return wrap(`${selectedCount}`);
     }
-    return '0 coche';
+    return wrap('0');
   }
-
-  // Cas particulier : badge Pilote → préfixe lisible "permis de ..."
-  if (badge?.name && badge.name.toLowerCase().includes('pilote')) {
-    return `permis de ${answer}`;
-  }
-
-  // Cas particulier : badge Bodycounter (orthographe tolérante) → suffixe explicite
-  if (badge?.name) {
-    const lowerName = badge.name.toLowerCase();
-    if (lowerName.includes('bodycounter') || lowerName.includes('bodycoutner')) {
-      return `${answer} partenaires sexuelle`;
-    }
-  }
-  if (typeof template === 'string' && template.includes('{{answer}}')) {
-    return template.replace('{{answer}}', answer);
-  }
-  if (typeof suffix === 'string' && suffix.trim().length) {
-    return `${answer} ${suffix}`;
-  }
-  if (questionSuffix) {
-    return `${answer} ${questionSuffix}`;
+  if (config?.type === 'singleSelect') {
+    const value = (answer ?? '').toString().trim();
+    const options = Array.isArray(config?.options) ? config.options : [];
+    const labelByValue = new Map(options.map(o => [String(o.value), String(o.label || o.value)]));
+    const label = labelByValue.get(String(value)) || value;
+    return wrap(label);
   }
   // Fallback lisible si rien n'est configuré
-  return `${answer}`;
+  return wrap(`${answer}`);
 }
 
 function getBadgeEmoji(badge) {
@@ -1155,17 +1399,6 @@ function stripEmojis(text) {
   if (!text) return '';
   // Supprime les caractères emoji pour ne garder que le texte
   return text.replace(/\p{Extended_Pictographic}/gu, '').trim();
-}
-
-function inferSuffixFromQuestion(question) {
-  if (!question) return null;
-  const q = question.toLowerCase();
-  if (q.includes('pays')) return 'pays visités';
-  if (q.includes('livre')) return 'livres lus';
-  if (q.includes('kilomètre') || q.includes('km')) return 'km/h sur l`autoroute';
-  if (q.includes('heures') || q.includes('heure')) return 'heures';
-  if (q.includes('service militaire') || q.includes('militaire')) return 'service militaire';
-  return null;
 }
 
 // Gestion du panneau profil (avatar + mot de passe)
@@ -1289,6 +1522,12 @@ function showCommunityProfile(data) {
   if (!els.communityProfileModal) return;
   els.communityProfileAvatar.src = data.avatar || './icons/logobl.png';
   els.communityProfileUsername.textContent = data.username || 'Utilisateur';
+  const rankMeta = getRankMeta(data.skillPoints || 0);
+  applyRankToElement(els.communityProfileUsername, rankMeta);
+  if (els.communityProfileRank) {
+    els.communityProfileRank.textContent = data.rank || rankMeta.name;
+    applyRankColor(els.communityProfileRank, rankMeta);
+  }
   els.communityProfileBadges.textContent = `${data.badges || 0} badge(s)`;
   els.communityProfileMystery.textContent = `${data.skills || 0} skill(s)`;
   renderCommunityBadgeGrid([]);
@@ -1471,10 +1710,24 @@ async function updateCounters(syncProfile = false) {
   
   if (els.badgeCount) els.badgeCount.textContent = `${badgeCount}`;
   if (els.skillCount) els.skillCount.textContent = `${totalSkillPoints}`;
+  
+  // Rang + style du pseudo
+  const rankMeta = getRankMeta(totalSkillPoints);
+  if (els.profileRank) {
+    els.profileRank.textContent = rankMeta.name;
+    applyRankColor(els.profileRank, rankMeta);
+  }
+  applyRankToElement(els.profileUsername, rankMeta);
+
   if (state.profile) {
     state.profile.badge_count = badgeCount;
+    state.profile.skill_points = totalSkillPoints;
+    state.profile.rank = rankMeta.name;
     if (syncProfile) {
-      await supabase.from('profiles').update({ badge_count: badgeCount }).eq('id', state.user.id);
+      await supabase
+        .from('profiles')
+        .update({ badge_count: badgeCount, skill_points: totalSkillPoints, rank: rankMeta.name })
+        .eq('id', state.user.id);
     }
   }
 }
