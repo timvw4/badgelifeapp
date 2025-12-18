@@ -1377,12 +1377,16 @@ function renderCommunity(profiles) {
     item.dataset.rank = profile.rank ?? '';
     item.dataset.isPrivate = (profile.is_private === true || profile.is_private === 'true') ? 'true' : 'false';
     const rankMeta = getRankMeta(profile.skill_points ?? 0);
+    // Utiliser le rang stocké ou calculer depuis les points
+    const displayRank = profile.rank || rankMeta.name;
+    // Pour "Rêve", afficher "Vie de Rêve", sinon "Vie [rang]"
+    const rankText = displayRank === 'Rêve' ? `Vie de ${displayRank}` : `Vie ${displayRank}`;
     item.innerHTML = `
       <div style="display:flex; align-items:center; gap:10px;">
         <img src="${avatarUrl}" alt="Avatar" class="logo small" style="width:36px;height:36px;border-radius:50%;object-fit:cover;">
         <div>
           <strong class="${rankMeta.fontClass}">${profile.username}</strong>
-          <p class="muted ${rankMeta.colorClass}">${profile.rank || rankMeta.name}</p>
+          <p class="muted ${rankMeta.colorClass}">${rankText}</p>
         </div>
       </div>
       <span class="pill">${profile.badge_count ?? 0} badge(s)</span>
@@ -2119,7 +2123,11 @@ function showCommunityProfile(data) {
   }
   
   if (els.communityProfileRank) {
-    els.communityProfileRank.textContent = data.rank || rankMeta.name;
+    // Utiliser le rang stocké ou calculer depuis les points
+    const displayRank = data.rank || rankMeta.name;
+    // Pour "Rêve", afficher "Vie de Rêve", sinon "Vie [rang]"
+    const rankText = displayRank === 'Rêve' ? `Vie de ${displayRank}` : `Vie ${displayRank}`;
+    els.communityProfileRank.textContent = rankText;
     applyRankColor(els.communityProfileRank, rankMeta);
   }
   els.communityProfileBadges.textContent = `${data.badges || 0} badge(s)`;
@@ -2515,7 +2523,9 @@ async function updateCounters(syncProfile = false) {
   // Rang + style du pseudo
   const rankMeta = getRankMeta(totalSkillPoints);
   if (els.profileRank) {
-    els.profileRank.textContent = rankMeta.name;
+    // Pour "Rêve", afficher "Vie de Rêve", sinon "Vie [rang]"
+    const rankText = rankMeta.name === 'Rêve' ? `Vie de ${rankMeta.name}` : `Vie ${rankMeta.name}`;
+    els.profileRank.textContent = rankText;
     applyRankColor(els.profileRank, rankMeta);
   }
   applyRankToElement(els.profileUsername, rankMeta);
