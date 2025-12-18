@@ -394,6 +394,7 @@ function updatePrivacyIndicator() {
   if (!els.profilePrivacyIndicator || !state.profile) return;
   const isPrivate = state.profile.is_private || false;
   els.profilePrivacyIndicator.style.background = isPrivate ? '#ef4444' : '#22c55e';
+  els.profilePrivacyIndicator.style.display = 'inline-block'; // S'assurer qu'il est visible
 }
 
 function attachRefreshButton() {
@@ -2022,6 +2023,7 @@ function showCommunityProfile(data) {
   const indicator = document.getElementById('community-profile-privacy-indicator');
   if (indicator) {
     indicator.style.background = isPrivate ? '#ef4444' : '#22c55e';
+    indicator.style.display = 'inline-block'; // S'assurer qu'il est visible
   }
   
   if (els.communityProfileRank) {

@@ -86,8 +86,8 @@ p {
 
 #profile-privacy-indicator {
   position: absolute;
-  top: 12px;
-  left: 12px;
+  top: 8px;
+  left: 8px;
   width: 8px;
   height: 8px;
   border-radius: 50%;
@@ -95,7 +95,7 @@ p {
   display: inline-block;
   z-index: 10;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
-  border: 2px solid rgba(255, 255, 255, 0.1);
+  border: 2px solid rgba(255, 255, 255, 0.15);
 }
 
 #profile-panel {
@@ -384,6 +384,7 @@ button {
 }
 
 .topbar {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1105,8 +1106,8 @@ button {
 
 @media (max-width: 640px) {
   #profile-privacy-indicator {
-    top: 10px;
-    left: 10px;
+    top: 6px;
+    left: 6px;
     width: 10px;
     height: 10px;
   }
