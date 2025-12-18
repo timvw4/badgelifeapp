@@ -6,6 +6,5 @@ export const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiO
 // Liste des UUID des utilisateurs autorisés à voir l'admin (à renseigner).
 // Exemple : export const ADMIN_USER_IDS = ['12345678-1234-1234-1234-123456789abc'];
 export const ADMIN_USER_IDS = [
-  '13afe477-ecd9-4c4e-8962-d6621c973d4a',
-  'c2aabd92-9ba2-458d-8d3d-8bb1a45c6614'
+  '13afe477-ecd9-4c4e-8962-d6621c973d4a'
 ];
