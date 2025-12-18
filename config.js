@@ -7,5 +7,5 @@ export const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiO
 // Exemple : export const ADMIN_USER_IDS = ['12345678-1234-1234-1234-123456789abc'];
 export const ADMIN_USER_IDS = [
   '13afe477-ecd9-4c4e-8962-d6621c973d4a',
-  'c2aabd92-9ba2-458d-8d3d-8bb1a45c6614',
+  'c2aabd92-9ba2-458d-8d3d-8bb1a45c6614'
 ];
