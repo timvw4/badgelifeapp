@@ -82,10 +82,7 @@
               <input id="badge-ghost" type="hidden" value="0">
             </div>
 
-            <label for="badge-description">Description</label>
-            <textarea id="badge-description" rows="2"></textarea>
-
-            <label for="badge-theme">Thème (optionnel)</label>
+            <label for="badge-theme">Thème</label>
             <input id="badge-theme" type="text" list="theme-options" placeholder="Choisis un thème...">
             <datalist id="theme-options">
               <option value="Sport"></option>
@@ -109,7 +106,7 @@
             <div id="block-ghost" class="answer-block hidden">
               <label>Badges requis</label>
               <select id="ghost-required-badges-select" class="select-multi" multiple size="8"></select>
-              <small class="muted">Tu peux sélectionner plusieurs badges (Ctrl/Cmd + clic).</small>
+              <small class="muted">Tu peux sélectionner plusieurs badges.</small>
               
               <label style="margin-top:10px;">Pré-requis</label>
               <div style="margin: 6px 0 10px;">
@@ -132,17 +129,19 @@
                   <label for="ghost-min-rank" class="muted" style="display:block; margin-bottom:4px;">Rang minimum</label>
                   <select id="ghost-min-rank">
                     <option value="">Aucun</option>
-                    <option value="Débutant">Débutant</option>
-                    <option value="Apprenti">Polyvalent</option>
-                    <option value="Confirmé">Compétent</option>
-                    <option value="Spécialiste">Accompli</option>
-                    <option value="Légende">Multiskills</option>
+                    <option value="Compliqué">Compliqué</option>
+                    <option value="Instable">Instable</option>
+                    <option value="Classique">Classique</option>
+                    <option value="Epanouie">Epanouie</option>
+                    <option value="Rêve">Rêve</option>
                   </select>
                 </div>
               </div>
               <label for="ghost-display-text" style="margin-top:10px;">Remplace la réponse</label>
               <textarea id="ghost-display-text" rows="2" placeholder="Ex: Débloqué automatiquement"></textarea>
-              <small class="muted">Ce badge sera débloqué automatiquement quand tous les badges requis sont débloqués. Il n'apparaîtra pas dans "Tous les badges".</small>
+              <label for="ghost-skill-points" style="margin-top:10px;">Points skills</label>
+              <input id="ghost-skill-points" type="number" min="0" step="1" placeholder="Laisse vide pour 1 point par défaut">
+              <small class="muted">Si vide, le badge vaut 1 point lorsqu'il est débloqué.</small>
             </div>
 
             <label for="badge-question" class="non-ghost-only">Question</label>
@@ -165,29 +164,32 @@
             <div id="block-boolean" class="answer-block hidden non-ghost-only">
               <label for="bool-display-text">Remplace la réponse</label>
               <textarea id="bool-display-text" rows="2" placeholder="Ex: A répondu à la question"></textarea>
-              <small class="muted">Ce texte sera affiché dans “Mes badges” à la place de “oui/non”.</small>
+              
+              <label for="bool-skill-points" style="margin-top:10px;">Points skills (si "oui")</label>
+              <input id="bool-skill-points" type="number" min="0" step="1" placeholder="Laisse vide pour 1 point par défaut">
+              <small class="muted">Si vide, le badge vaut 1 point.</small>
             </div>
 
             <div id="block-range" class="answer-block hidden non-ghost-only">
               <label>Niveaux (un par ligne)</label>
-              <textarea id="range-levels" rows="4" placeholder="Ex:&#10;Skill 1|0|4&#10;Skill 2|5|9&#10;Skill mystère|10|999"></textarea>
-              <small class="muted">Format : label|min|max. Utilise “Skill mystère” si tu veux un skill mystère.</small>
+              <textarea id="range-levels" rows="4" placeholder="Ex:&#10;Skill 1|0|4|3&#10;Skill 2|5|9|5&#10;Skill mystère|10|999|10"></textarea>
+              <small class="muted">Format : label|min|max|points. Points optionnel (défaut: position dans la liste). Utilise "Skill mystère" si tu veux un skill mystère.</small>
             </div>
 
             <div id="block-multi" class="answer-block hidden non-ghost-only">
               <label>Les choix de réponses</label>
               <textarea id="multi-options" rows="4" placeholder="valeur|Libellé"></textarea>
               <label>Niveaux (un par ligne)</label>
-              <textarea id="multi-levels" rows="3" placeholder="Ex:&#10;Skill 1|1&#10;Skill mystère|3"></textarea>
-              <small class="muted">Format skills : label|min sélection. Utilise “Skills mystère” si besoin.</small>
+              <textarea id="multi-levels" rows="3" placeholder="Ex:&#10;Skill 1|1|3&#10;Skill 2|3|5&#10;Skill mystère|5|10"></textarea>
+              <small class="muted">Format : label|min sélection|points. Ex: "Skill 1|1|3" = Skill 1 nécessite 1 sélection et donne 3 points. Le champ "points" est optionnel (défaut: position dans la liste). Utilise "Skill mystère" si besoin.</small>
               <div class="row" style="gap:10px; align-items:center; margin-top:10px;">
                 <button type="button" id="multi-skill-by-option-toggle" class="ghost">Skills par option : désactivé</button>
                 <input id="multi-skill-by-option" type="hidden" value="0">
               </div>
               <div id="multi-skill-by-option-block" class="hidden" style="margin-top:10px;">
                 <label>Skills par option (une par ligne)</label>
-                <textarea id="multi-option-skills" rows="4" placeholder="valeur|Skill 1&#10;valeur2|Expert&#10;valeur3|aucun"></textarea>
-                <small class="muted">valeur|Expert, valeur|skill 1, valeur|bloquer.</small>
+                <textarea id="multi-option-skills" rows="4" placeholder="valeur|Skill 1|3&#10;valeur2|Expert|10&#10;valeur3|aucun"></textarea>
+                <small class="muted">Format : valeur|skill|points. Ex: "valeur1|Skill 1|3" = cette option donne Skill 1 avec 3 points. Le champ "points" est optionnel (défaut: position dans la liste). Utilise "Expert", "bloquer" ou "aucun".</small>
               </div>
               <div class="row" style="gap:10px; align-items:center; margin-top:10px;">
                 <button type="button" id="multi-display-list-toggle" class="ghost">Liste : désactivée</button>
@@ -199,9 +201,9 @@
             <div id="block-single" class="answer-block hidden non-ghost-only">
               <label>Choix de réponses</label>
               <textarea id="single-options" rows="4" placeholder="valeur|Libellé"></textarea>
-              <label style="margin-top:10px;">Skills par option (une par ligne)</label>
+              <label style="margin-top:10px;">Skills par option</label>
               <textarea id="single-skills" rows="3" placeholder="valeur|Skill 1&#10;valeur2|Expert&#10;valeur3|aucun"></textarea>
-              <small class="muted">Chaque option peut donner un skill. Mets "Expert" pour un skill Expert (10 points), ou laisse vide après le | pour "aucun skill".</small>
+              <small class="muted">choisis entre skill, expert, aucuns ou bloquer.</small>
               <small class="muted">L’utilisateur pourra choisir une seule option.</small>
             </div>
 

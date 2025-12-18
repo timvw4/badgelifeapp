@@ -224,6 +224,33 @@ p {
   border-color: transparent;
 }
 
+.community-section-separator {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.1);
+  margin: 30px 0;
+  width: 100%;
+}
+
+.ideas-separator {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 20px 0 16px 0;
+}
+
+.ideas-separator-line {
+  flex: 1;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.ideas-separator-text {
+  color: var(--muted);
+  font-size: 13px;
+  margin: 0;
+  white-space: nowrap;
+}
+
 #community-ideas-panel .list {
   margin-top: 10px;
 }
@@ -246,6 +273,13 @@ p {
 
 .idea-title {
   font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.idea-emoji {
+  font-size: 1.1em;
 }
 
 .idea-meta {
@@ -308,6 +342,12 @@ p {
 }
 
 #badge-low-skill-toggle.active {
+  background: rgba(34,197,94,0.12);
+  border-color: rgba(34,197,94,0.5);
+  color: #22c55e;
+}
+
+#badge-ghost-toggle.active {
   background: rgba(34,197,94,0.12);
   border-color: rgba(34,197,94,0.5);
   color: #22c55e;
@@ -419,11 +459,11 @@ button {
 .rank-font-4 { font-family: 'Pacifico', 'Inter', system-ui, sans-serif; letter-spacing: 0.2px; }
 
 /* Couleurs de rang */
-.rank-color-0 { color: #94a3b8 !important; } /* gris doux */
-.rank-color-1 { color: #67e8f9 !important; text-shadow: 0 0 10px rgba(103,232,249,0.35); } /* cyan */
-.rank-color-2 { color: #22c55e !important; text-shadow: 0 0 10px rgba(34,197,94,0.35); } /* vert */
-.rank-color-3 { color: #c084fc !important; text-shadow: 0 0 10px rgba(192,132,252,0.35); } /* violet */
-.rank-color-4 { color: #fbbf24 !important; text-shadow: 0 0 12px rgba(251,191,36,0.40); } /* or */
+.rank-color-0 { color: #c2410c !important; text-shadow: 0 0 8px rgba(194,65,12,0.25); } /* Compliqué - rouge doux */
+.rank-color-1 { color: #f97316 !important; text-shadow: 0 0 10px rgba(249,115,22,0.35); } /* Instable - orange instable */
+.rank-color-2 { color: #3b82f6 !important; text-shadow: 0 0 10px rgba(59,130,246,0.35); } /* Classique - bleu classique */
+.rank-color-3 { color: #10b981 !important; text-shadow: 0 0 10px rgba(16,185,129,0.35); } /* Epanouie - vert épanouissant */
+.rank-color-4 { color: #fbbf24 !important; text-shadow: 0 0 12px rgba(251,191,36,0.50); } /* Rêve - or brillant */
 
 /* Infobulle rangs */
 .rank-tooltip {
@@ -873,6 +913,9 @@ button {
 
 .modal-card .close-btn {
   float: right;
+  font-size: 24px;
+  line-height: 1;
+  padding: 4px 8px;
 }
 
 .profile-modal-content {
@@ -962,6 +1005,10 @@ button {
   gap: 12px;
   width: 100%;
   margin-top: 6px;
+  max-height: 400px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 8px;
 }
 
 .modal-badge-emoji {
@@ -1179,6 +1226,9 @@ button {
     grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 10px;
     justify-items: center;
+    max-height: 300px;
+    overflow-y: auto;
+    overflow-x: hidden;
   }
   .modal-badge-emoji {
     font-size: 28px;

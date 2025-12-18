@@ -50,8 +50,9 @@
           <div>
             <strong id="profile-username">Utilisateur</strong>
             <div style="position:relative; display:inline-block;">
+              <span class="muted" style="margin-right:4px;">Vie:</span>
               <button id="profile-rank" type="button" class="muted ghost" style="margin-top:2px; padding:0; border:0; background:transparent; cursor:pointer;">—</button>
-              <div id="rank-tooltip" class="rank-tooltip hidden" role="dialog" aria-label="Rangs de skills"></div>
+              <div id="rank-tooltip" class="rank-tooltip hidden" role="dialog" aria-label="Type de vie"></div>
             </div>
           </div>
         </div>
@@ -131,17 +132,25 @@
           </div>
           <div id="community-list" class="list"></div>
         </div>
+        <div class="community-section-separator"></div>
         <div id="community-ideas-panel">
           <h3>Partage tes idées de badges</h3>
           <p class="muted" style="margin-bottom:10px;">Propose une idée de badge, ta suggestion sera peut-être ajoutée à la collection.</p>
           <form id="idea-form" class="auth-form" style="margin-bottom:12px;">
             <label for="idea-title">Nom du badge</label>
             <input id="idea-title" type="text" maxlength="80" required placeholder="Ex: Explorateur nocturne">
+            <label for="idea-emoji">Emoji</label>
+            <input id="idea-emoji" type="text" maxlength="10" placeholder="Ex: 🚀">
             <label for="idea-description">Description</label>
             <textarea id="idea-description" rows="2" maxlength="300" required placeholder="Décris l'idée en quelques lignes."></textarea>
             <button type="submit" class="primary">Proposer</button>
             <p id="idea-message" class="message"></p>
           </form>
+          <div class="ideas-separator">
+            <div class="ideas-separator-line"></div>
+            <p class="ideas-separator-text">Propositions</p>
+            <div class="ideas-separator-line"></div>
+          </div>
           <div id="idea-list" class="list"></div>
         </div>
       </section>
@@ -149,7 +158,7 @@
       <!-- Modal profil communauté -->
       <div id="community-profile-modal" class="modal-backdrop hidden">
         <div class="modal-card wide">
-          <button id="community-profile-close" class="ghost close-btn">Fermer</button>
+          <button id="community-profile-close" class="ghost close-btn">×</button>
           <div class="profile-modal-content two-col">
             <div class="profile-col-left">
               <img id="community-profile-avatar" src="./icons/logobl.png" alt="Avatar" class="logo medium">
