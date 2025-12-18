@@ -145,6 +145,25 @@ p {
 .my-badges-catalog > .section-subtitle.theme-locked {
   opacity: 0.85;
 }
+
+/* Séparation visuelle des thèmes dans Mes badges */
+.my-badges-catalog > .section-subtitle.theme-title {
+  margin-top: 20px;
+  margin-bottom: 12px;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+  padding: 8px 12px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 10px;
+}
+
+.my-catalog-card.expert-badge {
+  border: 2px solid #8d33e16e;
+  border-radius: 12px;
+}
+
 .my-catalog-card.locked {
   opacity: 0.55;
   filter: grayscale(1);
@@ -499,6 +518,12 @@ button {
 }
 
 .badge-count span { color: #67e8f9; }
+.badge-count .badge-total {
+  display: inline;
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--muted);
+}
 .skill-count span { color: #22c55e; }
 .mystery-count span { color: #c084fc; }
 

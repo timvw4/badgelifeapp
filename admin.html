@@ -47,7 +47,11 @@
         <div>
           <div class="row" style="justify-content: space-between; align-items: baseline;">
             <h3>Liste</h3>
-            <small id="admin-badge-total" class="muted">Total : 0</small>
+            <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px;">
+              <small id="admin-badge-total" class="muted">Total : 0</small>
+              <small id="admin-skills-total" class="muted">Skills : 0</small>
+              <small id="admin-low-skills-total" class="muted">Low skills : 0</small>
+            </div>
           </div>
           <div class="table">
             <div class="table-head" style="display:grid; grid-template-columns: 0.35fr minmax(180px, 1fr) 1fr; gap:8px;">
@@ -183,7 +187,7 @@
               <div id="multi-skill-by-option-block" class="hidden" style="margin-top:10px;">
                 <label>Skills par option (une par ligne)</label>
                 <textarea id="multi-option-skills" rows="4" placeholder="valeur|Skill 1&#10;valeur2|Expert&#10;valeur3|aucun"></textarea>
-                <small class="muted">Quand activé : le niveau dépend des options cochées (pas du nombre). Mets vide après le | pour “aucun skill”.</small>
+                <small class="muted">valeur|Expert, valeur|skill 1, valeur|bloquer.</small>
               </div>
               <div class="row" style="gap:10px; align-items:center; margin-top:10px;">
                 <button type="button" id="multi-display-list-toggle" class="ghost">Liste : désactivée</button>
@@ -196,8 +200,8 @@
               <label>Choix de réponses</label>
               <textarea id="single-options" rows="4" placeholder="valeur|Libellé"></textarea>
               <label style="margin-top:10px;">Skills par option (une par ligne)</label>
-              <textarea id="single-skills" rows="3" placeholder="valeur|Skill 1&#10;valeur2|aucun&#10;valeur3|Skill mystère"></textarea>
-              <small class="muted">Chaque option peut donner un skill. (laisse vide après le |) si cette option ne doit donner aucun skill.</small>
+              <textarea id="single-skills" rows="3" placeholder="valeur|Skill 1&#10;valeur2|Expert&#10;valeur3|aucun"></textarea>
+              <small class="muted">Chaque option peut donner un skill. Mets "Expert" pour un skill Expert (10 points), ou laisse vide après le | pour "aucun skill".</small>
               <small class="muted">L’utilisateur pourra choisir une seule option.</small>
             </div>
 

@@ -79,7 +79,6 @@ function pseudoToEmail(pseudo) {
 document.addEventListener('DOMContentLoaded', () => {
   cacheElements();
   bindAllBadgesFilters();
-  bindThemeFilters();
   bindRankTooltip();
   attachAuthTabListeners();
   attachFormListeners();
@@ -129,10 +128,6 @@ function cacheElements() {
   els.filterAll = document.getElementById('filter-all');
   els.filterUnlocked = document.getElementById('filter-unlocked');
   els.filterLocked = document.getElementById('filter-locked');
-  els.themesToggle = document.getElementById('themes-toggle');
-  els.themesPanel = document.getElementById('themes-panel');
-  els.themesAll = document.getElementById('themes-all');
-  els.themesList = document.getElementById('themes-list');
   els.communityList = document.getElementById('community-list');
   els.communityProfileModal = document.getElementById('community-profile-modal');
   els.communityProfileClose = document.getElementById('community-profile-close');
@@ -231,23 +226,6 @@ function bindAllBadgesFilters() {
   els.filterLocked.addEventListener('click', () => apply('locked'));
 }
 
-function bindThemeFilters() {
-  if (!els.themesToggle || !els.themesPanel || !els.themesAll || !els.themesList) return;
-
-  els.themesToggle.addEventListener('click', () => {
-    state.themesEnabled = !state.themesEnabled;
-    els.themesPanel.classList.toggle('hidden', !state.themesEnabled);
-    els.themesToggle.classList.toggle('active', state.themesEnabled);
-    renderAllBadges();
-  });
-
-  els.themesAll.addEventListener('click', () => {
-    state.selectedThemes = null; // pas de sélection => pas de filtre
-    renderThemesPanel();
-    renderAllBadges();
-  });
-}
-
 function getAllThemeNames() {
   const names = new Set();
   (state.badges || []).forEach(b => {
@@ -255,32 +233,6 @@ function getAllThemeNames() {
     if (t) names.add(t);
   });
   return Array.from(names).sort((a, b) => a.localeCompare(b, 'fr', { sensitivity: 'base' }));
-}
-
-function renderThemesPanel() {
-  if (!els.themesAll || !els.themesList) return;
-  const themes = getAllThemeNames();
-  const noneSelected = state.selectedThemes === null;
-  els.themesAll.classList.toggle('active', noneSelected);
-  els.themesList.innerHTML = '';
-
-  themes.forEach(theme => {
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'ghost';
-    const isActive = (!noneSelected && state.selectedThemes && state.selectedThemes.has(theme));
-    btn.classList.toggle('active', isActive);
-    btn.textContent = theme;
-    btn.addEventListener('click', () => {
-      // Si aucun thème n'était sélectionné, on démarre une sélection explicite
-      if (state.selectedThemes === null) state.selectedThemes = new Set();
-      if (state.selectedThemes.has(theme)) state.selectedThemes.delete(theme);
-      else state.selectedThemes.add(theme);
-      renderThemesPanel();
-      renderAllBadges();
-    });
-    els.themesList.appendChild(btn);
-  });
 }
 
 function attachAuthTabListeners() {
@@ -530,7 +482,6 @@ async function fetchBadges() {
     if (data) {
       state.badges = data;
       buildBadgeMaps();
-      renderThemesPanel();
       return;
     }
   }
@@ -542,7 +493,6 @@ async function fetchBadges() {
   }
   state.badges = localBadges;
   buildBadgeMaps();
-  renderThemesPanel();
 }
 
 function isLocalBadgesMode() {
@@ -639,19 +589,81 @@ async function fetchCommunity() {
     // Recalcule les compteurs via user_badges pour avoir des chiffres à jour (success != false).
     const { data: rows, error: errBadges } = await supabase
       .from('user_badges')
-      .select('user_id, level, success')
+      .select('user_id, badge_id, level, success')
       .in('user_id', ids);
     if (!errBadges && Array.isArray(rows)) {
-      const countMap = new Map();
-      const mysteryMap = new Map();
+      // Grouper les badges par utilisateur
+      const badgesByUser = new Map();
       rows.forEach(r => {
         if (r.success === false) return;
         const uid = r.user_id;
-        countMap.set(uid, (countMap.get(uid) || 0) + 1);
-        if (isMysteryLevel(r.level)) {
-          mysteryMap.set(uid, (mysteryMap.get(uid) || 0) + 1);
+        if (!badgesByUser.has(uid)) {
+          badgesByUser.set(uid, []);
         }
+        badgesByUser.get(uid).push(r);
       });
+      
+      const countMap = new Map();
+      const mysteryMap = new Map();
+      
+      // Pour chaque utilisateur, calculer les points et filtrer les badges fantômes
+      badgesByUser.forEach((userBadges, userId) => {
+        // Calculer les points de skills pour cet utilisateur
+        let userSkillPoints = 0;
+        const badgesWithLevels = new Set();
+        const userBadgeIds = new Set();
+        
+        userBadges.forEach(row => {
+          if (row.badge_id) {
+            userBadgeIds.add(row.badge_id);
+            if (row.level) {
+              userSkillPoints += getSkillPointsForBadge(row.badge_id, row.level);
+              badgesWithLevels.add(row.badge_id);
+            }
+          }
+        });
+        
+        // Ajouter 1 point pour les badges sans niveau
+        userBadges.forEach(row => {
+          if (row.badge_id && !badgesWithLevels.has(row.badge_id)) {
+            const badge = state.badges.find(b => b.id === row.badge_id);
+            if (badge) {
+              const config = parseConfig(badge.answer);
+              const hasLevels = config && Array.isArray(config.levels) && config.levels.length > 0;
+              if (!hasLevels) {
+                const isLowSkill = state.lowSkillBadges.has(row.badge_id);
+                if (isLowSkill) {
+                  userSkillPoints -= 1;
+                } else {
+                  userSkillPoints += 1;
+                }
+              }
+            }
+          }
+        });
+        
+        // Filtrer les badges fantômes qui ne devraient pas être débloqués
+        const validBadges = userBadges.filter(row => {
+          if (!row.badge_id) return false;
+          const badge = state.badges.find(b => b.id === row.badge_id);
+          if (!badge || !isGhostBadge(badge)) return true; // Garder les badges non-fantômes
+          
+          // Vérifier si le badge fantôme devrait être débloqué
+          const shouldBeUnlocked = checkGhostBadgeConditionsForUser(badge, userBadgeIds, userSkillPoints);
+          return shouldBeUnlocked;
+        });
+        
+        // Compter les badges valides
+        countMap.set(userId, validBadges.length);
+        
+        // Compter les badges "mystery" (Expert)
+        validBadges.forEach(r => {
+          if (isMysteryLevel(r.level)) {
+            mysteryMap.set(userId, (mysteryMap.get(userId) || 0) + 1);
+          }
+        });
+      });
+      
       profiles.forEach(p => {
         p.badge_count = countMap.get(p.id) || 0;
         p.mystery_count = mysteryMap.get(p.id) || 0;
@@ -723,8 +735,18 @@ function isGhostBadge(badge) {
 }
 
 function checkGhostBadgeConditions(badge) {
+  return checkGhostBadgeConditionsForUser(badge, state.userBadges, state.currentSkillPoints || 0);
+}
+
+// Vérifie si un badge fantôme devrait être débloqué pour un utilisateur donné
+// userBadgeIds: Set ou array des IDs de badges débloqués de l'utilisateur
+// userSkillPoints: nombre de points de skills de l'utilisateur
+function checkGhostBadgeConditionsForUser(badge, userBadgeIds, userSkillPoints) {
   const config = parseConfig(badge.answer);
   if (!config?.isGhost) return false;
+
+  // Convertir en Set si c'est un array
+  const badgeSet = userBadgeIds instanceof Set ? userBadgeIds : new Set(userBadgeIds);
 
   const prereqMode = (config.prereqMode === 'any') ? 'any' : 'all'; // défaut: all (ET)
   const checks = [];
@@ -733,7 +755,7 @@ function checkGhostBadgeConditions(badge) {
   if (Array.isArray(config.requiredBadges) && config.requiredBadges.length > 0) {
     const okBadges = config.requiredBadges.every(requiredId => {
       const idStr = String(requiredId);
-      return state.userBadges.has(idStr) || state.userBadges.has(Number(idStr));
+      return badgeSet.has(idStr) || badgeSet.has(Number(idStr));
     });
     checks.push(okBadges);
   }
@@ -741,20 +763,20 @@ function checkGhostBadgeConditions(badge) {
   // 2) Min badges débloqués
   const minBadges = Number(config.minBadges || 0);
   if (Number.isFinite(minBadges) && minBadges > 0) {
-    checks.push((state.userBadges?.size || 0) >= minBadges);
+    checks.push((badgeSet?.size || 0) >= minBadges);
   }
 
   // 3) Min points de skills
   const minSkills = Number(config.minSkills || 0);
   if (Number.isFinite(minSkills) && minSkills > 0) {
-    checks.push((state.currentSkillPoints || 0) >= minSkills);
+    checks.push((userSkillPoints || 0) >= minSkills);
   }
 
   // 4) Rang minimum
   const minRank = (config.minRank || '').toString().trim();
   if (minRank) {
     const order = ['Débutant', 'Polyvalent', 'Compétent', 'Accompli', 'Multiskills'];
-    const currentRank = getRankMeta(state.currentSkillPoints || 0).name;
+    const currentRank = getRankMeta(userSkillPoints || 0).name;
     checks.push(order.indexOf(currentRank) >= order.indexOf(minRank));
   }
 
@@ -842,13 +864,6 @@ function renderAllBadges() {
     visibleBadges = visibleBadges.filter(b => !state.userBadges.has(b.id));
   }
 
-  // Filtre par thèmes (uniquement si activé)
-  if (state.themesEnabled && state.selectedThemes instanceof Set && state.selectedThemes.size > 0) {
-    visibleBadges = visibleBadges.filter(b => {
-      const t = (b?.theme && String(b.theme).trim()) ? String(b.theme).trim() : '';
-      return state.selectedThemes.has(t);
-    });
-  }
   
   if (!visibleBadges.length) {
     els.allBadgesList.innerHTML = '<p class="muted">Aucun badge pour le moment.</p>';
@@ -1002,7 +1017,7 @@ function renderMyBadges() {
   els.myBadgesList.classList.remove('list-mode');
   els.myBadgesList.classList.add('my-badges-catalog');
   els.myBadgesList.innerHTML = '';
-
+  
   // Regrouper par thème pour garder des emplacements stables
   const themeName = (b) => (b.theme && String(b.theme).trim()) ? String(b.theme).trim() : 'Autres';
   const groups = new Map();
@@ -1015,13 +1030,13 @@ function renderMyBadges() {
   // Trier les badges dans un thème par ID (numérique ou texte)
   const sortById = (a, b) => String(a.id).localeCompare(String(b.id), 'fr', { numeric: true, sensitivity: 'base' });
 
-  themes.forEach(t => {
+  themes.forEach((t, index) => {
     const title = document.createElement('div');
-    title.className = 'section-subtitle';
+    title.className = 'section-subtitle theme-title';
     // Si aucun badge de ce thème n'est débloqué, on floute le titre du thème
     const hasAnyUnlockedInTheme = (groups.get(t) || []).some(b => state.userBadges.has(b.id));
     if (!hasAnyUnlockedInTheme) {
-      // Mode Pokédex : thème caché tant qu’aucun badge du thème n’est débloqué
+      // Mode Pokédex : thème caché tant qu'aucun badge du thème n'est débloqué
       title.classList.add('theme-locked');
       title.textContent = '?????';
       title.dataset.theme = t;
@@ -1049,9 +1064,11 @@ function renderMyBadges() {
       const statusClass = unlocked
         ? (isMysteryLevel(levelLabel) ? 'mystery' : 'success')
         : 'locked';
-      const statusDotClass = unlocked
-        ? (isMysteryLevel(levelLabel) ? 'dot-purple' : 'dot-green')
-        : 'dot-red';
+      const isExpert = unlocked && isMysteryLevel(levelLabel);
+      
+      if (isExpert) {
+        card.classList.add('expert-badge');
+      }
 
       const userAnswer = state.userBadgeAnswers.get(badge.id);
       const formattedAnswer = unlocked && userAnswer ? formatUserAnswer(badge, userAnswer) : null;
@@ -1063,7 +1080,6 @@ function renderMyBadges() {
           <span class="tag ${statusClass}">${statusLabel}</span>
         </div>
         <div class="badge-compact">
-          <span class="status-dot ${statusDotClass}"></span>
           <div class="badge-emoji">${safeEmoji}</div>
           <div class="badge-title">${safeTitle}</div>
         </div>
@@ -1281,7 +1297,7 @@ async function handleBadgeAnswer(event, badge) {
     state.attemptedBadges.add(badge.id);
     feedback.textContent = result.message || 'Badge non débloqué.';
     feedback.classList.add('error');
-    updateCounters(false);
+    await updateCounters(false);
     await syncGhostBadges();
     render();
     return;
@@ -1310,7 +1326,7 @@ async function handleBadgeAnswer(event, badge) {
   if (result.level) state.userBadgeLevels.set(badge.id, result.level);
   state.userBadgeAnswers.set(badge.id, rawAnswer);
   state.attemptedBadges.add(badge.id);
-  updateCounters(false);
+  await updateCounters(false);
   // Synchroniser les badges fantômes après avoir débloqué / rebloqué un badge
   await syncGhostBadges();
   feedback.textContent = result.message || 'Bravo, badge gagné !';
@@ -1416,15 +1432,15 @@ function evaluateBadgeAnswer(badge, rawAnswer, selectedOptions = []) {
       return { ok: false, message: 'Choisis au moins une option.' };
     }
 
-    // Règle "bloquer" valable pour TOUS les multi-select (même si skills par option est désactivé)
-    // Format admin : "valeur|bloquer" (ou "valeur|" en compat)
+    // Règle "bloquer" et "aucun" valable pour TOUS les multi-select (même si skills par option est désactivé)
+    // Format admin : "valeur|bloquer" ou "valeur|aucun" (ou "valeur|" en compat)
     if (config.optionSkills && typeof config.optionSkills === 'object') {
       for (const val of selectedOptions) {
         const key = String(val);
         const hasKey = Object.prototype.hasOwnProperty.call(config.optionSkills, key);
         if (!hasKey) continue;
         const lbl = (config.optionSkills[key] ?? '').toString().trim();
-        if (!lbl || lbl.toLowerCase() === 'bloquer') {
+        if (!lbl || lbl.toLowerCase() === 'bloquer' || lbl.toLowerCase() === 'aucun') {
           return { ok: false, message: 'Ce choix ne permet pas de débloquer ce badge.' };
         }
       }
@@ -1453,6 +1469,8 @@ function evaluateBadgeAnswer(badge, rawAnswer, selectedOptions = []) {
         const raw = config.optionSkills[String(val)];
         const lbl = (raw ?? '').toString().trim();
         if (!lbl) return;
+        // Ignorer "aucun" dans le calcul du meilleur skill
+        if (lbl.toLowerCase() === 'aucun') return;
         if (isMysteryLevel(lbl)) {
           bestLabel = 'Expert';
           bestPos = Number.POSITIVE_INFINITY;
@@ -1464,6 +1482,12 @@ function evaluateBadgeAnswer(badge, rawAnswer, selectedOptions = []) {
           bestLabel = lbl;
         }
       });
+      
+      // Si toutes les options sélectionnées sont "aucun" ou n'ont pas de skill, bloquer le badge
+      if (!bestLabel) {
+        return { ok: false, message: 'Aucun skill valide sélectionné. Le badge ne peut pas être débloqué.' };
+      }
+      
       const storedLabel = bestLabel ? (isMysteryLevel(bestLabel) ? 'Expert' : bestLabel) : null;
       return { ok: true, level: storedLabel, message: 'Bravo, badge débloqué !' };
     }
@@ -1507,9 +1531,16 @@ function evaluateBadgeAnswer(badge, rawAnswer, selectedOptions = []) {
       if (hasKey) {
         // Nouveau format : "valeur|bloquer"
         if (skillLabel.toLowerCase() === 'bloquer') return { ok: false, message: 'Ce choix ne permet pas de débloquer ce badge.' };
+        // "aucun" => pas de skill, bloque le badge
+        if (skillLabel.toLowerCase() === 'aucun') return { ok: false, message: 'Ce choix ne permet pas de débloquer ce badge.' };
         // Compat : si vide après "|" on considère aussi que c'est bloquant
         if (!skillLabel) return { ok: false, message: 'Ce choix ne permet pas de débloquer ce badge.' };
+      } else {
+        // Si l'option n'est pas dans optionSkills, elle n'a pas de skill => bloque
+        return { ok: false, message: 'Ce choix ne permet pas de débloquer ce badge.' };
       }
+    } else {
+      // Si optionSkills n'existe pas, le badge n'a pas de skills => peut être débloqué sans skill
     }
     const storedLabel = skillLabel ? (isMysteryLevel(skillLabel) ? 'Expert' : skillLabel) : null;
     return { ok: true, level: storedLabel, message: 'Bravo, badge débloqué !' };
@@ -1788,17 +1819,21 @@ async function fetchCommunityUserStats(userId) {
       renderCommunityBadgeGridMessage('Badges non visibles');
       return;
     }
-    const unlocked = rows.filter(r => r.success !== false);
-    const badgeCount = unlocked.length;
+    let unlocked = rows.filter(r => r.success !== false);
     
-    // Calculer le total de skills
+    // Calculer les points de skills et créer un Set des badges débloqués
+    // (nécessaire pour vérifier les conditions des badges fantômes)
     let totalSkills = 0;
     const badgesWithLevels = new Set();
+    const userBadgeIds = new Set();
     
     unlocked.forEach(row => {
-      if (row.badge_id && row.level) {
-        totalSkills += getSkillPointsForBadge(row.badge_id, row.level);
-        badgesWithLevels.add(row.badge_id);
+      if (row.badge_id) {
+        userBadgeIds.add(row.badge_id);
+        if (row.level) {
+          totalSkills += getSkillPointsForBadge(row.badge_id, row.level);
+          badgesWithLevels.add(row.badge_id);
+        }
       }
     });
     
@@ -1821,6 +1856,52 @@ async function fetchCommunityUserStats(userId) {
       }
     });
     
+    // Filtrer les badges fantômes qui ne remplissent plus leurs conditions
+    // (badges fantômes qui ont été rebloqués)
+    unlocked = unlocked.filter(row => {
+      if (!row.badge_id) return false;
+      const badge = state.badges.find(b => b.id === row.badge_id);
+      if (!badge || !isGhostBadge(badge)) return true; // Garder les badges non-fantômes
+      
+      // Vérifier si le badge fantôme devrait toujours être débloqué
+      const shouldBeUnlocked = checkGhostBadgeConditionsForUser(badge, userBadgeIds, totalSkills);
+      return shouldBeUnlocked;
+    });
+    
+    // Recalculer les points et le nombre de badges après filtrage
+    totalSkills = 0;
+    badgesWithLevels.clear();
+    const filteredBadgeIds = new Set();
+    
+    unlocked.forEach(row => {
+      if (row.badge_id) {
+        filteredBadgeIds.add(row.badge_id);
+        if (row.level) {
+          totalSkills += getSkillPointsForBadge(row.badge_id, row.level);
+          badgesWithLevels.add(row.badge_id);
+        }
+      }
+    });
+    
+    unlocked.forEach(row => {
+      if (row.badge_id && !badgesWithLevels.has(row.badge_id)) {
+        const badge = state.badges.find(b => b.id === row.badge_id);
+        if (badge) {
+          const config = parseConfig(badge.answer);
+          const hasLevels = config && Array.isArray(config.levels) && config.levels.length > 0;
+          if (!hasLevels) {
+            const isLowSkill = state.lowSkillBadges.has(row.badge_id);
+            if (isLowSkill) {
+              totalSkills -= 1; // Low skill sans niveau = -1 point
+            } else {
+              totalSkills += 1; // Badge sans niveau = +1 point
+            }
+          }
+        }
+      }
+    });
+    
+    const badgeCount = unlocked.length;
     els.communityProfileBadges.textContent = `${badgeCount} badge(s)`;
     els.communityProfileMystery.textContent = `${totalSkills} skill(s)`;
     renderCommunityBadgeGrid(unlocked);
@@ -1854,7 +1935,49 @@ function renderCommunityBadgeGrid(unlockedBadges) {
     renderCommunityBadgeGridMessage('Aucun badge');
     return;
   }
-  const items = unlockedBadges.map(row => {
+  
+  // Créer un Set des IDs de badges débloqués pour vérifier les conditions des badges fantômes
+  const userBadgeIds = new Set(unlockedBadges.map(row => row.badge_id).filter(Boolean));
+  
+  // Calculer les points de skills pour vérifier les conditions des badges fantômes
+  let userSkillPoints = 0;
+  const badgesWithLevels = new Set();
+  unlockedBadges.forEach(row => {
+    if (row.badge_id && row.level) {
+      userSkillPoints += getSkillPointsForBadge(row.badge_id, row.level);
+      badgesWithLevels.add(row.badge_id);
+    }
+  });
+  unlockedBadges.forEach(row => {
+    if (row.badge_id && !badgesWithLevels.has(row.badge_id)) {
+      const badge = state.badges.find(b => b.id === row.badge_id);
+      if (badge) {
+        const config = parseConfig(badge.answer);
+        const hasLevels = config && Array.isArray(config.levels) && config.levels.length > 0;
+        if (!hasLevels) {
+          const isLowSkill = state.lowSkillBadges.has(row.badge_id);
+          if (isLowSkill) {
+            userSkillPoints -= 1;
+          } else {
+            userSkillPoints += 1;
+          }
+        }
+      }
+    }
+  });
+  
+  // Filtrer les badges fantômes qui ne remplissent plus leurs conditions
+  const filteredBadges = unlockedBadges.filter(row => {
+    if (!row.badge_id) return false;
+    const badge = state.badges.find(b => b.id === row.badge_id);
+    if (!badge || !isGhostBadge(badge)) return true; // Garder les badges non-fantômes
+    
+    // Vérifier si le badge fantôme devrait toujours être débloqué
+    const shouldBeUnlocked = checkGhostBadgeConditionsForUser(badge, userBadgeIds, userSkillPoints);
+    return shouldBeUnlocked;
+  });
+  
+  const items = filteredBadges.map(row => {
     const badge = state.badges.find(b => b.id === row.badge_id);
     const emoji = badge ? getBadgeEmoji(badge) : '🏅';
     const formatted = badge ? formatUserAnswer(badge, row.user_answer || '') : (row.user_answer || '');
@@ -1904,17 +2027,82 @@ function setMessage(text, isError = false) {
 }
 
 async function updateCounters(syncProfile = false) {
-  const badgeCount = state.userBadges.size;
-  const totalBadges = state.badges?.length ?? 0;
+  // Calculer d'abord les points pour tous les badges (nécessaire pour vérifier les conditions des badges fantômes)
+  let tempSkillPoints = 0;
+  state.userBadgeLevels.forEach((lvl, badgeId) => {
+    tempSkillPoints += getSkillPointsForBadge(badgeId, lvl);
+  });
+  state.userBadges.forEach(badgeId => {
+    if (!state.userBadgeLevels.has(badgeId)) {
+      const badge = getBadgeById(badgeId);
+      if (badge) {
+        const config = parseConfig(badge.answer);
+        const hasLevels = config && Array.isArray(config.levels) && config.levels.length > 0;
+        if (!hasLevels) {
+          if (state.lowSkillBadges.has(badgeId)) {
+            tempSkillPoints -= 1;
+          } else {
+            tempSkillPoints += 1;
+          }
+        }
+      }
+    }
+  });
+  
+  // Filtrer les badges fantômes rebloqués (sécurité supplémentaire)
+  // Normalement syncGhostBadges() les supprime déjà, mais on vérifie quand même
+  const validBadgeIds = new Set();
+  state.userBadges.forEach(badgeId => {
+    const badge = getBadgeById(badgeId);
+    if (!badge) {
+      validBadgeIds.add(badgeId);
+      return;
+    }
+    
+    // Si c'est un badge fantôme, vérifier qu'il devrait toujours être débloqué
+    if (isGhostBadge(badge)) {
+      const shouldBeUnlocked = checkGhostBadgeConditionsForUser(badge, state.userBadges, tempSkillPoints);
+      if (shouldBeUnlocked) {
+        validBadgeIds.add(badgeId);
+      }
+      // Sinon, on ne l'ajoute pas (il devrait être supprimé par syncGhostBadges)
+    } else {
+      // Badge normal, on le garde
+      validBadgeIds.add(badgeId);
+    }
+  });
+  
+  // Recalculer les points en excluant les badges fantômes rebloqués
+  const badgeCount = validBadgeIds.size;
+  
+  // Calculer le nombre total de badges :
+  // - Tous les badges normaux (non-fantômes) comptent toujours
+  // - Les badges fantômes ne comptent que s'ils sont débloqués
+  let totalBadges = 0;
+  const allBadges = state.badges || [];
+  allBadges.forEach(badge => {
+    if (!isGhostBadge(badge)) {
+      // Badge normal : toujours compté
+      totalBadges++;
+    } else {
+      // Badge fantôme : compté seulement s'il est débloqué
+      if (validBadgeIds.has(badge.id)) {
+        totalBadges++;
+      }
+    }
+  });
+  
   let totalSkillPoints = 0;
   
   // Compter les points pour les badges avec niveaux
   state.userBadgeLevels.forEach((lvl, badgeId) => {
-    totalSkillPoints += getSkillPointsForBadge(badgeId, lvl);
+    if (validBadgeIds.has(badgeId)) {
+      totalSkillPoints += getSkillPointsForBadge(badgeId, lvl);
+    }
   });
   
   // Compter 1 point pour les badges débloqués sans niveau (text, boolean, etc.)
-  state.userBadges.forEach(badgeId => {
+  validBadgeIds.forEach(badgeId => {
     // Si le badge n'a pas de niveau défini, c'est un badge sans niveau
     if (!state.userBadgeLevels.has(badgeId)) {
       const badge = getBadgeById(badgeId);
@@ -1934,7 +2122,9 @@ async function updateCounters(syncProfile = false) {
     }
   });
   
-  if (els.badgeCount) els.badgeCount.textContent = `${badgeCount}`;
+  if (els.badgeCount) {
+    els.badgeCount.innerHTML = `${badgeCount} <span class="badge-total">/ ${totalBadges}</span>`;
+  }
   if (els.skillCount) els.skillCount.textContent = `${totalSkillPoints}`;
   state.currentSkillPoints = totalSkillPoints;
   

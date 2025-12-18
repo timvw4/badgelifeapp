@@ -35,6 +35,8 @@ function cacheEls() {
   els.loginMsg = document.getElementById('admin-message');
   els.logoutBtn = document.getElementById('admin-logout');
   els.badgeTotal = document.getElementById('admin-badge-total');
+  els.skillsTotal = document.getElementById('admin-skills-total');
+  els.lowSkillsTotal = document.getElementById('admin-low-skills-total');
   els.badgeList = document.getElementById('badge-list');
   els.badgeForm = document.getElementById('badge-form');
   els.formMsg = document.getElementById('form-message');
@@ -257,11 +259,91 @@ function setGhostSelectedIds(ids) {
   });
 }
 
+function calculateSkillsTotals() {
+  let totalSkills = 0;
+  let totalLowSkills = 0;
+  
+  state.badges.forEach(badge => {
+    // Vérifier si c'est un badge fantôme (exclure du calcul)
+    let parsed = null;
+    if (typeof badge.answer === 'string') {
+      try { parsed = JSON.parse(badge.answer); } catch (_) { parsed = null; }
+    }
+    if (parsed?.isGhost === true) return; // Ignorer les badges fantômes
+    
+    const isLowSkill = Boolean(badge.low_skill);
+    let badgeSkill = 0;
+    
+    if (!parsed || typeof parsed !== 'object' || !parsed.type) {
+      // Badge sans niveaux (text, boolean simple)
+      badgeSkill = 1;
+    } else if (parsed.type === 'range' && Array.isArray(parsed.levels) && parsed.levels.length > 0) {
+      // Badge avec niveaux (range)
+      const topLevel = pickHighestLevel(parsed.levels, 'max');
+      if (topLevel) {
+        const label = topLevel.label || '';
+        if (isMysteryLevel(label)) {
+          badgeSkill = 10; // Expert = 10 points
+        } else {
+          // Trouver la position du niveau dans la liste
+          const pos = parsed.levels.findIndex(l => (l?.label || '').toLowerCase() === label.toLowerCase());
+          badgeSkill = pos >= 0 ? pos + 1 : 1;
+        }
+      }
+    } else if (parsed.type === 'multiSelect' && Array.isArray(parsed.levels) && parsed.levels.length > 0) {
+      // Badge multi-sélection avec niveaux
+      const topLevel = pickHighestLevel(parsed.levels, 'min');
+      if (topLevel) {
+        const label = topLevel.label || '';
+        if (isMysteryLevel(label)) {
+          badgeSkill = 10;
+        } else {
+          const pos = parsed.levels.findIndex(l => (l?.label || '').toLowerCase() === label.toLowerCase());
+          badgeSkill = pos >= 0 ? pos + 1 : 1;
+        }
+      }
+    } else if (parsed.type === 'singleSelect' && Array.isArray(parsed.levels) && parsed.levels.length > 0) {
+      // Badge sélection unique avec niveaux
+      const topLevel = parsed.levels[parsed.levels.length - 1];
+      if (topLevel) {
+        const label = topLevel.label || '';
+        if (isMysteryLevel(label)) {
+          badgeSkill = 10;
+        } else {
+          const pos = parsed.levels.findIndex(l => (l?.label || '').toLowerCase() === label.toLowerCase());
+          badgeSkill = pos >= 0 ? pos + 1 : 1;
+        }
+      }
+    } else {
+      // Badge sans niveaux (boolean, text simple)
+      badgeSkill = 1;
+    }
+    
+    if (isLowSkill) {
+      totalLowSkills += Math.abs(badgeSkill) * 2; // Low skills = valeur x2 en négatif
+    } else {
+      totalSkills += badgeSkill;
+    }
+  });
+  
+  return { totalSkills, totalLowSkills };
+}
+
 function renderBadges() {
   els.badgeList.innerHTML = '';
   if (els.badgeTotal) {
-    els.badgeTotal.textContent = `Total : ${state.badges.length || 0}`;
+    els.badgeTotal.textContent = `Total de badges : ${state.badges.length || 0}`;
   }
+  
+  // Calculer les totaux de skills
+  const { totalSkills, totalLowSkills } = calculateSkillsTotals();
+  if (els.skillsTotal) {
+    els.skillsTotal.textContent = `Skills : ${totalSkills}`;
+  }
+  if (els.lowSkillsTotal) {
+    els.lowSkillsTotal.textContent = `Low skills : ${totalLowSkills}`;
+  }
+  
   if (!state.badges.length) {
     els.badgeList.innerHTML = '<div class="muted">Aucun badge.</div>';
     return;
@@ -275,56 +357,214 @@ function renderBadges() {
     row.innerHTML = `
       <span>${b.emoji || ''}</span>
       <span>${b.name || ''}</span>
-      <span class="muted" style="font-size:12px;">${getLevelSummary(b.answer)}${b.low_skill ? ' · Low skill' : ''}</span>
+      <span class="muted" style="font-size:12px;">${getLevelSummary(b.answer, Boolean(b.low_skill))}</span>
     `;
     row.addEventListener('click', () => fillForm(b));
     els.badgeList.appendChild(row);
   });
 }
 
-function getLevelSummary(answer) {
-  if (!answer) return '—';
+function calculateMaxSkillPoints(parsed, isLowSkill = false) {
+  if (!parsed || typeof parsed !== 'object' || !parsed.type) {
+    // Badge sans niveaux (text, boolean simple)
+    return isLowSkill ? -1 : 1;
+  }
+  
+  let maxSkill = 0;
+  
+  if (parsed.type === 'range' && Array.isArray(parsed.levels) && parsed.levels.length > 0) {
+    const top = pickHighestLevel(parsed.levels, 'max');
+    if (top) {
+      const label = top.label || '';
+      if (isMysteryLevel(label)) {
+        maxSkill = 10; // Expert = 10 points
+      } else {
+        const pos = parsed.levels.findIndex(l => (l?.label || '').toLowerCase() === label.toLowerCase());
+        maxSkill = pos >= 0 ? pos + 1 : 1;
+      }
+    }
+  } else if (parsed.type === 'multiSelect') {
+    // Mode "skills par option"
+    if (parsed.multiSkillMode === 'option' && parsed.optionSkills && typeof parsed.optionSkills === 'object') {
+      let bestSkill = 0;
+      Object.values(parsed.optionSkills).forEach(v => {
+        const label = String(v || '').trim();
+        if (!label || label.toLowerCase() === 'bloquer' || label.toLowerCase() === 'aucun') return;
+        if (isMysteryLevel(label)) {
+          bestSkill = 10;
+        } else {
+          // Trouver la position dans les levels si disponibles
+          if (Array.isArray(parsed.levels)) {
+            const pos = parsed.levels.findIndex(l => (l?.label || '').toLowerCase() === label.toLowerCase());
+            const skillValue = pos >= 0 ? pos + 1 : 1;
+            if (skillValue > bestSkill) bestSkill = skillValue;
+          } else {
+            bestSkill = Math.max(bestSkill, 1);
+          }
+        }
+      });
+      maxSkill = bestSkill;
+    } else if (Array.isArray(parsed.levels) && parsed.levels.length > 0) {
+      // Mode classique (par nombre de coches)
+      const top = pickHighestLevel(parsed.levels, 'min');
+      if (top) {
+        const label = top.label || '';
+        if (isMysteryLevel(label)) {
+          maxSkill = 10;
+        } else {
+          const pos = parsed.levels.findIndex(l => (l?.label || '').toLowerCase() === label.toLowerCase());
+          maxSkill = pos >= 0 ? pos + 1 : 1;
+        }
+      }
+    } else {
+      maxSkill = 1; // Badge sans niveaux
+    }
+  } else if (parsed.type === 'singleSelect') {
+    const levels = Array.isArray(parsed.levels) ? parsed.levels : [];
+    if (levels.length > 0) {
+      const topLevel = levels[levels.length - 1];
+      if (topLevel) {
+        const label = topLevel.label || '';
+        if (isMysteryLevel(label)) {
+          maxSkill = 10;
+        } else {
+          const pos = levels.findIndex(l => (l?.label || '').toLowerCase() === label.toLowerCase());
+          maxSkill = pos >= 0 ? pos + 1 : 1;
+        }
+      }
+    } else if (parsed.optionSkills && typeof parsed.optionSkills === 'object') {
+      // Skills par option
+      let bestSkill = 0;
+      Object.values(parsed.optionSkills).forEach(v => {
+        const label = String(v || '').trim();
+        if (!label || label.toLowerCase() === 'bloquer' || label.toLowerCase() === 'aucun') return;
+        if (isMysteryLevel(label)) {
+          bestSkill = 10;
+        } else {
+          bestSkill = Math.max(bestSkill, 1);
+        }
+      });
+      maxSkill = bestSkill;
+    } else {
+      maxSkill = 1; // Badge sans niveaux
+    }
+  } else if (parsed.type === 'boolean' || parsed.type === 'text') {
+    maxSkill = 1;
+  }
+  
+  // Appliquer le multiplicateur low skill (x2 en négatif)
+  if (isLowSkill) {
+    return -Math.abs(maxSkill) * 2;
+  }
+  return maxSkill;
+}
+
+function getLevelSummary(answer, isLowSkill = false) {
+  if (!answer) {
+    const maxSkill = calculateMaxSkillPoints(null, isLowSkill);
+    return `Aucun · ${isLowSkill ? 'low ' : ''}skills: ${maxSkill}`;
+  }
   let parsed = null;
   if (typeof answer === 'string') {
     try { parsed = JSON.parse(answer); } catch (_) { parsed = null; }
   }
+  
+  const maxSkill = calculateMaxSkillPoints(parsed, isLowSkill);
+  const skillText = `${isLowSkill ? 'low ' : ''}skills: ${maxSkill}`;
+  
   if (!parsed || typeof parsed !== 'object' || !parsed.type) {
-    return 'Sans skills'; // réponse simple
+    return `1 skill (sans niveau) · ${skillText}`;
   }
+  
+  // Badge fantôme
+  if (parsed.isGhost === true) {
+    return `Badge fantôme · ${skillText}`;
+  }
+  
+  // Badge range (numérotation)
   if (parsed.type === 'range' && Array.isArray(parsed.levels)) {
     const levels = parsed.levels;
+    if (!levels.length) return `Aucun niveau · ${skillText}`;
     const hasMystery = levels.some(l => isMysteryLevel(l.label));
     const top = pickHighestLevel(levels, 'max');
     const topLabel = top?.label || '—';
-    if (hasMystery) return `Mystère (max: ${topLabel})`;
-    return `Max: ${topLabel}`;
+    const levelCount = levels.length;
+    if (hasMystery) {
+      return `Expert (${levelCount} niveau${levelCount > 1 ? 'x' : ''}) · ${skillText}`;
+    }
+    return `${topLabel} (${levelCount} niveau${levelCount > 1 ? 'x' : ''}) · ${skillText}`;
   }
-  if (parsed.type === 'multiSelect' && Array.isArray(parsed.levels)) {
-    const levels = parsed.levels;
-    const hasMystery = levels.some(l => isMysteryLevel(l.label));
-    const top = pickHighestLevel(levels, 'min');
-    const topLabel = top?.label || '—';
-    if (hasMystery) return `Mystère (max: ${topLabel})`;
-    return `Max: ${topLabel}`;
+  
+  // Badge multiSelect
+  if (parsed.type === 'multiSelect') {
+    // Vérifier si mode "skills par option"
+    if (parsed.multiSkillMode === 'option' && parsed.optionSkills && typeof parsed.optionSkills === 'object') {
+      const optionCount = Object.keys(parsed.optionSkills).length;
+      const hasExpert = Object.values(parsed.optionSkills).some(v => {
+        const label = String(v || '').trim();
+        return isMysteryLevel(label);
+      });
+      if (hasExpert) {
+        return `Expert (${optionCount} option${optionCount > 1 ? 's' : ''}) · ${skillText}`;
+      }
+      return `Par option (${optionCount} option${optionCount > 1 ? 's' : ''}) · ${skillText}`;
+    }
+    
+    // Mode classique (par nombre de coches)
+    if (Array.isArray(parsed.levels)) {
+      const levels = parsed.levels;
+      if (!levels.length) return `Aucun niveau · ${skillText}`;
+      const hasMystery = levels.some(l => isMysteryLevel(l.label));
+      const top = pickHighestLevel(levels, 'min');
+      const topLabel = top?.label || '—';
+      const levelCount = levels.length;
+      if (hasMystery) {
+        return `Expert (${levelCount} niveau${levelCount > 1 ? 'x' : ''}) · ${skillText}`;
+      }
+      return `${topLabel} (${levelCount} niveau${levelCount > 1 ? 'x' : ''}) · ${skillText}`;
+    }
+    return `Aucun niveau · ${skillText}`;
   }
+  
+  // Badge singleSelect
   if (parsed.type === 'singleSelect') {
     const levels = Array.isArray(parsed.levels) ? parsed.levels : [];
-    if (!levels.length) return 'Sans skills';
+    if (!levels.length) {
+      // Vérifier si skills par option
+      if (parsed.optionSkills && typeof parsed.optionSkills === 'object') {
+        const optionCount = Object.keys(parsed.optionSkills).length;
+        const hasExpert = Object.values(parsed.optionSkills).some(v => {
+          const label = String(v || '').trim();
+          return isMysteryLevel(label);
+        });
+        if (hasExpert) {
+          return `Expert (${optionCount} option${optionCount > 1 ? 's' : ''}) · ${skillText}`;
+        }
+        return `Par option (${optionCount} option${optionCount > 1 ? 's' : ''}) · ${skillText}`;
+      }
+      return `1 skill (sans niveau) · ${skillText}`;
+    }
     const hasMystery = levels.some(l => isMysteryLevel(l.label));
     const topLabel = levels[levels.length - 1]?.label || '—';
-    if (hasMystery) return `Mystère (max: ${topLabel})`;
-    return `Max: ${topLabel}`;
+    const levelCount = levels.length;
+    if (hasMystery) {
+      return `Expert (${levelCount} niveau${levelCount > 1 ? 'x' : ''}) · ${skillText}`;
+    }
+    return `${topLabel} (${levelCount} niveau${levelCount > 1 ? 'x' : ''}) · ${skillText}`;
   }
-  if (parsed.type === 'boolean') {
-    return 'Sans skills';
+  
+  // Badge boolean ou text simple
+  if (parsed.type === 'boolean' || parsed.type === 'text') {
+    return `1 skill (sans niveau) · ${skillText}`;
   }
-  return 'Sans skills';
+  
+  return `Aucun · ${skillText}`;
 }
 
 function isMysteryLevel(label) {
   if (typeof label !== 'string') return false;
   const lower = label.toLowerCase();
-  return lower.includes('mystère') || lower.includes('mystere') || lower.includes('secret');
+  return lower.includes('mystère') || lower.includes('mystere') || lower.includes('secret') || lower.includes('expert');
 }
 
 function pickHighestLevel(levels, field) {
@@ -617,8 +857,9 @@ function parseSingleSkills(text) {
         map[v] = 'bloquer';
         return;
       }
-      // "aucun"/"none"/vide => pas de skill pour cette option
+      // "aucun"/"none"/vide => pas de skill pour cette option (mais on le stocke pour vérifier)
       if (!sRaw || sLower === 'aucun' || sLower === 'none' || sLower === 'no' || sLower === '0' || sLower === '-') {
+        map[v] = 'aucun';
         return;
       }
       map[v] = sRaw;
