@@ -84,6 +84,25 @@ p {
   box-shadow: 0 10px 40px rgba(0,0,0,0.25);
 }
 
+#profile-privacy-indicator {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #22c55e;
+  display: inline-block;
+  z-index: 10;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  border: 2px solid rgba(255, 255, 255, 0.1);
+}
+
+#profile-panel {
+  position: relative;
+  overflow: visible;
+}
+
 .tabs {
   display: flex;
   gap: 8px;
@@ -858,7 +877,7 @@ button {
 .profile-modal-content {
   display: grid;
   gap: 14px;
-  justify-items: center;
+  justify-items: start;
   margin-top: 6px;
   padding: 6px;
 }
@@ -873,6 +892,18 @@ button {
   flex-direction: column;
   align-items: flex-start;
   gap: 8px;
+  width: 100%;
+}
+
+#community-profile-privacy-indicator {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #22c55e;
+  display: inline-block;
+  flex-shrink: 0;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  border: 2px solid rgba(255, 255, 255, 0.15);
 }
 
 .profile-col-left .logo.medium {
@@ -1073,6 +1104,13 @@ button {
 }
 
 @media (max-width: 640px) {
+  #profile-privacy-indicator {
+    top: 10px;
+    left: 10px;
+    width: 10px;
+    height: 10px;
+  }
+  
   .topbar {
     flex-direction: column;
     align-items: flex-start;
@@ -1129,7 +1167,12 @@ button {
   /* Modal communauté : stack + grille plus dense */
   .profile-modal-content.two-col {
     grid-template-columns: 1fr;
-    justify-items: center;
+    justify-items: start;
+  }
+  
+  #community-profile-privacy-indicator {
+    width: 12px;
+    height: 12px;
   }
   .modal-badges-grid {
     grid-template-columns: repeat(4, minmax(0, 1fr));

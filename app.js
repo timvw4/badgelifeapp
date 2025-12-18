@@ -26,6 +26,7 @@ const state = {
   themesEnabled: false,
   selectedThemes: null, // null => aucun thème sélectionné (pas de filtre). Set non-vide => filtre.
   currentSkillPoints: 0, // calculé dans updateCounters
+  realtimeChannel: null, // Canal Supabase Realtime
 };
 
 const els = {};
@@ -134,6 +135,7 @@ function cacheElements() {
   els.communityProfileClose = document.getElementById('community-profile-close');
   els.communityProfileAvatar = document.getElementById('community-profile-avatar');
   els.communityProfileUsername = document.getElementById('community-profile-username');
+  els.communityProfilePrivacyIndicator = document.getElementById('community-profile-privacy-indicator');
   els.communityProfileRank = document.getElementById('community-profile-rank');
   els.communityProfileBadges = document.getElementById('community-profile-badges');
   els.communityProfileMystery = document.getElementById('community-profile-mystery');
@@ -273,6 +275,7 @@ function attachFormListeners() {
     state.user = data.user;
     toggleAdminLink(isAdminUser(state.user));
     await loadAppData();
+    setupRealtimeSubscription(); // Démarrer l'écoute Realtime après la connexion
   });
 
   els.signupForm.addEventListener('submit', async (e) => {
@@ -305,6 +308,7 @@ function attachFormListeners() {
     state.user = data.user;
     toggleAdminLink(isAdminUser(state.user));
     await loadAppData();
+    setupRealtimeSubscription(); // Démarrer l'écoute Realtime après l'inscription
   });
 
   els.logoutBtn.addEventListener('click', async () => {
@@ -348,19 +352,33 @@ function attachSettingsMenuListeners() {
       const isPrivate = state.profile.is_private || false;
       const newPrivacy = !isPrivate;
       
+      // Mise à jour optimiste : changer l'état immédiatement
+      const oldPrivacy = state.profile.is_private;
+      state.profile.is_private = newPrivacy;
+      updatePrivacyButton();
+      updatePrivacyIndicator();
+      
+      // Ensuite, mettre à jour dans Supabase
       const { error } = await supabase
         .from('profiles')
         .update({ is_private: newPrivacy })
         .eq('id', state.user.id);
       
       if (error) {
-        setMessage('Erreur lors de la mise à jour du profil.', true);
+        console.error('Erreur mise à jour is_private:', error);
+        // Revenir en arrière en cas d'erreur
+        state.profile.is_private = oldPrivacy;
+        updatePrivacyButton();
+        updatePrivacyIndicator();
+        // Si la colonne n'existe pas, informer l'utilisateur
+        if (error.message && error.message.includes('is_private')) {
+          setMessage('La colonne is_private n\'existe pas dans Supabase. Veuillez l\'ajouter à la table profiles.', true);
+        } else {
+          setMessage('Erreur lors de la mise à jour du profil.', true);
+        }
         return;
       }
       
-      state.profile.is_private = newPrivacy;
-      updatePrivacyButton();
-      updatePrivacyIndicator();
       setMessage(`Profil ${newPrivacy ? 'privé' : 'public'}.`, false);
     });
   }
@@ -436,13 +454,16 @@ async function bootstrapSession() {
     state.user = data.session.user;
     toggleAdminLink(isAdminUser(state.user));
     await loadAppData();
+    setupRealtimeSubscription(); // Démarrer l'écoute Realtime après le chargement initial
   } else {
     toggleViews(false);
     toggleAdminLink(false);
+    stopRealtimeSubscription(); // Arrêter l'écoute Realtime si l'utilisateur n'est pas connecté
   }
 }
 
 function resetState() {
+  stopRealtimeSubscription(); // Arrêter l'écoute Realtime
   state.session = null;
   state.user = null;
   state.profile = null;
@@ -456,6 +477,88 @@ function resetState() {
   els.communityList.innerHTML = '';
 }
 
+// Configuration de Supabase Realtime pour écouter les changements
+function setupRealtimeSubscription() {
+  // Arrêter toute subscription existante
+  stopRealtimeSubscription();
+  
+  // Créer un canal pour écouter les changements sur la table profiles
+  const channel = supabase
+    .channel('profiles-changes')
+    .on(
+      'postgres_changes',
+      {
+        event: '*', // Écouter tous les événements (INSERT, UPDATE, DELETE)
+        schema: 'public',
+        table: 'profiles',
+      },
+      (payload) => {
+        handleProfileChange(payload);
+      }
+    )
+    .subscribe();
+  
+  state.realtimeChannel = channel;
+}
+
+function stopRealtimeSubscription() {
+  if (state.realtimeChannel) {
+    supabase.removeChannel(state.realtimeChannel);
+    state.realtimeChannel = null;
+  }
+}
+
+// Gérer les changements détectés par Realtime
+async function handleProfileChange(payload) {
+  if (!state.user) return;
+  
+  const { eventType, new: newRecord, old: oldRecord } = payload;
+  
+  // Si c'est une mise à jour du profil de l'utilisateur actuel
+  if (newRecord && newRecord.id === state.user.id) {
+    // Mettre à jour le profil local
+    if (state.profile) {
+      state.profile = { ...state.profile, ...newRecord };
+      updatePrivacyButton();
+      updatePrivacyIndicator();
+      // Re-rendre si nécessaire
+      render();
+    }
+  }
+  
+  // Si c'est une mise à jour d'un profil dans la communauté
+  // Rafraîchir la liste de la communauté pour voir les changements
+  if (eventType === 'UPDATE' && newRecord) {
+    // Mettre à jour le profil dans la liste de la communauté si présent
+    if (state.communityProfiles.length > 0) {
+      const updatedProfile = state.communityProfiles.find(p => p.id === newRecord.id);
+      if (updatedProfile) {
+        // Mettre à jour le profil dans la liste
+        Object.assign(updatedProfile, newRecord);
+        // Re-rendre la communauté
+        renderCommunityFiltered('');
+      } else {
+        // Si le profil n'est pas dans la liste, rafraîchir toute la communauté
+        await fetchCommunity();
+      }
+    }
+    
+    // Si un modal de profil est ouvert pour cet utilisateur, mettre à jour l'indicateur
+    if (els.communityProfileModal && !els.communityProfileModal.classList.contains('hidden')) {
+      const currentUserId = els.communityProfileUsername?.dataset?.userId || 
+                           els.communityProfileUsername?.closest('[data-user-id]')?.dataset?.userId;
+      if (currentUserId === newRecord.id) {
+        // Mettre à jour l'indicateur de confidentialité dans le modal
+        const indicator = document.getElementById('community-profile-privacy-indicator');
+        if (indicator) {
+          const isPrivate = newRecord.is_private === true || newRecord.is_private === 'true';
+          indicator.style.background = isPrivate ? '#ef4444' : '#22c55e';
+        }
+      }
+    }
+  }
+}
+
 async function loadAppData() {
   toggleViews(true);
   try { await fetchProfile(); } catch (e) { console.error(e); }
@@ -467,18 +570,86 @@ async function loadAppData() {
   render();
 }
 
+// Fonction de rafraîchissement périodique (polling)
+async function refreshAllData() {
+  if (!state.user) return; // Ne pas rafraîchir si l'utilisateur n'est pas connecté
+  
+  try {
+    // Rafraîchir le profil (avec is_private, avatar, rank, etc.)
+    await fetchProfile();
+    
+    // Rafraîchir les badges utilisateur (pour mettre à jour les skills, rang, etc.)
+    await fetchUserBadges();
+    
+    // Rafraîchir les compteurs (badges, skills, rang)
+    await updateCounters(true);
+    
+    // Rafraîchir la communauté (pour voir les changements de privé/public des autres)
+    await fetchCommunity();
+    
+    // Rafraîchir les idées
+    await fetchIdeas();
+    await fetchIdeaVotes();
+    
+    // Re-rendre l'interface
+    render();
+  } catch (e) {
+    console.error('Erreur lors du rafraîchissement:', e);
+  }
+}
+
+// Démarrer le polling toutes les 50 secondes
+let pollingInterval = null;
+
+function startPolling() {
+  // Arrêter le polling précédent si il existe
+  if (pollingInterval) {
+    clearInterval(pollingInterval);
+  }
+  
+  // Démarrer le nouveau polling (50 secondes = 50000 ms)
+  pollingInterval = setInterval(() => {
+    refreshAllData();
+  }, 50000);
+}
+
+function stopPolling() {
+  if (pollingInterval) {
+    clearInterval(pollingInterval);
+    pollingInterval = null;
+  }
+}
+
 async function fetchProfile() {
   if (!state.user) return;
-  const { data, error } = await supabase.from('profiles').select('username, badge_count, avatar_url, skill_points, rank, is_private').eq('id', state.user.id).single();
+  // Essayer d'abord avec is_private, sinon sans
+  let { data, error } = await supabase.from('profiles').select('username, badge_count, avatar_url, skill_points, rank, is_private').eq('id', state.user.id).single();
+  
+  // Si la colonne is_private n'existe pas, réessayer sans
+  if (error && error.message && error.message.includes('is_private')) {
+    const retry = await supabase.from('profiles').select('username, badge_count, avatar_url, skill_points, rank').eq('id', state.user.id).single();
+    if (!retry.error) {
+      data = retry.data;
+      error = null;
+    }
+  }
+  
   if (error && error.code !== 'PGRST116') {
-    console.error(error);
+    console.error('Erreur fetchProfile:', error);
     return;
   }
   if (!data) {
-    await supabase.from('profiles').insert({ id: state.user.id, username: 'Invité', badge_count: 0, avatar_url: null, skill_points: 0, rank: 'Débutant', is_private: false });
-    state.profile = { username: 'Invité', badge_count: 0, avatar_url: null, skill_points: 0, rank: 'Débutant', is_private: false };
+    // Essayer d'insérer avec is_private, sinon sans
+    const insertData = { id: state.user.id, username: 'Invité', badge_count: 0, avatar_url: null, skill_points: 0, rank: 'Débutant' };
+    try {
+      await supabase.from('profiles').insert({ ...insertData, is_private: false });
+      state.profile = { ...insertData, is_private: false };
+    } catch (e) {
+      await supabase.from('profiles').insert(insertData);
+      state.profile = { ...insertData, is_private: false };
+    }
   } else {
-    state.profile = data;
+    state.profile = { ...data, is_private: data.is_private ?? false };
   }
   updatePrivacyButton();
   updatePrivacyIndicator();
@@ -598,17 +769,43 @@ async function fetchUserBadges() {
 }
 
 async function fetchCommunity() {
-  const { data, error } = await supabase
+  // Essayer d'abord avec is_private, sinon sans
+  let { data, error } = await supabase
     .from('profiles')
     .select('id,username,badge_count,avatar_url,skill_points,rank,is_private')
     .order('badge_count', { ascending: false })
     .limit(50);
+  
+  // Si la colonne is_private n'existe pas, réessayer sans
+  if (error && error.message && error.message.includes('is_private')) {
+    const retry = await supabase
+      .from('profiles')
+      .select('id,username,badge_count,avatar_url,skill_points,rank')
+      .order('badge_count', { ascending: false })
+      .limit(50);
+    if (!retry.error) {
+      data = retry.data;
+      error = null;
+    }
+  }
+  
   if (error) {
-    console.error(error);
-    return;
+    console.error('Erreur fetchCommunity:', error);
+    // Même en cas d'erreur, essayer d'afficher ce qui est disponible
+    if (!data || data.length === 0) {
+      renderCommunity([]);
+      return;
+    }
   }
 
   const profiles = data ?? [];
+  
+  // S'assurer que tous les profils ont is_private défini
+  profiles.forEach(p => {
+    if (p.is_private === undefined) {
+      p.is_private = false;
+    }
+  });
   const ids = profiles.map(p => p.id).filter(Boolean);
 
   if (ids.length) {
@@ -693,6 +890,10 @@ async function fetchCommunity() {
       profiles.forEach(p => {
         p.badge_count = countMap.get(p.id) || 0;
         p.mystery_count = mysteryMap.get(p.id) || 0;
+        // S'assurer que is_private existe, sinon le définir à false
+        if (p.is_private === undefined) {
+          p.is_private = false;
+        }
       });
     }
   }
@@ -1144,7 +1345,7 @@ function renderCommunity(profiles) {
     item.dataset.mystery = profile.mystery_count ?? 0;
     item.dataset.skillPoints = profile.skill_points ?? 0;
     item.dataset.rank = profile.rank ?? '';
-    item.dataset.isPrivate = profile.is_private ? 'true' : 'false';
+    item.dataset.isPrivate = (profile.is_private === true || profile.is_private === 'true') ? 'true' : 'false';
     const rankMeta = getRankMeta(profile.skill_points ?? 0);
     item.innerHTML = `
       <div style="display:flex; align-items:center; gap:10px;">
@@ -1805,16 +2006,30 @@ function updateAvatar(url) {
 function showCommunityProfile(data) {
   if (!els.communityProfileModal) return;
   els.communityProfileAvatar.src = data.avatar || './icons/logobl.png';
-  els.communityProfileUsername.textContent = data.username || 'Utilisateur';
+  
+  // Mettre à jour le nom d'utilisateur (le texte dans le span)
+  const usernameText = data.username || 'Utilisateur';
+  const usernameSpan = els.communityProfileUsername.querySelector('span:last-child');
+  if (usernameSpan) {
+    usernameSpan.textContent = usernameText;
+  }
+  
   const rankMeta = getRankMeta(data.skillPoints || 0);
   applyRankToElement(els.communityProfileUsername, rankMeta);
+  
+  // Mettre à jour l'indicateur de confidentialité
+  const isPrivate = data.isPrivate === 'true' || data.isPrivate === true;
+  const indicator = document.getElementById('community-profile-privacy-indicator');
+  if (indicator) {
+    indicator.style.background = isPrivate ? '#ef4444' : '#22c55e';
+  }
+  
   if (els.communityProfileRank) {
     els.communityProfileRank.textContent = data.rank || rankMeta.name;
     applyRankColor(els.communityProfileRank, rankMeta);
   }
   els.communityProfileBadges.textContent = `${data.badges || 0} badge(s)`;
   els.communityProfileMystery.textContent = `${data.skills || 0} skill(s)`;
-  const isPrivate = data.isPrivate === 'true' || data.isPrivate === true;
   renderCommunityBadgeGrid([], isPrivate);
   els.communityProfileModal.classList.remove('hidden');
   if (data.userId) {

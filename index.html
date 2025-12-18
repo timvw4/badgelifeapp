@@ -47,7 +47,9 @@
         <div class="brand">
           <img id="avatar-img" src="./icons/logobl.png" alt="Avatar" class="logo small">
           <div>
-            <p class="muted">Connecté</p>
+            <p class="muted" style="display: flex; align-items: center; gap: 8px;">
+              <span id="profile-privacy-indicator"></span>
+            </p>
             <strong id="profile-username">Utilisateur</strong>
             <div style="position:relative; display:inline-block;">
               <button id="profile-rank" type="button" class="muted ghost" style="margin-top:2px; padding:0; border:0; background:transparent; cursor:pointer;">—</button>
@@ -77,8 +79,7 @@
         </div>
       </header>
 
-      <section id="profile-panel" class="card hidden" style="position:relative;">
-        <span id="profile-privacy-indicator" style="position:absolute; top:10px; left:10px; width:12px; height:12px; border-radius:50%; background:#22c55e; display:inline-block;"></span>
+      <section id="profile-panel" class="card hidden">
         <h3>Profil</h3>
         <form id="profile-form" class="auth-form">
           <label for="profile-name">Ton pseudo</label>
@@ -154,7 +155,10 @@
           <div class="profile-modal-content two-col">
             <div class="profile-col-left">
               <img id="community-profile-avatar" src="./icons/logobl.png" alt="Avatar" class="logo medium">
-              <h3 id="community-profile-username">Utilisateur</h3>
+              <h3 id="community-profile-username" style="display: flex; align-items: center; gap: 8px;">
+                <span id="community-profile-privacy-indicator"></span>
+                <span>Utilisateur</span>
+              </h3>
               <p id="community-profile-rank" class="muted">—</p>
               <p class="muted" id="community-profile-badges">0 badge(s)</p>
               <p class="muted" id="community-profile-mystery">0 skill(s)</p>
