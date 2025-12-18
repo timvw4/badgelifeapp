@@ -70,13 +70,15 @@
             <div id="settings-menu" class="settings-menu hidden">
               <a id="admin-link" class="ghost full-width" href="./admin.html" style="display:none;">Admin</a>
               <button id="edit-profile-btn" class="ghost full-width">Modifier mon profil</button>
+              <button id="profile-privacy-btn" class="ghost full-width">Profil: Public</button>
               <button id="logout-btn" class="ghost full-width">Se déconnecter</button>
             </div>
           </div>
         </div>
       </header>
 
-      <section id="profile-panel" class="card hidden">
+      <section id="profile-panel" class="card hidden" style="position:relative;">
+        <span id="profile-privacy-indicator" style="position:absolute; top:10px; left:10px; width:12px; height:12px; border-radius:50%; background:#22c55e; display:inline-block;"></span>
         <h3>Profil</h3>
         <form id="profile-form" class="auth-form">
           <label for="profile-name">Ton pseudo</label>
@@ -122,27 +124,22 @@
 
       <section id="community" class="tab-content hidden">
         <h2>Communauté</h2>
-        <div class="subtabs">
-          <button class="subtab-button active" data-community-tab="profiles">Découvrir</button>
-          <button class="subtab-button" data-community-tab="ideas">Idées</button>
-        </div>
         <div id="community-profiles-panel">
+          <h3>Découvrir</h3>
           <p class="muted" style="margin-bottom:10px;">Découvre les membres, leurs badges et leurs skills.</p>
           <div class="search-bar">
             <input id="community-search" type="search" placeholder="Rechercher un utilisateur..." aria-label="Rechercher un utilisateur">
           </div>
           <div id="community-list" class="list"></div>
         </div>
-        <div id="community-ideas-panel" class="hidden">
-          <div class="row" style="justify-content: space-between; align-items: center;">
-            <h3>Idées de badges</h3>
-          </div>
+        <div id="community-ideas-panel">
+          <h3>Partages des idées de badges</h3>
           <p class="muted" style="margin-bottom:10px;">Propose une idée de badge, ta suggestion sera peut-être ajoutée à la collection.</p>
           <form id="idea-form" class="auth-form" style="margin-bottom:12px;">
             <label for="idea-title">Nom du badge</label>
             <input id="idea-title" type="text" maxlength="80" required placeholder="Ex: Explorateur nocturne">
             <label for="idea-description">Description</label>
-            <textarea id="idea-description" rows="2" maxlength="300" required placeholder="Décris l’idée en quelques lignes."></textarea>
+            <textarea id="idea-description" rows="2" maxlength="300" required placeholder="Décris l'idée en quelques lignes."></textarea>
             <button type="submit" class="primary">Proposer</button>
             <p id="idea-message" class="message"></p>
           </form>

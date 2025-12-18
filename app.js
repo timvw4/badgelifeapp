@@ -87,7 +87,6 @@ document.addEventListener('DOMContentLoaded', () => {
   attachSettingsMenuListeners();
   attachRefreshButton();
   attachCommunitySearchListener();
-  attachCommunitySubtabs();
   attachIdeaListeners();
   bootstrapSession();
 });
@@ -111,6 +110,8 @@ function cacheElements() {
   els.refreshBtn = document.getElementById('refresh-btn');
   els.logoutBtn = document.getElementById('logout-btn');
   els.editProfileBtn = document.getElementById('edit-profile-btn');
+  els.profilePrivacyBtn = document.getElementById('profile-privacy-btn');
+  els.profilePrivacyIndicator = document.getElementById('profile-privacy-indicator');
   els.profilePanel = document.getElementById('profile-panel');
   els.profileForm = document.getElementById('profile-form');
   els.profileName = document.getElementById('profile-name');
@@ -141,7 +142,6 @@ function cacheElements() {
   els.communitySearch = document.getElementById('community-search');
   els.communityProfilesPanel = document.getElementById('community-profiles-panel');
   els.communityIdeasPanel = document.getElementById('community-ideas-panel');
-  els.communitySubtabs = document.querySelectorAll('.subtab-button[data-community-tab]');
   els.ideaForm = document.getElementById('idea-form');
   els.ideaTitle = document.getElementById('idea-title');
   els.ideaDescription = document.getElementById('idea-description');
@@ -340,6 +340,42 @@ function attachSettingsMenuListeners() {
     if (els.settingsMenu.contains(e.target) || els.settingsToggle.contains(e.target)) return;
     els.settingsMenu.classList.add('hidden');
   });
+  
+  // Bouton de confidentialité du profil
+  if (els.profilePrivacyBtn) {
+    els.profilePrivacyBtn.addEventListener('click', async () => {
+      if (!state.user || !state.profile) return;
+      const isPrivate = state.profile.is_private || false;
+      const newPrivacy = !isPrivate;
+      
+      const { error } = await supabase
+        .from('profiles')
+        .update({ is_private: newPrivacy })
+        .eq('id', state.user.id);
+      
+      if (error) {
+        setMessage('Erreur lors de la mise à jour du profil.', true);
+        return;
+      }
+      
+      state.profile.is_private = newPrivacy;
+      updatePrivacyButton();
+      updatePrivacyIndicator();
+      setMessage(`Profil ${newPrivacy ? 'privé' : 'public'}.`, false);
+    });
+  }
+}
+
+function updatePrivacyButton() {
+  if (!els.profilePrivacyBtn || !state.profile) return;
+  const isPrivate = state.profile.is_private || false;
+  els.profilePrivacyBtn.textContent = `Profil: ${isPrivate ? 'Privé' : 'Public'}`;
+}
+
+function updatePrivacyIndicator() {
+  if (!els.profilePrivacyIndicator || !state.profile) return;
+  const isPrivate = state.profile.is_private || false;
+  els.profilePrivacyIndicator.style.background = isPrivate ? '#ef4444' : '#22c55e';
 }
 
 function attachRefreshButton() {
@@ -357,18 +393,6 @@ function attachCommunitySearchListener() {
   });
 }
 
-function attachCommunitySubtabs() {
-  if (!els.communitySubtabs) return;
-  els.communitySubtabs.forEach(btn => {
-    btn.addEventListener('click', () => {
-      els.communitySubtabs.forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      const tab = btn.dataset.communityTab;
-      if (els.communityProfilesPanel) els.communityProfilesPanel.classList.toggle('hidden', tab !== 'profiles');
-      if (els.communityIdeasPanel) els.communityIdeasPanel.classList.toggle('hidden', tab !== 'ideas');
-    });
-  });
-}
 
 function attachIdeaListeners() {
   if (els.ideaForm) {
@@ -445,17 +469,19 @@ async function loadAppData() {
 
 async function fetchProfile() {
   if (!state.user) return;
-  const { data, error } = await supabase.from('profiles').select('username, badge_count, avatar_url, skill_points, rank').eq('id', state.user.id).single();
+  const { data, error } = await supabase.from('profiles').select('username, badge_count, avatar_url, skill_points, rank, is_private').eq('id', state.user.id).single();
   if (error && error.code !== 'PGRST116') {
     console.error(error);
     return;
   }
   if (!data) {
-    await supabase.from('profiles').insert({ id: state.user.id, username: 'Invité', badge_count: 0, avatar_url: null, skill_points: 0, rank: 'Débutant' });
-    state.profile = { username: 'Invité', badge_count: 0, avatar_url: null, skill_points: 0, rank: 'Débutant' };
+    await supabase.from('profiles').insert({ id: state.user.id, username: 'Invité', badge_count: 0, avatar_url: null, skill_points: 0, rank: 'Débutant', is_private: false });
+    state.profile = { username: 'Invité', badge_count: 0, avatar_url: null, skill_points: 0, rank: 'Débutant', is_private: false };
   } else {
     state.profile = data;
   }
+  updatePrivacyButton();
+  updatePrivacyIndicator();
 }
 
 async function fetchBadges() {
@@ -574,7 +600,7 @@ async function fetchUserBadges() {
 async function fetchCommunity() {
   const { data, error } = await supabase
     .from('profiles')
-    .select('id,username,badge_count,avatar_url,skill_points,rank')
+    .select('id,username,badge_count,avatar_url,skill_points,rank,is_private')
     .order('badge_count', { ascending: false })
     .limit(50);
   if (error) {
@@ -1118,6 +1144,7 @@ function renderCommunity(profiles) {
     item.dataset.mystery = profile.mystery_count ?? 0;
     item.dataset.skillPoints = profile.skill_points ?? 0;
     item.dataset.rank = profile.rank ?? '';
+    item.dataset.isPrivate = profile.is_private ? 'true' : 'false';
     const rankMeta = getRankMeta(profile.skill_points ?? 0);
     item.innerHTML = `
       <div style="display:flex; align-items:center; gap:10px;">
@@ -1787,10 +1814,11 @@ function showCommunityProfile(data) {
   }
   els.communityProfileBadges.textContent = `${data.badges || 0} badge(s)`;
   els.communityProfileMystery.textContent = `${data.skills || 0} skill(s)`;
-  renderCommunityBadgeGrid([]);
+  const isPrivate = data.isPrivate === 'true' || data.isPrivate === true;
+  renderCommunityBadgeGrid([], isPrivate);
   els.communityProfileModal.classList.remove('hidden');
   if (data.userId) {
-    fetchCommunityUserStats(data.userId);
+    fetchCommunityUserStats(data.userId, isPrivate);
   }
 }
 
@@ -1812,7 +1840,7 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // Stats supplémentaires pour un profil communauté
-async function fetchCommunityUserStats(userId) {
+async function fetchCommunityUserStats(userId, isPrivate = false) {
   try {
     const rows = await fetchPublicUserBadges(userId);
     if (!rows || !rows.length) {
@@ -1904,7 +1932,7 @@ async function fetchCommunityUserStats(userId) {
     const badgeCount = unlocked.length;
     els.communityProfileBadges.textContent = `${badgeCount} badge(s)`;
     els.communityProfileMystery.textContent = `${totalSkills} skill(s)`;
-    renderCommunityBadgeGrid(unlocked);
+    renderCommunityBadgeGrid(unlocked, isPrivate);
   } catch (_) {
     renderCommunityBadgeGridMessage('Badges non visibles');
   }
@@ -1926,7 +1954,7 @@ async function fetchPublicUserBadges(userId) {
   return [];
 }
 
-function renderCommunityBadgeGrid(unlockedBadges) {
+function renderCommunityBadgeGrid(unlockedBadges, isPrivate = false) {
   if (!els.communityProfileBadgesGrid) return;
   if (els.communityProfileAnswer) {
     els.communityProfileAnswer.textContent = '';
@@ -1980,11 +2008,19 @@ function renderCommunityBadgeGrid(unlockedBadges) {
   const items = filteredBadges.map(row => {
     const badge = state.badges.find(b => b.id === row.badge_id);
     const emoji = badge ? getBadgeEmoji(badge) : '🏅';
-    const formatted = badge ? formatUserAnswer(badge, row.user_answer || '') : (row.user_answer || '');
-    return `<button class="modal-badge-emoji" data-answer="${encodeURIComponent(formatted)}" title="${badge?.name ?? ''}">${emoji}</button>`;
+    // Si le profil est privé, ne pas inclure la réponse dans data-answer
+    const formatted = isPrivate ? '' : (badge ? formatUserAnswer(badge, row.user_answer || '') : (row.user_answer || ''));
+    const disabled = isPrivate ? 'disabled' : '';
+    const cursorStyle = isPrivate ? 'cursor: not-allowed; opacity: 0.6;' : '';
+    return `<button class="modal-badge-emoji" data-answer="${encodeURIComponent(formatted)}" title="${badge?.name ?? ''}" ${disabled} style="${cursorStyle}">${emoji}</button>`;
   }).join('');
   els.communityProfileBadgesGrid.innerHTML = items;
   els.communityProfileBadgesGrid.querySelectorAll('.modal-badge-emoji').forEach(btn => {
+    if (isPrivate) {
+      // Si privé, désactiver le clic
+      btn.style.pointerEvents = 'none';
+      return;
+    }
     btn.addEventListener('click', () => {
       const ans = decodeURIComponent(btn.dataset.answer || '');
       // Met en évidence l'emoji sélectionné
