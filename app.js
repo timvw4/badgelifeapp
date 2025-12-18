@@ -545,7 +545,7 @@ async function handleProfileChange(payload) {
       }
     }
     
-    // Si un modal de profil est ouvert pour cet utilisateur, mettre à jour l'indicateur
+    // Si un modal de profil est ouvert pour cet utilisateur, mettre à jour les informations
     if (els.communityProfileModal && !els.communityProfileModal.classList.contains('hidden')) {
       const currentUserId = els.communityProfileUsername?.dataset?.userId || 
                            els.communityProfileUsername?.closest('[data-user-id]')?.dataset?.userId;
@@ -555,6 +555,23 @@ async function handleProfileChange(payload) {
         if (indicator) {
           const isPrivate = newRecord.is_private === true || newRecord.is_private === 'true';
           indicator.style.background = isPrivate ? '#ef4444' : '#22c55e';
+        }
+        
+        // Mettre à jour le rang dans le modal
+        if (els.communityProfileRank) {
+          const rankMeta = getRankMeta(newRecord.skill_points ?? 0);
+          const displayRank = newRecord.rank || rankMeta.name;
+          const rankText = displayRank === 'Rêve' ? `Vie de ${displayRank}` : `Vie ${displayRank}`;
+          els.communityProfileRank.textContent = rankText;
+          applyRankColor(els.communityProfileRank, rankMeta);
+        }
+        
+        // Mettre à jour le nombre de badges et skills dans le modal
+        if (els.communityProfileBadges && newRecord.badge_count !== undefined) {
+          els.communityProfileBadges.textContent = `${newRecord.badge_count ?? 0} badge(s)`;
+        }
+        if (els.communityProfileMystery && newRecord.skill_points !== undefined) {
+          els.communityProfileMystery.textContent = `${newRecord.skill_points ?? 0} skill(s)`;
         }
       }
     }
