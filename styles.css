@@ -187,9 +187,14 @@ p {
   opacity: 0.55;
   filter: grayscale(1);
 }
-.my-catalog-card.locked .badge-emoji,
-.my-catalog-card.locked .badge-title {
+.my-catalog-card.locked:not(.blocked) .badge-emoji,
+.my-catalog-card.locked:not(.blocked) .badge-title {
   filter: blur(1px);
+}
+/* Les badges bloqués (non débloqués mais déjà répondu) gardent le grayscale mais sans flou */
+.my-catalog-card.blocked {
+  opacity: 0.55;
+  filter: grayscale(1);
 }
 
 /* Mes badges : badges fantômes non débloqués = flou plus fort */

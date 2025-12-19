@@ -27,6 +27,7 @@ const state = {
   selectedThemes: null, // null => aucun thème sélectionné (pas de filtre). Set non-vide => filtre.
   currentSkillPoints: 0, // calculé dans updateCounters
   realtimeChannel: null, // Canal Supabase Realtime
+  failedBadgeId: null, // ID du badge qui vient d'échouer (pour afficher le message)
 };
 
 const els = {};
@@ -1133,9 +1134,9 @@ function renderAllBadges() {
       card.classList.add('expert-badge');
     }
     
-    // Si bloqué, afficher le badge visible mais grisé
-    const emoji = unlocked || isBlocked ? getBadgeEmoji(badge) : '❓';
-    const title = unlocked || isBlocked ? stripEmojis(badge.name || '') : '?????';
+    // Si bloqué, ne pas afficher le nom et l'emoji (comme les badges jamais répondu)
+    const emoji = unlocked ? getBadgeEmoji(badge) : '❓';
+    const title = unlocked ? stripEmojis(badge.name || '') : '?????';
     let formContent = `
       <input type="text" name="answer" placeholder="Ta réponse" required>
       <button type="submit" class="primary">Valider</button>
@@ -1188,11 +1189,12 @@ function renderAllBadges() {
         <div class="badge-emoji">${emoji}</div>
         <div class="badge-title">${title}</div>
       </div>
+      ${state.failedBadgeId === badge.id ? '<p class="message small error" style="margin-top:8px; text-align:center; font-size:11px;">Ta réponse n\'a pas suffi pour débloquer ce badge.</p>' : ''}
       <div class="all-badge-details hidden">
         ${hasAnswer ? '' : `<p class="muted">${badge.question}</p>`}
         ${hasAnswer ? `
           <p class="muted">${formatUserAnswer(badge, userAnswer) || userAnswer}</p>
-          <button type="button" class="primary rerépondre-btn" data-badge-id="${badge.id}">Change ta réponse</button>
+          <button type="button" class="primary rerépondre-btn" data-badge-id="${badge.id}">${unlocked ? 'Modifie ta réponse' : 'Tente de le débloquer'}</button>
         ` : `
           <form data-badge-id="${badge.id}">
             ${formContent}
@@ -1244,6 +1246,7 @@ function renderAllBadges() {
             });
           });
         }
+        
       }
     }
     
@@ -1349,14 +1352,14 @@ function renderMyBadges() {
       const card = document.createElement('article');
       card.className = `card-badge clickable compact all-badge-card my-catalog-card${unlocked ? '' : ' locked'}${isBlocked ? ' blocked' : ''}`;
 
-      // Afficher tous les badges : débloqués normalement, bloqués en grisé, jamais répondu en flou avec ????
-      const safeEmoji = unlocked ? getBadgeEmoji(badge) : (isBlocked ? getBadgeEmoji(badge) : '❓');
-      const safeTitle = unlocked ? stripEmojis(badge.name || '') : (isBlocked ? stripEmojis(badge.name || '') : '?????');
+      // Afficher tous les badges : débloqués normalement, bloqués et jamais répondu avec ❓ et ?????
+      const safeEmoji = unlocked ? getBadgeEmoji(badge) : '❓';
+      const safeTitle = unlocked ? stripEmojis(badge.name || '') : '?????';
 
       let statusLabel = formatLevelTag(unlocked, levelLabel, config);
-      // Si bloqué, afficher "Non débloqué" au lieu du niveau
+      // Si bloqué, afficher "Bloqué" au lieu du niveau
       if (isBlocked) {
-        statusLabel = 'Non débloqué';
+        statusLabel = 'Bloqué';
       }
 
       const statusClass = unlocked
@@ -1618,8 +1621,16 @@ async function handleBadgeAnswer(event, badge) {
     state.userBadgeLevels.set(badge.id, level0); // Stocker le niveau 0
     state.userBadgeAnswers.set(badge.id, rawAnswer);
     state.attemptedBadges.add(badge.id);
-    feedback.textContent = result.message || 'Badge non débloqué.';
-    feedback.classList.add('error');
+    
+    // Stocker l'ID du badge qui a échoué pour afficher le message dans renderAllBadges()
+    state.failedBadgeId = badge.id;
+    
+    // Faire disparaître le message après 4 secondes
+    setTimeout(() => {
+      state.failedBadgeId = null;
+      render();
+    }, 4000);
+    
     await updateCounters(false);
     await syncGhostBadges();
     render();
