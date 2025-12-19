@@ -112,7 +112,7 @@
 
       <section id="all-badges" class="tab-content hidden">
         <h2>Tous les badges</h2>
-        <p class="muted">Débloque les badges en répondant à leur questions.</p>
+        <p class="muted">Débloque les badges en répondant à leur questions et obtiens des skills pour gagner en style de vie.</p>
         <div class="row badge-filters" style="gap:8px; flex-wrap:wrap; margin: 10px 0 6px;">
           <button id="filter-all" class="ghost active" type="button">Tous</button>
           <button id="filter-unlocked" class="ghost" type="button">Débloqués</button>
@@ -123,18 +123,19 @@
 
       <section id="community" class="tab-content hidden">
         <h2>Communauté</h2>
-        <div id="community-profiles-panel">
-          <h3>Découvrir</h3>
-          <p class="muted" style="margin-bottom:10px;">Découvre les membres, leurs badges et leurs skills.</p>
+        <div class="subtabs">
+          <button id="community-tab-discover" class="subtab-button active" data-community-tab="discover">Découvrir</button>
+          <button id="community-tab-share" class="subtab-button" data-community-tab="share">Partage</button>
+        </div>
+        <div id="community-profiles-panel" class="community-subtab-content">
+          <p class="muted" style="margin-bottom:10px;">Découvre les badges et les skills des autres.</p>
           <div class="search-bar">
             <input id="community-search" type="search" placeholder="Rechercher un utilisateur..." aria-label="Rechercher un utilisateur">
           </div>
           <div id="community-list" class="list"></div>
         </div>
-        <div class="community-section-separator"></div>
-        <div id="community-ideas-panel">
-          <h3>Partage tes idées de badges</h3>
-          <p class="muted" style="margin-bottom:10px;">Propose une idée de badge, ta suggestion sera peut-être ajoutée à la collection.</p>
+        <div id="community-ideas-panel" class="community-subtab-content hidden">
+          <p class="muted" style="margin-bottom:10px;">Partage tes idées de badges à la comunauté et vote pour les meilleurs ou pires idées.</p>
           <form id="idea-form" class="auth-form" style="margin-bottom:12px;">
             <label for="idea-title">Nom du badge</label>
             <input id="idea-title" type="text" maxlength="80" required placeholder="Ex: Explorateur nocturne">

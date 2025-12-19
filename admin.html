@@ -162,8 +162,11 @@
             </div>
 
             <div id="block-boolean" class="answer-block hidden non-ghost-only">
-              <label for="bool-display-text">Remplace la réponse</label>
+              <label for="bool-display-text">Remplace la réponse (si "oui")</label>
               <textarea id="bool-display-text" rows="2" placeholder="Ex: A répondu à la question"></textarea>
+              
+              <label for="bool-display-text-false" style="margin-top:10px;">Remplace la réponse (si "non")</label>
+              <textarea id="bool-display-text-false" rows="2" placeholder="Ex: N'a pas répondu à la question"></textarea>
               
               <label for="bool-skill-points" style="margin-top:10px;">Points skills (si "oui")</label>
               <input id="bool-skill-points" type="number" min="0" step="1" placeholder="Laisse vide pour 1 point par défaut">

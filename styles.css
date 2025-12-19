@@ -741,7 +741,7 @@ button {
 }
 
 .card-badge.expanded {
-  border-color: var(--accent);
+  border-color: var(--border);
 }
 
 .card-badge.clickable {
@@ -1087,6 +1087,12 @@ button {
   background: rgba(248,113,113,0.15);
   color: #fecdd3;
   border-color: rgba(248,113,113,0.4);
+}
+
+.tag.blocked {
+  background: rgba(239,68,68,0.15);
+  color: #fecaca;
+  border-color: rgba(239,68,68,0.4);
 }
 
 .card-badge form {

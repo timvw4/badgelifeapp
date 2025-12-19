@@ -48,6 +48,7 @@ function cacheEls() {
   els.answerType = document.getElementById('answer-type');
   els.answerText = document.getElementById('answer-text');
   els.boolDisplayText = document.getElementById('bool-display-text');
+  els.boolDisplayTextFalse = document.getElementById('bool-display-text-false');
   els.boolSkillPoints = document.getElementById('bool-skill-points');
   els.rangeLevels = document.getElementById('range-levels');
   els.multiOptions = document.getElementById('multi-options');
@@ -727,6 +728,7 @@ function fillForm(b) {
   if (els.displayPrefix) els.displayPrefix.value = '';
   els.displaySuffix.value = '';
   if (els.boolDisplayText) els.boolDisplayText.value = '';
+  if (els.boolDisplayTextFalse) els.boolDisplayTextFalse.value = '';
   setMultiDisplayListState(false);
   setMultiSkillByOptionState(false);
   if (els.multiOptionSkills) els.multiOptionSkills.value = '';
@@ -775,6 +777,7 @@ function fillForm(b) {
   showBlock(type);
   if (type === 'boolean') {
     if (els.boolDisplayText) els.boolDisplayText.value = parsed.booleanDisplayText ?? '';
+    if (els.boolDisplayTextFalse) els.boolDisplayTextFalse.value = parsed.booleanDisplayTextFalse ?? '';
     // Si c'est un badge fantôme, utiliser ghostSkillPoints, sinon boolSkillPoints
     if (isGhost) {
       // ghostSkillPoints est déjà chargé plus haut pour tous les types
@@ -923,6 +926,7 @@ function buildPayloadFromForm() {
       // Par défaut, on débloque si l'utilisateur répond "oui"
       expected: true,
       ...(els.boolDisplayText?.value?.trim() ? { booleanDisplayText: els.boolDisplayText.value.trim() } : {}),
+      ...(els.boolDisplayTextFalse?.value?.trim() ? { booleanDisplayTextFalse: els.boolDisplayTextFalse.value.trim() } : {}),
     };
     // Ajouter skillPoints seulement si le champ est rempli (pour badges normaux ou fantômes)
     const skillPointsValue = isGhost ? ghostSkillPoints : (els.boolSkillPoints?.value?.trim() || '');
@@ -1002,8 +1006,10 @@ function parseRangeLevels(text) {
         max: Number(max),
       };
       // Si points est spécifié et valide, l'utiliser, sinon utiliser position+1
+      // Permettre points = 0 pour le niveau 0 (badge bloqué)
       const pointsNum = points.trim() ? Number(points.trim()) : null;
-      if (!Number.isNaN(pointsNum) && pointsNum > 0) {
+      const isLevel0 = parsed.label.toLowerCase() === 'niv 0' || parsed.label.toLowerCase() === 'skill 0' || parsed.label.toLowerCase() === 'niveau 0';
+      if (!Number.isNaN(pointsNum) && (pointsNum > 0 || (pointsNum === 0 && isLevel0))) {
         parsed.points = pointsNum;
       }
       return parsed;
@@ -1034,8 +1040,10 @@ function parseMultiLevels(text) {
         min: Number(min),
       };
       // Si points est spécifié et valide, l'utiliser, sinon utiliser position+1
+      // Permettre points = 0 pour le niveau 0 (badge bloqué)
       const pointsNum = points.trim() ? Number(points.trim()) : null;
-      if (!Number.isNaN(pointsNum) && pointsNum > 0) {
+      const isLevel0 = parsed.label.toLowerCase() === 'niv 0' || parsed.label.toLowerCase() === 'skill 0' || parsed.label.toLowerCase() === 'niveau 0';
+      if (!Number.isNaN(pointsNum) && (pointsNum > 0 || (pointsNum === 0 && isLevel0))) {
         parsed.points = pointsNum;
       }
       return parsed;
@@ -1069,9 +1077,11 @@ function parseSingleSkills(text) {
       }
       map[v] = sRaw;
       // Si des points sont spécifiés, les stocker
+      // Permettre points = 0 pour le niveau 0 (badge bloqué)
       if (points.trim()) {
         const pointsNum = parseInt(points.trim(), 10);
-        if (!isNaN(pointsNum) && pointsNum > 0) {
+        const isLevel0 = sRaw.toLowerCase() === 'niv 0' || sRaw.toLowerCase() === 'skill 0' || sRaw.toLowerCase() === 'niveau 0';
+        if (!isNaN(pointsNum) && (pointsNum > 0 || (pointsNum === 0 && isLevel0))) {
           pointsMap[sRaw] = pointsNum;
         }
       }
@@ -1095,13 +1105,18 @@ function uniqueSkillLevelsFromOptionSkills(optionSkillsData) {
     labels.push(l);
   });
   // Trier pour que les points soient cohérents:
-  // Skill 1, Skill 2, Skill 3... puis "Skill mystère" à la fin.
+  // niv 0, Skill 1, Skill 2, Skill 3... puis "Skill mystère" à la fin.
   labels.sort((a, b) => {
-    const am = isMysteryLevel(a) ? 1 : 0;
-    const bm = isMysteryLevel(b) ? 1 : 0;
-    if (am !== bm) return am - bm; // non-mystère d'abord
+    const am = isMysteryLevel(a) ? 2 : 0;
+    const bm = isMysteryLevel(b) ? 2 : 0;
+    if (am !== bm) return am - bm; // non-mystère d'abord, puis mystère à la fin
     const an = extractSkillNumber(a);
     const bn = extractSkillNumber(b);
+    // Vérifier si c'est le niveau 0
+    const aIsZero = a.toLowerCase() === 'niv 0' || a.toLowerCase() === 'skill 0' || a.toLowerCase() === 'niveau 0';
+    const bIsZero = b.toLowerCase() === 'niv 0' || b.toLowerCase() === 'skill 0' || b.toLowerCase() === 'niveau 0';
+    if (aIsZero && !bIsZero) return -1; // niv 0 en premier
+    if (!aIsZero && bIsZero) return 1;
     if (an !== null && bn !== null) return an - bn;
     if (an !== null) return -1;
     if (bn !== null) return 1;
@@ -1111,7 +1126,9 @@ function uniqueSkillLevelsFromOptionSkills(optionSkillsData) {
   return labels.map((label, index) => {
     const level = { label };
     // Si des points sont définis pour ce label, les utiliser
-    if (typeof pointsMap[label] === 'number' && pointsMap[label] > 0) {
+    // Permettre points = 0 pour le niveau 0 (badge bloqué)
+    const isLevel0 = label.toLowerCase() === 'niv 0' || label.toLowerCase() === 'skill 0' || label.toLowerCase() === 'niveau 0';
+    if (typeof pointsMap[label] === 'number' && (pointsMap[label] > 0 || (pointsMap[label] === 0 && isLevel0))) {
       level.points = pointsMap[label];
     }
     return level;
@@ -1120,9 +1137,9 @@ function uniqueSkillLevelsFromOptionSkills(optionSkillsData) {
 
 function extractSkillNumber(label) {
   if (typeof label !== 'string') return null;
-  const m = label.toLowerCase().match(/skill\s*(\d+)/);
+  const m = label.toLowerCase().match(/skill\s*(\d+)|niv\s*(\d+)|niveau\s*(\d+)/);
   if (!m) return null;
-  const n = Number(m[1]);
+  const n = Number(m[1] || m[2] || m[3]);
   return Number.isFinite(n) ? n : null;
 }
 
