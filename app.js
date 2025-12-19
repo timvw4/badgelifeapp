@@ -22,7 +22,7 @@ const state = {
   userBadgeLevels: new Map(),
   userBadgeAnswers: new Map(), // stocke la réponse saisie par badge
   attemptedBadges: new Set(),
-  allBadgesFilter: 'all', // all | unlocked | locked
+  allBadgesFilter: 'all', // all | unlocked | locked | blocked
   themesEnabled: false,
   selectedThemes: null, // null => aucun thème sélectionné (pas de filtre). Set non-vide => filtre.
   currentSkillPoints: 0, // calculé dans updateCounters
@@ -136,6 +136,7 @@ function cacheElements() {
   els.filterAll = document.getElementById('filter-all');
   els.filterUnlocked = document.getElementById('filter-unlocked');
   els.filterLocked = document.getElementById('filter-locked');
+  els.filterBlocked = document.getElementById('filter-blocked');
   els.communityList = document.getElementById('community-list');
   els.communityProfileModal = document.getElementById('community-profile-modal');
   els.communityProfileClose = document.getElementById('community-profile-close');
@@ -224,17 +225,19 @@ function bindRankTooltip() {
 }
 
 function bindAllBadgesFilters() {
-  if (!els.filterAll || !els.filterUnlocked || !els.filterLocked) return;
+  if (!els.filterAll || !els.filterUnlocked || !els.filterLocked || !els.filterBlocked) return;
   const apply = (mode) => {
     state.allBadgesFilter = mode;
     els.filterAll.classList.toggle('active', mode === 'all');
     els.filterUnlocked.classList.toggle('active', mode === 'unlocked');
     els.filterLocked.classList.toggle('active', mode === 'locked');
+    els.filterBlocked.classList.toggle('active', mode === 'blocked');
     renderAllBadges();
   };
   els.filterAll.addEventListener('click', () => apply('all'));
   els.filterUnlocked.addEventListener('click', () => apply('unlocked'));
   els.filterLocked.addEventListener('click', () => apply('locked'));
+  els.filterBlocked.addEventListener('click', () => apply('blocked'));
 }
 
 function attachAuthTabListeners() {
@@ -575,7 +578,7 @@ async function handleProfileChange(payload) {
         const indicator = document.getElementById('community-profile-privacy-indicator');
         if (indicator) {
           const isPrivate = newRecord.is_private === true || newRecord.is_private === 'true';
-          indicator.style.background = isPrivate ? '#ef4444' : '#22c55e';
+          indicator.textContent = isPrivate ? 'compte privé' : 'compte publique';
         }
         
         // Mettre à jour le rang dans le modal
@@ -738,10 +741,10 @@ async function fetchUserBadges() {
     // Charger les niveaux et réponses pour tous les badges (débloqués et bloqués avec réponses)
     state.userBadgeLevels = new Map(rows.filter(r => r.level !== null).map(r => [r.badge_id, r.level]));
     state.userBadgeAnswers = new Map(rows.filter(r => r.user_answer).map(r => [r.badge_id, r.user_answer]));
-    await updateCounters(true);
-    // Synchroniser les badges fantômes après avoir chargé les badges utilisateur
-    await syncGhostBadges();
-    return;
+  await updateCounters(true);
+  // Synchroniser les badges fantômes après avoir chargé les badges utilisateur
+  await syncGhostBadges();
+  return;
   }
 
   const { data, error } = await supabase.from('user_badges').select('badge_id, level, success, user_answer').eq('user_id', state.user.id);
@@ -1081,11 +1084,25 @@ function renderAllBadges() {
   // Filtrer les badges fantômes
   let visibleBadges = state.badges.filter(badge => !isGhostBadge(badge));
   
-  // Appliquer le filtre (Tous / Débloqués / À débloquer)
+  // Appliquer le filtre (Tous / Débloqués / Inconnus / Bloqués)
   if (state.allBadgesFilter === 'unlocked') {
     visibleBadges = visibleBadges.filter(b => state.userBadges.has(b.id));
   } else if (state.allBadgesFilter === 'locked') {
-    visibleBadges = visibleBadges.filter(b => !state.userBadges.has(b.id));
+    // Badges jamais répondu (non débloqués ET pas de réponse)
+    visibleBadges = visibleBadges.filter(b => {
+      const unlocked = state.userBadges.has(b.id);
+      const userAnswer = state.userBadgeAnswers.get(b.id);
+      const hasAnswer = userAnswer !== undefined && userAnswer !== null;
+      return !unlocked && !hasAnswer; // Non débloqué ET jamais répondu
+    });
+  } else if (state.allBadgesFilter === 'blocked') {
+    // Badges répondu mais bloqués (non débloqués)
+    visibleBadges = visibleBadges.filter(b => {
+      const unlocked = state.userBadges.has(b.id);
+      const userAnswer = state.userBadgeAnswers.get(b.id);
+      const hasAnswer = userAnswer !== undefined && userAnswer !== null;
+      return !unlocked && hasAnswer; // Répondu mais non débloqué
+    });
   }
 
   // Fonction helper pour trier les badges par ID (ordre déterministe pour tous les utilisateurs)
@@ -1103,7 +1120,8 @@ function renderAllBadges() {
   const suffix =
     state.allBadgesFilter === 'unlocked'
       ? 'badges débloqués'
-      : (state.allBadgesFilter === 'locked' ? 'badges à débloquer' : 'badges à collecter');
+      : (state.allBadgesFilter === 'locked' ? 'badges inconnus' 
+        : (state.allBadgesFilter === 'blocked' ? 'badges découverts à redébloquer' : 'badges à collecter'));
   header.textContent = `${total} ${suffix}`;
   els.allBadgesList.appendChild(header);
   
@@ -1134,9 +1152,10 @@ function renderAllBadges() {
       card.classList.add('expert-badge');
     }
     
-    // Si bloqué, ne pas afficher le nom et l'emoji (comme les badges jamais répondu)
-    const emoji = unlocked ? getBadgeEmoji(badge) : '❓';
-    const title = unlocked ? stripEmojis(badge.name || '') : '?????';
+    // Si bloqué, afficher le vrai emoji et nom (en flouté et grisé via CSS)
+    // Si jamais répondu, afficher ❓ et ?????
+    const emoji = unlocked || isBlocked ? getBadgeEmoji(badge) : '❓';
+    const title = unlocked || isBlocked ? stripEmojis(badge.name || '') : '?????';
     let formContent = `
       <input type="text" name="answer" placeholder="Ta réponse" required>
       <button type="submit" class="primary">Valider</button>
@@ -1196,9 +1215,9 @@ function renderAllBadges() {
           <p class="muted">${formatUserAnswer(badge, userAnswer) || userAnswer}</p>
           <button type="button" class="primary rerépondre-btn" data-badge-id="${badge.id}">${unlocked ? 'Modifie ta réponse' : 'Tente de le débloquer'}</button>
         ` : `
-          <form data-badge-id="${badge.id}">
-            ${formContent}
-          </form>
+        <form data-badge-id="${badge.id}">
+          ${formContent}
+        </form>
         `}
       </div>
     `;
@@ -1232,20 +1251,20 @@ function renderAllBadges() {
         });
       }
     } else {
-      const form = card.querySelector('form');
+    const form = card.querySelector('form');
       if (form) {
-        form.addEventListener('submit', (e) => handleBadgeAnswer(e, badge));
-        // Binding boutons Oui/Non
-        if (config?.type === 'boolean') {
-          const hidden = form.querySelector('input[name="answer"]');
-          const btns = form.querySelectorAll('button[data-bool]');
-          btns.forEach(btn => {
-            btn.addEventListener('click', () => {
-              if (hidden) hidden.value = btn.getAttribute('data-bool') || '';
-              form.requestSubmit();
-            });
-          });
-        }
+    form.addEventListener('submit', (e) => handleBadgeAnswer(e, badge));
+    // Binding boutons Oui/Non
+    if (config?.type === 'boolean') {
+      const hidden = form.querySelector('input[name="answer"]');
+      const btns = form.querySelectorAll('button[data-bool]');
+      btns.forEach(btn => {
+        btn.addEventListener('click', () => {
+          if (hidden) hidden.value = btn.getAttribute('data-bool') || '';
+          form.requestSubmit();
+        });
+      });
+    }
         
       }
     }
@@ -1352,9 +1371,9 @@ function renderMyBadges() {
       const card = document.createElement('article');
       card.className = `card-badge clickable compact all-badge-card my-catalog-card${unlocked ? '' : ' locked'}${isBlocked ? ' blocked' : ''}`;
 
-      // Afficher tous les badges : débloqués normalement, bloqués et jamais répondu avec ❓ et ?????
-      const safeEmoji = unlocked ? getBadgeEmoji(badge) : '❓';
-      const safeTitle = unlocked ? stripEmojis(badge.name || '') : '?????';
+      // Afficher tous les badges : débloqués normalement, bloqués avec vrai emoji/nom (flouté/grisé), jamais répondu avec ❓ et ?????
+      const safeEmoji = unlocked || isBlocked ? getBadgeEmoji(badge) : '❓';
+      const safeTitle = unlocked || isBlocked ? stripEmojis(badge.name || '') : '?????';
 
       let statusLabel = formatLevelTag(unlocked, levelLabel, config);
       // Si bloqué, afficher "Bloqué" au lieu du niveau
@@ -2080,7 +2099,7 @@ function formatUserAnswer(badge, answer) {
     const isTrue = trueLabels.includes(answerLower);
     
     if (isTrue && typeof config?.booleanDisplayText === 'string' && config.booleanDisplayText.trim()) {
-      return config.booleanDisplayText.trim();
+    return config.booleanDisplayText.trim();
     }
     if (!isTrue && typeof config?.booleanDisplayTextFalse === 'string' && config.booleanDisplayTextFalse.trim()) {
       return config.booleanDisplayTextFalse.trim();
@@ -2276,7 +2295,7 @@ function showCommunityProfile(data) {
   const isPrivate = data.isPrivate === 'true' || data.isPrivate === true;
   const indicator = document.getElementById('community-profile-privacy-indicator');
   if (indicator) {
-    indicator.style.background = isPrivate ? '#ef4444' : '#22c55e';
+    indicator.textContent = isPrivate ? 'compte privé' : 'compte publique';
     indicator.style.display = 'inline-block'; // S'assurer qu'il est visible
   }
   
@@ -2582,7 +2601,7 @@ async function updateCounters(syncProfile = false) {
     if (!state.userBadgeLevels.has(badgeId)) {
       const badge = getBadgeById(badgeId);
       if (badge) {
-        const userAnswer = state.userBadgeAnswers.get(badgeId);
+            const userAnswer = state.userBadgeAnswers.get(badgeId);
         totalSkillPoints += calculatePointsForBadgeWithoutLevel(badge, badgeId, userAnswer);
       }
     }

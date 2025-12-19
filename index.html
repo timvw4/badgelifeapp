@@ -116,7 +116,8 @@
         <div class="row badge-filters" style="gap:8px; flex-wrap:wrap; margin: 10px 0 6px;">
           <button id="filter-all" class="ghost active" type="button">Tous</button>
           <button id="filter-unlocked" class="ghost" type="button">Débloqués</button>
-          <button id="filter-locked" class="ghost" type="button">À débloquer</button>
+          <button id="filter-locked" class="ghost" type="button">Inconnus</button>
+          <button id="filter-blocked" class="ghost" type="button">Révélés</button>
         </div>
         <div id="all-badges-list" class="grid"></div>
       </section>
@@ -158,12 +159,12 @@
       <!-- Modal profil communauté -->
       <div id="community-profile-modal" class="modal-backdrop hidden">
         <div class="modal-card wide">
+          <span id="community-profile-privacy-indicator"></span>
           <button id="community-profile-close" class="ghost close-btn">×</button>
           <div class="profile-modal-content two-col">
             <div class="profile-col-left">
               <img id="community-profile-avatar" src="./icons/logobl.png" alt="Avatar" class="logo medium">
               <h3 id="community-profile-username" style="display: flex; align-items: center; gap: 8px;">
-                <span id="community-profile-privacy-indicator"></span>
                 <span>Utilisateur</span>
               </h3>
               <p id="community-profile-rank" class="muted">—</p>

@@ -178,10 +178,6 @@ p {
   border-radius: 10px;
 }
 
-.my-catalog-card.expert-badge {
-  border: 2px solid #8d33e16e;
-  border-radius: 12px;
-}
 
 .my-catalog-card.locked {
   opacity: 0.55;
@@ -191,10 +187,16 @@ p {
 .my-catalog-card.locked:not(.blocked) .badge-title {
   filter: blur(1px);
 }
-/* Les badges bloqués (non débloqués mais déjà répondu) gardent le grayscale mais sans flou */
-.my-catalog-card.blocked {
+/* Les badges bloqués (non débloqués mais déjà répondu) : emoji et titre en flouté et grisé */
+.my-catalog-card.blocked,
+.all-badge-card.blocked {
   opacity: 0.55;
-  filter: grayscale(1);
+}
+.my-catalog-card.blocked .badge-emoji,
+.my-catalog-card.blocked .badge-title,
+.all-badge-card.blocked .badge-emoji,
+.all-badge-card.blocked .badge-title {
+  filter: blur(1px) grayscale(1);
 }
 
 /* Mes badges : badges fantômes non débloqués = flou plus fort */
@@ -909,6 +911,7 @@ button {
   box-shadow: 0 16px 60px rgba(0,0,0,0.45);
   max-height: 94vh;         /* occupe presque toute la hauteur */
   overflow-y: auto;
+  position: relative;
 }
 
 .modal-card.wide {
@@ -927,7 +930,7 @@ button {
   display: grid;
   gap: 14px;
   justify-items: start;
-  margin-top: 6px;
+  margin-top: 20px;
   padding: 6px;
 }
 
@@ -945,14 +948,14 @@ button {
 }
 
 #community-profile-privacy-indicator {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: #22c55e;
+  font-size: 11px;
+  color: var(--muted);
   display: inline-block;
-  flex-shrink: 0;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
-  border: 2px solid rgba(255, 255, 255, 0.15);
+  position: absolute;
+  top: 8px;
+  left: 0;
+  padding-left: 8px;
+  z-index: 10;
 }
 
 .profile-col-left .logo.medium {
@@ -1229,10 +1232,6 @@ button {
     justify-items: start;
   }
   
-  #community-profile-privacy-indicator {
-    width: 12px;
-    height: 12px;
-  }
   .modal-badges-grid {
     grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 10px;
