@@ -144,11 +144,6 @@ p {
   border-color: rgba(255,255,255,0.18);
 }
 
-/* Panneau thèmes */
-#themes-panel .ghost.active {
-  background: rgba(255,255,255,0.08);
-  border-color: rgba(255,255,255,0.18);
-}
 
 /* Mes badges : mode catalogue (Pokédex) */
 .my-badges-catalog {
@@ -231,12 +226,6 @@ p {
   border-color: transparent;
 }
 
-.community-section-separator {
-  height: 1px;
-  background: rgba(255, 255, 255, 0.1);
-  margin: 30px 0;
-  width: 100%;
-}
 
 .ideas-separator {
   display: flex;
@@ -442,6 +431,89 @@ button {
   margin-bottom: 14px;
 }
 
+.rank-wrapper {
+  position: relative;
+  display: inline-block;
+}
+
+.rank-button {
+  margin-top: 2px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.community-profile-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.logo.avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.message-error-small {
+  margin-top: 8px;
+  text-align: center;
+  font-size: 11px;
+}
+
+.grid-full-center {
+  grid-column: 1 / -1;
+  text-align: center;
+}
+
+.modal-badge-emoji.disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.section-description {
+  margin-bottom: 50px;
+  margin-top: 10px;
+  color: rgb(198, 200, 222);
+  font-size: 15px;
+}
+
+.section-description.first {
+  margin-top: 0;
+}
+
+.section-description.community {
+  margin-top: 20px;
+}
+
+.badge-filters {
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 10px 0 6px;
+}
+
+.form-compact {
+  margin-bottom: 12px;
+}
+
+.username-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.table-row {
+  display: grid;
+  grid-template-columns: 0.35fr minmax(180px, 1fr) 1fr;
+  gap: 8px;
+}
+
+.text-small {
+  font-size: 12px;
+}
+
 .brand {
   display: flex;
   align-items: center;
@@ -567,8 +639,7 @@ button {
 }
 
 .badge-count,
-.skill-count,
-.mystery-count {
+.skill-count {
   text-align: center;
   background: rgba(255,255,255,0.02);
   padding: 6px 10px;
@@ -577,8 +648,7 @@ button {
 }
 
 .badge-count span,
-.skill-count span,
-.mystery-count span {
+.skill-count span {
   display: block;
   font-size: 18px;
   font-weight: 700;
@@ -592,7 +662,6 @@ button {
   color: var(--muted);
 }
 .skill-count span { color: #22c55e; }
-.mystery-count span { color: #c084fc; }
 
 .muted {
   color: var(--muted);
@@ -649,31 +718,6 @@ button {
   padding-top: 0;
 }
 
-/* Mes badges : éviter que le layout se déforme quand on affiche la réponse */
-.my-badge-card {
-  position: relative;
-  padding-bottom: 42px; /* réserve de place pour la réponse */
-}
-
-.my-badge-card .badge-details {
-  position: absolute;
-  left: 14px;
-  right: 14px;
-  bottom: 12px;
-  margin: 0;
-  padding-top: 10px; /* un peu plus d'espace au-dessus de la réponse */
-  border-top: none;
-  opacity: 0;
-  transform: translateY(6px);
-  pointer-events: none;
-  transition: opacity 160ms ease, transform 160ms ease;
-}
-
-.my-badge-card.show-details .badge-details {
-  opacity: 1;
-  transform: translateY(0);
-  pointer-events: auto;
-}
 
 .card-badge {
   background: rgba(255,255,255,0.03);
@@ -703,30 +747,6 @@ button {
   width: 100%;
 }
 
-.my-badge-card .badge-compact {
-  justify-content: space-between;
-  gap: 10px;
-  align-items: center;
-  width: 100%;
-}
-
-.my-badge-card .badge-left {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex: 1 1 auto;
-}
-
-.my-badge-card .badge-level {
-  margin-left: auto;
-  white-space: nowrap;
-}
-
-.my-badge-card .badge-level.low-skill {
-  background: rgba(239,68,68,0.15);
-  color: #fecaca;
-  border-color: rgba(239,68,68,0.4);
-}
 
 .card-badge.compact .badge-emoji {
   font-size: 26px;
@@ -821,34 +841,6 @@ button {
   width: 100%;
 }
 
-.option-list {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-  gap: 8px;
-  width: 100%;
-  max-height: 220px;
-  overflow-y: auto;
-}
-
-.option-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 14px;
-  width: 100%;
-}
-
-.option-item input[type="checkbox"] {
-  accent-color: var(--accent-2);
-}
-
-.option-item span {
-  display: block;
-  color: var(--text);
-  white-space: normal;
-  word-break: break-word;
-  width: 100%;
-}
 
 .select-multi {
   width: 100%;
@@ -863,28 +855,6 @@ button {
 .select-multi:focus {
   outline: 2px solid var(--accent);
   border-color: transparent;
-}
-
-.select-multi {
-  width: 100%;
-  background: rgba(255,255,255,0.04);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  color: var(--text);
-  padding: 8px;
-}
-
-.select-multi:focus {
-  outline: 2px solid var(--accent);
-  border-color: transparent;
-}
-
-.option-item input[type="checkbox"] {
-  accent-color: var(--accent-2);
-}
-
-.option-item span {
-  color: var(--text);
 }
 
 .modal-backdrop {
@@ -1109,21 +1079,6 @@ button {
   width: 100%;
 }
 
-.option-list {
-  display: grid;
-  gap: 6px;
-  grid-template-columns: 1fr;
-  width: 100%;
-}
-
-.option-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 14px;
-  width: 100%;
-}
-
 .list {
   display: grid;
   gap: 10px;
@@ -1280,15 +1235,4 @@ button {
     gap: 6px;
   }
 
-  /* Mes badges : affichage cohérent sur mobile */
-  .my-badge-card {
-    padding-bottom: 52px; /* plus de place si la réponse fait 2 lignes */
-  }
-
-  .my-badge-card .badge-details {
-    left: 12px;
-    right: 12px;
-    font-size: 15px;
-    line-height: 1.4;
-  }
 }

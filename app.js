@@ -1208,7 +1208,7 @@ function renderAllBadges() {
         <div class="badge-emoji">${emoji}</div>
         <div class="badge-title">${title}</div>
       </div>
-      ${state.failedBadgeId === badge.id ? '<p class="message small error" style="margin-top:8px; text-align:center; font-size:11px;">Ta réponse n\'a pas suffi pour débloquer ce badge.</p>' : ''}
+      ${state.failedBadgeId === badge.id ? '<p class="message small error message-error-small">Ta réponse n\'a pas suffi pour débloquer ce badge.</p>' : ''}
       <div class="all-badge-details hidden">
         ${hasAnswer ? '' : `<p class="muted">${badge.question}</p>`}
         ${hasAnswer ? `
@@ -1457,8 +1457,8 @@ function renderCommunity(profiles) {
     const displayRank = profile.rank || rankMeta.name;
     const rankText = formatRankText(displayRank);
     item.innerHTML = `
-      <div style="display:flex; align-items:center; gap:10px;">
-        <img src="${avatarUrl}" alt="Avatar" class="logo small" style="width:36px;height:36px;border-radius:50%;object-fit:cover;">
+      <div class="community-profile-header">
+        <img src="${avatarUrl}" alt="Avatar" class="logo small avatar">
         <div>
           <strong class="${rankMeta.fontClass}">${profile.username}</strong>
           <p class="muted ${rankMeta.colorClass}">${rankText}</p>
@@ -2501,7 +2501,7 @@ function renderCommunityBadgeGrid(unlockedBadges, isPrivate = false) {
 
 function renderCommunityBadgeGridMessage(msg) {
   if (!els.communityProfileBadgesGrid) return;
-  els.communityProfileBadgesGrid.innerHTML = `<p class="muted" style="grid-column:1/-1;text-align:center;">${msg}</p>`;
+  els.communityProfileBadgesGrid.innerHTML = `<p class="muted grid-full-center">${msg}</p>`;
   if (els.communityProfileAnswer) {
     els.communityProfileAnswer.textContent = '';
   }

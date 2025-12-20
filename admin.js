@@ -446,13 +446,10 @@ function renderBadges() {
   state.badges.forEach(b => {
     const row = document.createElement('div');
     row.className = 'table-row clickable';
-    row.style.display = 'grid';
-    row.style.gridTemplateColumns = '0.35fr minmax(180px, 1fr) 1fr';
-    row.style.gap = '8px';
     row.innerHTML = `
       <span>${b.emoji || ''}</span>
       <span>${b.name || ''}</span>
-      <span class="muted" style="font-size:12px;">${getLevelSummary(b.answer, Boolean(b.low_skill))}</span>
+      <span class="muted text-small">${getLevelSummary(b.answer, Boolean(b.low_skill))}</span>
     `;
     row.addEventListener('click', () => fillForm(b));
     els.badgeList.appendChild(row);

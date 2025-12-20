@@ -43,14 +43,14 @@
     </section>
 
     <section id="app-view" class="panel hidden">
-      <header class="topbar" style="position: relative;">
+      <header class="topbar">
         <span id="profile-privacy-indicator"></span>
         <div class="brand">
           <img id="avatar-img" src="./icons/logobl.png" alt="Avatar" class="logo small">
           <div>
             <strong id="profile-username">Utilisateur</strong>
-            <div style="position:relative; display:inline-block;">
-              <button id="profile-rank" type="button" class="muted ghost" style="margin-top:2px; padding:0; border:0; background:transparent; cursor:pointer;">—</button>
+            <div class="rank-wrapper">
+              <button id="profile-rank" type="button" class="muted ghost rank-button">—</button>
               <div id="rank-tooltip" class="rank-tooltip hidden" role="dialog" aria-label="Type de vie"></div>
             </div>
           </div>
@@ -68,7 +68,7 @@
             <button id="refresh-btn" class="ghost icon-btn" aria-label="Rafraîchir">⟳</button>
             <button id="settings-toggle" class="ghost icon-btn" aria-label="Réglages">⚙️</button>
             <div id="settings-menu" class="settings-menu hidden">
-              <a id="admin-link" class="ghost full-width" href="./admin.html" style="display:none;">Admin</a>
+              <a id="admin-link" class="ghost full-width hidden" href="./admin.html">Admin</a>
               <button id="edit-profile-btn" class="ghost full-width">Modifier mon profil</button>
               <button id="profile-privacy-btn" class="ghost full-width">Profil: Public</button>
               <button id="logout-btn" class="ghost full-width">Se déconnecter</button>
@@ -106,14 +106,14 @@
 
       <section id="my-badges" class="tab-content">
         <h2>Mes badges</h2>
-        <p class="muted">Les badges que tu as débloqués.</p>
+        <p class="muted section-description first">.</p>
         <div id="my-badges-list" class="grid badges-grid"></div>
       </section>
 
       <section id="all-badges" class="tab-content hidden">
         <h2>Tous les badges</h2>
-        <p class="muted">Débloque les badges en répondant à leur questions et obtiens des skills pour gagner en style de vie.</p>
-        <div class="row badge-filters" style="gap:8px; flex-wrap:wrap; margin: 10px 0 6px;">
+        <p class="muted section-description">Débloque les badges en répondant à leur questions et obtiens des skills pour gagner en style de vie.</p>
+        <div class="row badge-filters">
           <button id="filter-all" class="ghost active" type="button">Tous</button>
           <button id="filter-unlocked" class="ghost" type="button">Débloqués</button>
           <button id="filter-locked" class="ghost" type="button">Inconnus</button>
@@ -126,18 +126,18 @@
         <h2>Communauté</h2>
         <div class="subtabs">
           <button id="community-tab-discover" class="subtab-button active" data-community-tab="discover">Découvrir</button>
-          <button id="community-tab-share" class="subtab-button" data-community-tab="share">Partage</button>
+          <button id="community-tab-share" class="subtab-button" data-community-tab="share">Partager</button>
         </div>
         <div id="community-profiles-panel" class="community-subtab-content">
-          <p class="muted" style="margin-bottom:10px;">Découvre les badges et les skills des autres.</p>
+          <p class="muted section-description community">Découvre les badges et les skills des potes.</p>
           <div class="search-bar">
             <input id="community-search" type="search" placeholder="Rechercher un utilisateur..." aria-label="Rechercher un utilisateur">
           </div>
           <div id="community-list" class="list"></div>
         </div>
         <div id="community-ideas-panel" class="community-subtab-content hidden">
-          <p class="muted" style="margin-bottom:10px;">Partage tes idées de badges à la comunauté et vote pour les meilleurs ou pires idées.</p>
-          <form id="idea-form" class="auth-form" style="margin-bottom:12px;">
+          <p class="muted section-description community">Partage tes idées de badges à la comunauté et vote pour les idées qui te plaisent pour tenter de les ajouter à la collection.</p>
+          <form id="idea-form" class="auth-form form-compact">
             <label for="idea-title">Nom du badge</label>
             <input id="idea-title" type="text" maxlength="80" required placeholder="Ex: Explorateur nocturne">
             <label for="idea-emoji">Emoji</label>
@@ -164,7 +164,7 @@
           <div class="profile-modal-content two-col">
             <div class="profile-col-left">
               <img id="community-profile-avatar" src="./icons/logobl.png" alt="Avatar" class="logo medium">
-              <h3 id="community-profile-username" style="display: flex; align-items: center; gap: 8px;">
+              <h3 id="community-profile-username" class="username-header">
                 <span>Utilisateur</span>
               </h3>
               <p id="community-profile-rank" class="muted">—</p>
