@@ -1,15 +1,3 @@
-#all-badges-list > .section-subtitle {
-  grid-column: 1 / -1;
-  color: var(--muted);
-  font-size: 15px;
-  margin: 0 0 10px 0;
-  display: inline-block;
-  padding: 6px 10px;
-  border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 10px;
-  background: rgba(255,255,255,0.02);
-  text-align: center;
-}
 :root {
   --bg: #0f172a;
   --card: #111827;
@@ -23,6 +11,19 @@
 }
 
 * { box-sizing: border-box; }
+
+#all-badges-list > .section-subtitle {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  font-size: 15px;
+  margin: 0 0 10px 0;
+  display: inline-block;
+  padding: 6px 10px;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 10px;
+  background: rgba(255,255,255,0.02);
+  text-align: center;
+}
 body {
   margin: 0;
   background: radial-gradient(circle at 20% 20%, rgba(8,47,73,0.35), transparent 35%), radial-gradient(circle at 80% 0%, rgba(59,7,100,0.35), transparent 30%), var(--bg);
@@ -144,7 +145,6 @@ p {
   border-color: rgba(255,255,255,0.18);
 }
 
-
 /* Mes badges : mode catalogue (Pokédex) */
 .my-badges-catalog {
   display: grid;
@@ -173,7 +173,6 @@ p {
   border-radius: 10px;
 }
 
-
 .my-catalog-card.locked {
   opacity: 0.55;
   filter: grayscale(1);
@@ -182,16 +181,36 @@ p {
 .my-catalog-card.locked:not(.blocked) .badge-title {
   filter: blur(1px);
 }
+/* Contour grisé pour tous les états sauf "À débloquer" */
+.my-catalog-card:not(.locked),
+.my-catalog-card.blocked,
+.my-catalog-card.reblocked {
+  border-color: rgba(255, 255, 255, 0.2);
+}
 /* Les badges bloqués (non débloqués mais déjà répondu) : emoji et titre en flouté et grisé */
 .my-catalog-card.blocked,
 .all-badge-card.blocked {
   opacity: 0.55;
 }
-.my-catalog-card.blocked .badge-emoji,
-.my-catalog-card.blocked .badge-title,
-.all-badge-card.blocked .badge-emoji,
-.all-badge-card.blocked .badge-title {
+/* Les badges rebloqués (débloqués puis rebloqués) : affichent le badge en flou et grisé */
+.my-catalog-card.reblocked .badge-emoji,
+.my-catalog-card.reblocked .badge-title,
+.all-badge-card.reblocked .badge-emoji,
+.all-badge-card.reblocked .badge-title {
   filter: blur(1px) grayscale(1);
+}
+/* Les badges bloqués (jamais débloqués) : pas de flou, juste l'opacité réduite, texte blanc */
+.my-catalog-card.blocked:not(.reblocked) .badge-emoji,
+.my-catalog-card.blocked:not(.reblocked) .badge-title,
+.all-badge-card.blocked:not(.reblocked) .badge-emoji,
+.all-badge-card.blocked:not(.reblocked) .badge-title {
+  filter: none;
+  color: white;
+}
+/* Bords plus clairs pour les badges bloqués (jamais débloqués) */
+.my-catalog-card.blocked:not(.reblocked),
+.all-badge-card.blocked:not(.reblocked) {
+  border-color: rgba(255, 255, 255, 0.15);
 }
 
 /* Mes badges : badges fantômes non débloqués = flou plus fort */
@@ -225,7 +244,6 @@ p {
   color: #0b1120;
   border-color: transparent;
 }
-
 
 .ideas-separator {
   display: flex;
@@ -450,9 +468,9 @@ button {
   gap: 10px;
 }
 
-.logo.avatar {
-  width: 36px;
-  height: 36px;
+.community-profile-header .logo.avatar {
+  width: 56px;
+  height: 56px;
   border-radius: 50%;
   object-fit: cover;
 }
@@ -633,9 +651,16 @@ button {
   justify-content: flex-start;
 }
 
+.settings-menu a.full-width {
+  text-decoration: none;
+  display: flex;
+  align-items: center;
+}
+
 #admin-link.full-width {
   font-size: 12px;
   text-align: center;
+  justify-content: center;
 }
 
 .badge-count,
@@ -747,7 +772,6 @@ button {
   width: 100%;
 }
 
-
 .card-badge.compact .badge-emoji {
   font-size: 26px;
 }
@@ -769,6 +793,19 @@ button {
 
 .card-badge.expanded {
   border-color: var(--border);
+}
+/* Surcharger la bordure pour les états spécifiques même quand la carte est ouverte */
+.my-catalog-card:not(.locked).expanded,
+.my-catalog-card.blocked.expanded,
+.my-catalog-card.reblocked.expanded,
+.all-badge-card:not(.locked).expanded,
+.all-badge-card.reblocked.expanded {
+  border-color: rgba(255, 255, 255, 0.2) !important;
+}
+/* Conserver la bordure plus claire pour les badges bloqués (jamais débloqués) même quand ouverts */
+.my-catalog-card.blocked:not(.reblocked).expanded,
+.all-badge-card.blocked:not(.reblocked).expanded {
+  border-color: rgba(255, 255, 255, 0.15) !important;
 }
 
 .card-badge.clickable {
@@ -840,7 +877,6 @@ button {
   padding-top: 8px;
   width: 100%;
 }
-
 
 .select-multi {
   width: 100%;
@@ -1011,6 +1047,11 @@ button {
   outline-offset: 2px;
 }
 
+.modal-badge-emoji.disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
 .card-badge .row {
   display: flex;
   align-items: center;
@@ -1070,6 +1111,12 @@ button {
 .tag.blocked {
   background: rgba(239,68,68,0.15);
   color: #fecaca;
+  border-color: rgba(239,68,68,0.4);
+}
+
+.tag.reblocked {
+  background: rgba(239,68,68,0.15);
+  color: #ef4444;
   border-color: rgba(239,68,68,0.4);
 }
 
