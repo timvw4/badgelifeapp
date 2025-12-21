@@ -1,0 +1,5 @@
+remplacer l'onglet tous les badges par l'onglet xxxx.
+concept de l'onglet.
+dans cet onglet, l'utilisateur pourra faire tourner une roue qui défilera tous les emojis des badges non débloqués, pour tanter de les débloqués.
+l'utilisateur ne pourra tourner la roue que 2 fois tous les 24h. donc tanter de débloqué jusqu'à 2 badges si bien répondu.
+donc toutes les 24h, 

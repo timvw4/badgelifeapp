@@ -926,16 +926,33 @@ button {
 }
 
 .modal-card .close-btn {
+  position: sticky;
+  top: 0;
   float: right;
   font-size: 24px;
   line-height: 1;
   padding: 4px 8px;
+  z-index: 100;
+  background: linear-gradient(135deg, rgba(30, 41, 59, 0.98), rgba(17, 24, 39, 0.95));
+  border-radius: 0 18px 0 18px;
+  margin-left: auto;
 }
 
 .profile-modal-content {
   display: grid;
   gap: 14px;
   justify-items: start;
+  margin-top: 20px;
+  padding: 6px;
+}
+
+.profile-modal-content.centered {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 8px;
   margin-top: 20px;
   padding: 6px;
 }
@@ -964,6 +981,7 @@ button {
   z-index: 10;
 }
 
+.profile-modal-content.centered .logo.medium,
 .profile-col-left .logo.medium {
   width: 82px;
   height: 82px;

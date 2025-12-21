@@ -146,8 +146,7 @@ function cacheElements() {
   els.communityProfileRank = document.getElementById('community-profile-rank');
   els.communityProfileBadges = document.getElementById('community-profile-badges');
   els.communityProfileMystery = document.getElementById('community-profile-mystery');
-  els.communityProfileBadgesGrid = document.getElementById('community-profile-badges-grid');
-  els.communityProfileAnswer = document.getElementById('community-profile-answer');
+  els.communityProfileBadgesList = document.getElementById('community-profile-badges-list');
   els.communitySearch = document.getElementById('community-search');
   els.communityProfilesPanel = document.getElementById('community-profiles-panel');
   els.communityIdeasPanel = document.getElementById('community-ideas-panel');
@@ -1389,9 +1388,26 @@ function renderAllBadges() {
 }
 
 function renderMyBadges() {
-  // Mode "Pokédex" : on affiche le catalogue complet (y compris les fantômes),
-  // avec les badges non débloqués grisés et masqués, mais à leur place.
-  const visibleBadges = state.badges.slice();
+  // On affiche uniquement les badges qui ont été répondu (débloqués, bloqués, ou rebloqués)
+  // Les badges jamais répondu ne sont pas affichés
+  const allBadges = state.badges.slice();
+  if (!allBadges.length) {
+    els.myBadgesList.innerHTML = '<p class="muted">Aucun badge pour le moment.</p>';
+    return;
+  }
+
+  // Filtrer les badges : ne garder que ceux qui sont débloqués OU rebloqués
+  const visibleBadges = allBadges.filter(badge => {
+    const unlocked = state.userBadges.has(badge.id);
+    const userAnswer = state.userBadgeAnswers.get(badge.id);
+    const hasAnswer = userAnswer !== undefined && userAnswer !== null;
+    const wasEverUnlocked = state.wasEverUnlocked.has(badge.id);
+    const isBlocked = !unlocked && hasAnswer;
+    const isReblocked = isBlocked && wasEverUnlocked;
+    // Afficher uniquement si débloqué OU rebloqué
+    return unlocked || isReblocked;
+  });
+
   if (!visibleBadges.length) {
     els.myBadgesList.innerHTML = '<p class="muted">Aucun badge pour le moment.</p>';
     return;
@@ -1401,7 +1417,7 @@ function renderMyBadges() {
   els.myBadgesList.classList.add('my-badges-catalog');
   els.myBadgesList.innerHTML = '';
   
-  // Regrouper par thème pour garder des emplacements stables
+  // Regrouper par thème
   const themeName = (b) => (b.theme && String(b.theme).trim()) ? String(b.theme).trim() : 'Autres';
   const groups = new Map();
   visibleBadges.forEach(b => {
@@ -1414,10 +1430,14 @@ function renderMyBadges() {
   const sortById = (a, b) => String(a.id).localeCompare(String(b.id), 'fr', { numeric: true, sensitivity: 'base' });
 
   themes.forEach((t) => {
+    // Ne pas afficher le thème s'il n'y a aucun badge à afficher
+    const themeBadges = groups.get(t) || [];
+    if (themeBadges.length === 0) return;
+
     const title = document.createElement('div');
     title.className = 'section-subtitle theme-title';
     // Si aucun badge de ce thème n'est débloqué, on floute le titre du thème
-    const hasAnyUnlockedInTheme = (groups.get(t) || []).some(b => state.userBadges.has(b.id));
+    const hasAnyUnlockedInTheme = themeBadges.some(b => state.userBadges.has(b.id));
     if (!hasAnyUnlockedInTheme) {
       // Mode Pokédex : thème caché tant qu'aucun badge du thème n'est débloqué
       title.classList.add('theme-locked');
@@ -1428,7 +1448,7 @@ function renderMyBadges() {
     }
     els.myBadgesList.appendChild(title);
 
-    groups.get(t).sort(sortById).forEach(badge => {
+    themeBadges.sort(sortById).forEach(badge => {
       const unlocked = state.userBadges.has(badge.id);
       const levelLabel = state.userBadgeLevels.get(badge.id);
       const config = parseConfig(badge.answer);
@@ -2407,7 +2427,7 @@ function showCommunityProfile(data) {
   }
   els.communityProfileBadges.textContent = `${data.badges || 0} badge(s)`;
   els.communityProfileMystery.textContent = `${data.skills || 0} skill(s)`;
-  renderCommunityBadgeGrid([], isPrivate);
+  renderCommunityProfileBadges([], isPrivate);
   els.communityProfileModal.classList.remove('hidden');
   if (data.userId) {
     fetchCommunityUserStats(data.userId, isPrivate);
@@ -2436,7 +2456,7 @@ async function fetchCommunityUserStats(userId, isPrivate = false) {
   try {
     const rows = await fetchPublicUserBadges(userId);
     if (!rows || !rows.length) {
-      renderCommunityBadgeGridMessage('Badges non visibles');
+      renderCommunityProfileBadges([], isPrivate);
       return;
     }
     let unlocked = rows.filter(r => r.success !== false);
@@ -2506,9 +2526,9 @@ async function fetchCommunityUserStats(userId, isPrivate = false) {
     const badgeCount = unlocked.length;
     els.communityProfileBadges.textContent = `${badgeCount} badge(s)`;
     els.communityProfileMystery.textContent = `${totalSkills} skill(s)`;
-    renderCommunityBadgeGrid(unlocked, isPrivate);
+    renderCommunityProfileBadges(unlocked, isPrivate);
   } catch (_) {
-    renderCommunityBadgeGridMessage('Badges non visibles');
+    renderCommunityProfileBadges([], isPrivate);
   }
 }
 
@@ -2528,83 +2548,155 @@ async function fetchPublicUserBadges(userId) {
   return [];
 }
 
-function renderCommunityBadgeGrid(unlockedBadges, isPrivate = false) {
-  if (!els.communityProfileBadgesGrid) return;
-  if (els.communityProfileAnswer) {
-    els.communityProfileAnswer.textContent = '';
+// Rendre les badges du profil communautaire comme dans "Mes badges"
+function renderCommunityProfileBadges(unlockedBadges, isPrivate = false) {
+  if (!els.communityProfileBadgesList) return;
+  
+  // Créer des Maps et Sets pour les badges de l'utilisateur communautaire
+  const communityUserBadges = new Set();
+  const communityUserBadgeLevels = new Map();
+  const communityUserBadgeAnswers = new Map();
+  const communityWasEverUnlocked = new Set();
+  
+  if (unlockedBadges && unlockedBadges.length > 0) {
+    unlockedBadges.forEach(row => {
+      if (row.badge_id) {
+        communityUserBadges.add(row.badge_id);
+        if (row.level) {
+          communityUserBadgeLevels.set(row.badge_id, row.level);
+        }
+        if (row.user_answer) {
+          communityUserBadgeAnswers.set(row.badge_id, row.user_answer);
+        }
+        // Si le badge est débloqué (success !== false), il a été débloqué au moins une fois
+        if (row.success !== false) {
+          communityWasEverUnlocked.add(row.badge_id);
+        }
+      }
+    });
   }
-  if (!unlockedBadges || !unlockedBadges.length) {
-    renderCommunityBadgeGridMessage('Aucun badge');
+  
+  // Filtrer les badges fantômes
+  const visibleBadges = state.badges.slice();
+  if (!visibleBadges.length) {
+    els.communityProfileBadgesList.innerHTML = '<p class="muted">Aucun badge pour le moment.</p>';
     return;
   }
+
+  els.communityProfileBadgesList.classList.remove('list-mode');
+  els.communityProfileBadgesList.classList.add('my-badges-catalog');
+  els.communityProfileBadgesList.innerHTML = '';
   
-  // Créer un Set des IDs de badges débloqués pour vérifier les conditions des badges fantômes
-  const userBadgeIds = new Set(unlockedBadges.map(row => row.badge_id).filter(Boolean));
-  
-  // Calculer les points de skills pour vérifier les conditions des badges fantômes
-  let userSkillPoints = 0;
-  const badgesWithLevels = new Set();
-  unlockedBadges.forEach(row => {
-    if (row.badge_id && row.level) {
-      userSkillPoints += getSkillPointsForBadge(row.badge_id, row.level);
-      badgesWithLevels.add(row.badge_id);
-    }
+  // Regrouper par thème
+  const themeName = (b) => (b.theme && String(b.theme).trim()) ? String(b.theme).trim() : 'Autres';
+  const groups = new Map();
+  visibleBadges.forEach(b => {
+    const t = themeName(b);
+    if (!groups.has(t)) groups.set(t, []);
+    groups.get(t).push(b);
   });
-  unlockedBadges.forEach(row => {
-    if (row.badge_id && !badgesWithLevels.has(row.badge_id)) {
-      const badge = state.badges.find(b => b.id === row.badge_id);
-      if (badge) {
-        userSkillPoints += calculatePointsForBadgeWithoutLevel(badge, row.badge_id, row.user_answer);
+  const themes = Array.from(groups.keys()).sort(compareThemesFixed);
+  const sortById = (a, b) => String(a.id).localeCompare(String(b.id), 'fr', { numeric: true, sensitivity: 'base' });
+
+  themes.forEach((t) => {
+    const title = document.createElement('div');
+    title.className = 'section-subtitle theme-title';
+    const hasAnyUnlockedInTheme = (groups.get(t) || []).some(b => communityUserBadges.has(b.id));
+    if (!hasAnyUnlockedInTheme) {
+      title.classList.add('theme-locked');
+      title.textContent = '?????';
+      title.dataset.theme = t;
+    } else {
+      title.textContent = t;
+    }
+    els.communityProfileBadgesList.appendChild(title);
+
+    groups.get(t).sort(sortById).forEach(badge => {
+      const unlocked = communityUserBadges.has(badge.id);
+      const levelLabel = communityUserBadgeLevels.get(badge.id);
+      const config = parseConfig(badge.answer);
+      const userAnswer = communityUserBadgeAnswers.get(badge.id);
+      const hasAnswer = userAnswer !== undefined && userAnswer !== null;
+      const wasEverUnlocked = communityWasEverUnlocked.has(badge.id);
+      const isBlocked = !unlocked && hasAnswer;
+      const isReblocked = isBlocked && wasEverUnlocked;
+      const isBlockedNeverUnlocked = isBlocked && !wasEverUnlocked;
+
+      const card = document.createElement('article');
+      card.className = `card-badge clickable compact all-badge-card my-catalog-card${unlocked ? '' : ' locked'}${isBlocked ? ' blocked' : ''}${isReblocked ? ' reblocked' : ''}`;
+
+      const safeEmoji = unlocked || isReblocked ? getBadgeEmoji(badge) : '❓';
+      const safeTitle = unlocked || isReblocked ? stripEmojis(badge.name || '') : '?????';
+
+      let statusLabel;
+      let statusClass;
+      
+      if (unlocked) {
+        statusLabel = formatLevelTag(unlocked, levelLabel, config);
+        statusClass = isMysteryLevel(levelLabel) ? 'mystery' : 'success';
+      } else if (isReblocked) {
+        statusLabel = 'Rebloqué';
+        statusClass = 'reblocked';
+      } else if (isBlocked) {
+        statusLabel = 'Bloqué';
+        statusClass = 'blocked';
+      } else {
+        statusLabel = 'À débloquer';
+        statusClass = 'locked';
       }
-    }
-  });
-  
-  // Filtrer les badges fantômes qui ne remplissent plus leurs conditions
-  const filteredBadges = unlockedBadges.filter(row => {
-    if (!row.badge_id) return false;
-    const badge = state.badges.find(b => b.id === row.badge_id);
-    if (!badge || !isGhostBadge(badge)) return true; // Garder les badges non-fantômes
-    
-    // Vérifier si le badge fantôme devrait toujours être débloqué
-    const shouldBeUnlocked = checkGhostBadgeConditionsForUser(badge, userBadgeIds, userSkillPoints);
-    return shouldBeUnlocked;
-  });
-  
-  const items = filteredBadges.map(row => {
-    const badge = state.badges.find(b => b.id === row.badge_id);
-    const emoji = badge ? getBadgeEmoji(badge) : '🏅';
-    // Si le profil est privé, ne pas inclure la réponse dans data-answer
-    const formatted = isPrivate ? '' : (badge ? formatUserAnswer(badge, row.user_answer || '') : (row.user_answer || ''));
-    const disabled = isPrivate ? 'disabled' : '';
-    const disabledClass = isPrivate ? 'disabled' : '';
-    return `<button class="modal-badge-emoji ${disabledClass}" data-answer="${encodeURIComponent(formatted)}" title="${badge?.name ?? ''}" ${disabled}>${emoji}</button>`;
-  }).join('');
-  els.communityProfileBadgesGrid.innerHTML = items;
-  els.communityProfileBadgesGrid.querySelectorAll('.modal-badge-emoji').forEach(btn => {
-    if (isPrivate) {
-      // Si privé, désactiver le clic
-      btn.style.pointerEvents = 'none';
-      return;
-    }
-    btn.addEventListener('click', () => {
-      const ans = decodeURIComponent(btn.dataset.answer || '');
-      // Met en évidence l'emoji sélectionné
-      els.communityProfileBadgesGrid.querySelectorAll('.modal-badge-emoji')
-        .forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      if (els.communityProfileAnswer) {
-        els.communityProfileAnswer.textContent = ans ? ans : 'Réponse indisponible';
+      const isExpert = unlocked && isMysteryLevel(levelLabel);
+      
+      if (isExpert) {
+        card.classList.add('expert-badge');
       }
+
+      const formattedAnswer = unlocked && userAnswer ? formatUserAnswer(badge, userAnswer) : null;
+      const ghostText = unlocked && isGhostBadge(badge) ? (config?.ghostDisplayText || 'Débloqué automatiquement') : null;
+      const displayText = formattedAnswer || ghostText || (isBlocked && userAnswer ? formatUserAnswer(badge, userAnswer) : null) || (unlocked ? '' : 'Badge non débloqué');
+
+      card.innerHTML = `
+        <div class="row level-row">
+          <span class="tag ${statusClass}">${statusLabel}</span>
+        </div>
+        <div class="badge-compact">
+          <div class="badge-emoji">${safeEmoji}</div>
+          <div class="badge-title">${safeTitle}</div>
+        </div>
+        <div class="all-badge-details hidden">
+          <p class="muted">${displayText || ''}</p>
+        </div>
+      `;
+
+      const details = card.querySelector('.all-badge-details');
+      card.addEventListener('click', (e) => {
+        const tag = e.target.tagName.toLowerCase();
+        if (tag === 'input' || tag === 'button' || e.target.closest('form')) return;
+        
+        // Fermer tous les autres badges
+        const allCards = els.communityProfileBadgesList.querySelectorAll('.my-catalog-card');
+        allCards.forEach(otherCard => {
+          if (otherCard !== card) {
+            const otherDetails = otherCard.querySelector('.all-badge-details');
+            if (otherDetails) {
+              otherDetails.classList.add('hidden');
+              otherCard.classList.remove('expanded');
+            }
+          }
+        });
+        
+        // Ouvrir/fermer le badge cliqué
+        details.classList.toggle('hidden');
+        card.classList.toggle('expanded');
+      });
+
+      els.communityProfileBadgesList.appendChild(card);
     });
   });
 }
 
 function renderCommunityBadgeGridMessage(msg) {
-  if (!els.communityProfileBadgesGrid) return;
-  els.communityProfileBadgesGrid.innerHTML = `<p class="muted grid-full-center">${msg}</p>`;
-  if (els.communityProfileAnswer) {
-    els.communityProfileAnswer.textContent = '';
-  }
+  if (!els.communityProfileBadgesList) return;
+  els.communityProfileBadgesList.innerHTML = `<p class="muted grid-full-center">${msg}</p>`;
 }
 
 function toggleViews(authenticated) {
