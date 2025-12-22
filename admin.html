@@ -25,6 +25,7 @@
       </div>
     </header>
 
+    <!-- Section connexion admin -->
     <section class="card" id="admin-auth-card">
       <h2>Connexion admin</h2>
       <p class="muted">Entre ton pseudo et ton mot de passe admin.</p>
@@ -38,95 +39,127 @@
       <p id="admin-message" class="message"></p>
     </section>
 
+    <!-- Application admin -->
     <section id="admin-app" class="card hidden">
-      <div class="row" style="justify-content: space-between; align-items: center;">
+      <div class="admin-header">
         <h2>Badges</h2>
         <button id="admin-logout" class="ghost">Se déconnecter</button>
       </div>
-      <div class="grid" style="grid-template-columns: 1fr 1fr; gap: 20px;">
+      
+      <!-- Section gestion des jetons -->
+      <div class="admin-section">
+        <h3>🪙 Gestion des jetons</h3>
+        <p class="muted">Ajoute des jetons à ton compte admin.</p>
+        <form id="tokens-form" class="auth-form" style="max-width: 400px;">
+          <label for="tokens-amount">Nombre de jetons à ajouter</label>
+          <input id="tokens-amount" type="number" min="1" step="1" value="10" required placeholder="Ex: 10">
+          <button type="submit" class="primary">Ajouter les jetons</button>
+        </form>
+        <p id="tokens-message" class="message"></p>
+      </div>
+
+      <!-- Grille liste + édition -->
+      <div class="admin-grid">
+        <!-- Colonne liste -->
         <div>
-          <div class="row" style="justify-content: space-between; align-items: baseline;">
-            <h3>Liste</h3>
-            <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px;">
+          <div class="admin-header">
+            <h3>📋 Liste</h3>
+            <div class="admin-stats">
               <small id="admin-badge-total" class="muted">Total : 0</small>
               <small id="admin-skills-total" class="muted">Skills : 0</small>
               <small id="admin-low-skills-total" class="muted">Low skills : 0</small>
             </div>
           </div>
-          <div class="table">
-            <div class="table-head" style="display:grid; grid-template-columns: 0.35fr minmax(180px, 1fr) 1fr; gap:8px;">
-              <span>Emoji</span><span>Nom</span><span>Statut skills</span>
+          <div class="admin-table">
+            <div class="table-head">
+              <span>Emoji</span>
+              <span>Nom</span>
+              <span>Statut skills</span>
             </div>
             <div id="badge-list" class="table-body"></div>
           </div>
         </div>
+
+        <!-- Colonne édition -->
         <div>
-          <h3>Édition / création</h3>
+          <h3>✏️ Édition / création</h3>
           <form id="badge-form" class="auth-form">
-            <label for="badge-id">ID (optionnel si auto-incr.)</label>
-            <input id="badge-id" type="text" placeholder="Laisse vide pour nouvel ID">
+            
+            <!-- Informations de base -->
+            <div class="form-group">
+              <label for="badge-id" class="form-label">ID (optionnel si auto-incr.)</label>
+              <input id="badge-id" type="text" placeholder="Laisse vide pour nouvel ID">
 
-            <label for="badge-name">Nom</label>
-            <input id="badge-name" type="text" required>
+              <label for="badge-name" class="form-label form-label-spaced">Nom</label>
+              <input id="badge-name" type="text" required>
 
-            <label for="badge-emoji">Emoji</label>
-            <input id="badge-emoji" type="text" placeholder="Ex: 🚀">
+              <label for="badge-emoji" class="form-label form-label-spaced">Emoji</label>
+              <input id="badge-emoji" type="text" placeholder="Ex: 🚀">
 
-            <div class="row" style="gap:10px; align-items:center;">
-              <button type="button" id="badge-low-skill-toggle" class="ghost">Low skill : désactivé</button>
-              <input id="badge-low-skill" type="hidden" value="0">
+              <label for="badge-question" class="form-label form-label-spaced non-ghost-only">Question</label>
+              <textarea id="badge-question" class="non-ghost-only" rows="2"></textarea>
             </div>
 
-            <div class="row" style="gap:10px; align-items:center;">
-              <button type="button" id="badge-ghost-toggle" class="ghost">Badge fantôme : désactivé</button>
-              <input id="badge-ghost" type="hidden" value="0">
+            <!-- Thème -->
+            <div class="form-group">
+              <label for="badge-theme" class="form-label">Thème</label>
+              <input id="badge-theme" type="text" list="theme-options" placeholder="Choisis un thème...">
+              <datalist id="theme-options">
+                <option value="Sport"></option>
+                <option value="Voyage"></option>
+                <option value="Relations"></option>
+                <option value="Amour"></option>
+                <option value="Études"></option>
+                <option value="Travail"></option>
+                <option value="Loisir"></option>
+                <option value="Technologie"></option>
+                <option value="Santé"></option>
+                <option value="Lifestyle"></option>
+                <option value="Cuisine"></option>
+                <option value="Animaux"></option>
+                <option value="Nature"></option>
+                <option value="Réseaux sociaux"></option>
+                <option value="Autres"></option>
+                <option value="Badges cachés"></option>
+              </datalist>
+
+              <!-- Options Low skill et Fantôme (toujours visibles, sous le thème) -->
+              <div class="toggle-row" style="margin-top: 12px;">
+                <button type="button" id="badge-low-skill-toggle" class="ghost toggle-btn">Low skill : désactivé</button>
+                <input id="badge-low-skill" type="hidden" value="0">
+              </div>
+
+              <div class="toggle-row">
+                <button type="button" id="badge-ghost-toggle" class="ghost toggle-btn">Badge fantôme : désactivé</button>
+                <input id="badge-ghost" type="hidden" value="0">
+              </div>
             </div>
 
-            <label for="badge-theme">Thème</label>
-            <input id="badge-theme" type="text" list="theme-options" placeholder="Choisis un thème...">
-            <datalist id="theme-options">
-              <option value="Sport"></option>
-              <option value="Voyage"></option>
-              <option value="Relations"></option>
-              <option value="Amour"></option>
-              <option value="Études"></option>
-              <option value="Travail"></option>
-              <option value="Loisir"></option>
-              <option value="Technologie"></option>
-              <option value="Santé"></option>
-              <option value="Lifestyle"></option>
-              <option value="Cuisine"></option>
-              <option value="Animaux"></option>
-              <option value="Nature"></option>
-              <option value="Réseaux sociaux"></option>
-              <option value="Autres"></option>
-              <option value="Badges cachés"></option>
-            </datalist>
-
+            <!-- Bloc badge fantôme -->
             <div id="block-ghost" class="answer-block hidden">
-              <label>Badges requis</label>
+              <label class="form-label">Badges requis</label>
               <select id="ghost-required-badges-select" class="select-multi" multiple size="8"></select>
               <small class="muted">Tu peux sélectionner plusieurs badges.</small>
               
-              <label style="margin-top:10px;">Pré-requis</label>
-              <div style="margin: 6px 0 10px;">
-                <label for="ghost-prereq-mode" class="muted" style="display:block; margin-bottom:4px;">Mode de prérequis</label>
+              <label class="form-label form-label-spaced">Pré-requis</label>
+              <div class="prereq-item" style="margin-bottom: 12px;">
+                <label for="ghost-prereq-mode" class="muted">Mode de prérequis</label>
                 <select id="ghost-prereq-mode">
                   <option value="all">ET (tous les prérequis doivent être vrais)</option>
                   <option value="any">OU (au moins un prérequis doit être vrai)</option>
                 </select>
               </div>
-              <div class="row" style="gap:10px; flex-wrap:wrap;">
-                <div style="min-width:160px; flex: 1 1 160px;">
-                  <label for="ghost-min-badges" class="muted" style="display:block; margin-bottom:4px;">Badges débloqués (min)</label>
+              <div class="prereq-grid">
+                <div class="prereq-item">
+                  <label for="ghost-min-badges" class="muted">Badges débloqués (min)</label>
                   <input id="ghost-min-badges" type="number" min="0" step="1" placeholder="Ex: 2">
                 </div>
-                <div style="min-width:160px; flex: 1 1 160px;">
-                  <label for="ghost-min-skills" class="muted" style="display:block; margin-bottom:4px;">Points de skills (min)</label>
+                <div class="prereq-item">
+                  <label for="ghost-min-skills" class="muted">Points de skills (min)</label>
                   <input id="ghost-min-skills" type="number" min="0" step="1" placeholder="Ex: 3">
                 </div>
-                <div style="min-width:160px; flex: 1 1 160px;">
-                  <label for="ghost-min-rank" class="muted" style="display:block; margin-bottom:4px;">Rang minimum</label>
+                <div class="prereq-item">
+                  <label for="ghost-min-rank" class="muted">Rang minimum</label>
                   <select id="ghost-min-rank">
                     <option value="">Aucun</option>
                     <option value="Compliqué">Compliqué</option>
@@ -137,86 +170,111 @@
                   </select>
                 </div>
               </div>
-              <label for="ghost-display-text" style="margin-top:10px;">Remplace la réponse</label>
+              <label for="ghost-display-text" class="form-label form-label-spaced">Remplace la réponse</label>
               <textarea id="ghost-display-text" rows="2" placeholder="Ex: Débloqué automatiquement"></textarea>
-              <label for="ghost-skill-points" style="margin-top:10px;">Points skills</label>
+              <label for="ghost-skill-points" class="form-label form-label-spaced">Points skills</label>
               <input id="ghost-skill-points" type="number" min="0" step="1" placeholder="Laisse vide pour 1 point par défaut">
               <small class="muted">Si vide, le badge vaut 1 point lorsqu'il est débloqué.</small>
             </div>
 
-            <label for="badge-question" class="non-ghost-only">Question</label>
-            <textarea id="badge-question" class="non-ghost-only" rows="2"></textarea>
+            <!-- Type de réponse (caché si fantôme) -->
+            <div class="form-group non-ghost-only">
+              <label for="answer-type" class="form-label">Type de réponse</label>
+              <select id="answer-type">
+                <option value="text">Texte exact (réponse simple)</option>
+                <option value="boolean">Oui / Non</option>
+                <option value="range">Numérotation</option>
+                <option value="singleSelect">Sélection unique</option>
+                <option value="multiSelect">Multi-sélection</option>
+              </select>
+            </div>
 
-            <label for="answer-type" class="non-ghost-only">Type de réponse</label>
-            <select id="answer-type" class="non-ghost-only">
-              <option value="text">Texte exact (réponse simple)</option>
-              <option value="boolean">Oui / Non</option>
-              <option value="range">Numérotation</option>
-              <option value="singleSelect">Sélection unique</option>
-              <option value="multiSelect">Multi-sélection</option>
-            </select>
-
+            <!-- Bloc réponse texte -->
             <div id="block-text" class="answer-block non-ghost-only">
-              <label for="answer-text">Réponse attendue (texte)</label>
+              <label for="answer-text" class="form-label">Réponse attendue (texte)</label>
               <input id="answer-text" type="text" placeholder="Ex: javascript">
             </div>
 
+            <!-- Bloc réponse boolean -->
             <div id="block-boolean" class="answer-block hidden non-ghost-only">
-              <label for="bool-display-text">Remplace la réponse (si "oui")</label>
+              <label for="bool-display-text" class="form-label">Remplace la réponse (si "oui")</label>
               <textarea id="bool-display-text" rows="2" placeholder="Ex: A répondu à la question"></textarea>
               
-              <label for="bool-display-text-false" style="margin-top:10px;">Remplace la réponse (si "non")</label>
+              <label for="bool-display-text-false" class="form-label form-label-spaced">Remplace la réponse (si "non")</label>
               <textarea id="bool-display-text-false" rows="2" placeholder="Ex: N'a pas répondu à la question"></textarea>
               
-              <label for="bool-skill-points" style="margin-top:10px;">Points skills (si "oui")</label>
+              <label for="bool-skill-points" class="form-label form-label-spaced">Points skills (si "oui")</label>
               <input id="bool-skill-points" type="number" min="0" step="1" placeholder="Laisse vide pour 1 point par défaut">
               <small class="muted">Si vide, le badge vaut 1 point.</small>
             </div>
 
+            <!-- Bloc réponse range -->
             <div id="block-range" class="answer-block hidden non-ghost-only">
-              <label>Niveaux (un par ligne)</label>
+              <label class="form-label">Niveaux (un par ligne)</label>
               <textarea id="range-levels" rows="4" placeholder="Ex:&#10;Skill 1|0|4|3&#10;Skill 2|5|9|5&#10;Skill mystère|10|999|10"></textarea>
               <small class="muted">Format : label|min|max|points. Points optionnel (défaut: position dans la liste). Utilise "Skill mystère" si tu veux un skill mystère.</small>
             </div>
 
+            <!-- Bloc multi-sélection -->
             <div id="block-multi" class="answer-block hidden non-ghost-only">
-              <label>Les choix de réponses</label>
+              <label class="form-label">Les choix de réponses</label>
               <textarea id="multi-options" rows="4" placeholder="valeur|Libellé"></textarea>
-              <label>Niveaux (un par ligne)</label>
+              
+              <label class="form-label form-label-spaced">Niveaux (un par ligne)</label>
               <textarea id="multi-levels" rows="3" placeholder="Ex:&#10;Skill 1|1|3&#10;Skill 2|3|5&#10;Skill mystère|5|10"></textarea>
               <small class="muted">Format : label|min sélection|points. Ex: "Skill 1|1|3" = Skill 1 nécessite 1 sélection et donne 3 points. Le champ "points" est optionnel (défaut: position dans la liste). Utilise "Skill mystère" si besoin.</small>
-              <div class="row" style="gap:10px; align-items:center; margin-top:10px;">
-                <button type="button" id="multi-skill-by-option-toggle" class="ghost">Skills par option : désactivé</button>
+              
+              <div class="toggle-row" style="margin-top: 12px;">
+                <button type="button" id="multi-skill-by-option-toggle" class="ghost toggle-btn">Skills par option : désactivé</button>
                 <input id="multi-skill-by-option" type="hidden" value="0">
               </div>
-              <div id="multi-skill-by-option-block" class="hidden" style="margin-top:10px;">
-                <label>Skills par option (une par ligne)</label>
-                <textarea id="multi-option-skills" rows="4" placeholder="valeur|Skill 1|3&#10;valeur2|Expert|10&#10;valeur3|aucun"></textarea>
-                <small class="muted">Format : valeur|skill|points. Ex: "valeur1|Skill 1|3" = cette option donne Skill 1 avec 3 points. Le champ "points" est optionnel (défaut: position dans la liste). Utilise "Expert", "bloquer" ou "aucun".</small>
+              <div id="multi-skill-by-option-block" class="hidden">
+                <label class="form-label form-label-spaced">Skills par option (une par ligne)</label>
+                <textarea id="multi-option-skills" rows="4" placeholder="valeur|Skill 1|3&#10;valeur2|Expert|10&#10;valeur3|bloquer"></textarea>
+                <small class="muted">Format : valeur|skill|points. Ex: "valeur1|Skill 1|3" = cette option donne Skill 1 avec 3 points.</small>
+                <small class="muted">• Skill = débloque avec ce niveau et ces points</small>
+                <small class="muted">• Expert = niveau mystère</small>
+                <small class="muted">• bloquer = badge non débloqué (va dans "badges à retenter")</small>
               </div>
-              <div class="row" style="gap:10px; align-items:center; margin-top:10px;">
-                <button type="button" id="multi-display-list-toggle" class="ghost">Liste : désactivée</button>
+              
+              <div class="toggle-row" style="margin-top: 12px;">
+                <button type="button" id="multi-display-list-toggle" class="ghost toggle-btn">Liste : désactivée</button>
                 <input id="multi-display-list" type="hidden" value="0">
               </div>
-              <small class="muted">Si “Liste” est activée : on affichera les choix cochés. Sinon : on affichera le nombre de coches.</small>
+              <small class="muted">Si "Liste" est activée : on affichera les choix cochés. Sinon : on affichera le nombre de coches.</small>
             </div>
 
+            <!-- Bloc sélection unique -->
             <div id="block-single" class="answer-block hidden non-ghost-only">
-              <label>Choix de réponses</label>
+              <label class="form-label">Choix de réponses</label>
               <textarea id="single-options" rows="4" placeholder="valeur|Libellé"></textarea>
-              <label style="margin-top:10px;">Skills par option</label>
-              <textarea id="single-skills" rows="3" placeholder="valeur|Skill 1&#10;valeur2|Expert&#10;valeur3|aucun"></textarea>
-              <small class="muted">choisis entre skill, expert, aucuns ou bloquer.</small>
-              <small class="muted">L’utilisateur pourra choisir une seule option.</small>
+              
+              <label class="form-label form-label-spaced">Skills par option</label>
+              <textarea id="single-skills" rows="3" placeholder="valeur|Skill 1&#10;valeur2|Expert&#10;valeur3|bloquer"></textarea>
+              <small class="muted">Options : Skill 1, Skill 2, Expert, ou bloquer.</small>
+              <small class="muted">• Skill = débloque le badge avec ce niveau</small>
+              <small class="muted">• Expert = niveau mystère (caché)</small>
+              <small class="muted">• bloquer = badge non débloqué (va dans "badges à retenter")</small>
             </div>
 
-            <label for="display-prefix" class="non-ghost-only non-boolean-only">Texte avant (optionnel)</label>
-            <input id="display-prefix" class="non-ghost-only non-boolean-only" type="text" placeholder="Ex: J'ai :">
+            <!-- Options d'affichage -->
+            <div class="form-group non-ghost-only non-boolean-only">
+              <label for="display-prefix" class="form-label">Texte avant (optionnel)</label>
+              <input id="display-prefix" type="text" placeholder="Ex: J'ai :">
 
-            <label for="display-suffix" class="non-ghost-only non-boolean-only">Texte après (optionnel)</label>
-            <input id="display-suffix" class="non-ghost-only non-boolean-only" type="text" placeholder="Ex: pays visités">
+              <label for="display-suffix" class="form-label form-label-spaced">Texte après (optionnel)</label>
+              <input id="display-suffix" type="text" placeholder="Ex: pays visités">
+            </div>
 
-            <div class="row" style="gap:10px; flex-wrap: wrap;">
+            <!-- Message si non débloqué -->
+            <div class="form-group non-ghost-only">
+              <label for="blocked-message" class="form-label">Message si non débloqué (optionnel)</label>
+              <textarea id="blocked-message" rows="2" placeholder="Ex: Tu n'as pas assez voyagé pour débloquer ce badge !"></textarea>
+              <small class="muted">Ce message s'affiche dans la roue si le badge n'est pas débloqué. Laisse vide pour le message par défaut.</small>
+            </div>
+
+            <!-- Boutons d'action -->
+            <div class="action-buttons">
               <button type="submit" class="primary">Enregistrer</button>
               <button type="button" id="btn-delete" class="ghost">Supprimer</button>
               <button type="button" id="btn-reset" class="ghost">Réinitialiser</button>
@@ -229,4 +287,3 @@
   </div>
 </body>
 </html>
-

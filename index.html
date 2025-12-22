@@ -64,16 +64,6 @@
             <span id="skill-count">0</span>
             <small>skills</small>
           </div>
-          <div class="settings-wrapper">
-            <button id="refresh-btn" class="ghost icon-btn" aria-label="Rafraîchir">⟳</button>
-            <button id="settings-toggle" class="ghost icon-btn" aria-label="Réglages">⚙️</button>
-            <div id="settings-menu" class="settings-menu hidden">
-              <a id="admin-link" class="ghost full-width hidden" href="./admin.html">Admin</a>
-              <button id="edit-profile-btn" class="ghost full-width">Modifier mon profil</button>
-              <button id="profile-privacy-btn" class="ghost full-width">Profil: Public</button>
-              <button id="logout-btn" class="ghost full-width">Se déconnecter</button>
-            </div>
-          </div>
         </div>
       </header>
 
@@ -98,27 +88,101 @@
         </form>
       </section>
 
-      <div class="tabs">
-        <button class="tab-button active" data-tab="my-badges">Mes badges</button>
-        <button class="tab-button" data-tab="all-badges">Tous les badges</button>
-        <button class="tab-button" data-tab="community">Communauté</button>
-      </div>
 
       <section id="my-badges" class="tab-content">
-        <h2>Ma collection</h2>
+        <!-- Header profil dans la section -->
+        <div class="profile-section-header">
+          <div class="profile-section-main">
+            <img id="profile-section-avatar" src="./icons/logobl.png" alt="Avatar" class="logo medium">
+            <div class="profile-section-info">
+              <h2 id="profile-section-username">Utilisateur</h2>
+              <div class="profile-section-stats">
+                <div class="profile-stat">
+                  <span id="profile-section-badge-count">0</span>
+                  <small>badges</small>
+                </div>
+                <div class="profile-stat">
+                  <span id="profile-section-skill-count">0</span>
+                  <small>skills</small>
+                </div>
+                <div class="profile-stat">
+                  <button id="profile-section-rank" type="button" class="ghost rank-button">—</button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="profile-section-actions">
+            <div class="settings-wrapper">
+              <div class="settings-buttons-row">
+                <button id="settings-toggle" class="ghost icon-btn" aria-label="Réglages">⚙️</button>
+                <button id="calendar-btn" class="ghost icon-btn calendar-btn" aria-label="Tes jours de connexion">
+                  📅
+                  <span id="calendar-badge" class="calendar-badge hidden">3</span>
+                </button>
+              </div>
+              <div id="settings-menu" class="settings-menu hidden">
+                <a id="admin-link" class="ghost full-width hidden" href="./admin.html">Admin</a>
+                <button id="edit-profile-btn" class="ghost full-width">Modifier mon profil</button>
+                <button id="profile-privacy-btn" class="ghost full-width">Profil: Public</button>
+                <button id="logout-btn" class="ghost full-width">Se déconnecter</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <h3>Ma collection</h3>
         <p class="muted section-description first">Découvre tous les badges et thèmes que tu as débloqués.</p>
         <div id="my-badges-list" class="grid badges-grid"></div>
       </section>
 
       <section id="all-badges" class="tab-content hidden">
-        <h2>Tous les badges</h2>
-        <p class="muted section-description">Débloque les badges en répondant à leur questions et obtiens des skills pour gagner en style de vie.</p>
-        <div class="row badge-filters">
-          <button id="filter-all" class="ghost active" type="button">Tous</button>
-          <button id="filter-unlocked" class="ghost" type="button">Débloqués</button>
-          <button id="filter-blocked" class="ghost" type="button">Bloqués</button>
+        <h2>Roue des badges</h2>
+        <p class="muted section-description">Tourne la roue pour débloquer un badge et réponds à sa question pour le débloquer !</p>
+        
+        <!-- Compteur de jetons -->
+        <div id="tokens-counter" class="tokens-counter clickable" title="Clique pour plus d'infos">
+          <span class="token-emoji">🪙</span>
+          <span id="tokens-count" class="tokens-count">0</span>
+          <!-- Infobulle des jetons -->
+          <div id="tokens-tooltip" class="tokens-tooltip hidden">
+            <p>Reçois 2 jetons chaque jour à ta première connexion. Si tu ne te connectes pas, les jetons sont perdus. Utilise-les pour tourner la roue et débloquer de nouveaux badges !</p>
+          </div>
         </div>
-        <div id="all-badges-list" class="grid"></div>
+
+        <!-- Interface de la roue -->
+        <div id="wheel-container" class="wheel-container">
+          <div id="wheel" class="wheel">
+            <div id="wheel-items" class="wheel-items"></div>
+          </div>
+          <div id="wheel-indicator" class="wheel-indicator"></div>
+          <div class="spin-button-wrapper">
+            <button id="spin-button" class="primary spin-button" disabled>Tourner la roue (1 jeton)</button>
+            <!-- Infobulle pour le bouton tourner la roue -->
+            <div id="spin-button-tooltip" class="tokens-tooltip hidden">
+              <p>Tu n'as pas assez de jetons pour tourner la roue. Tu recevras 2 jetons d'expérience chaque jour. Reviens demain pour continuer à débloquer des badges !</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Zone pour afficher la question après le spin -->
+        <div id="badge-question-container" class="badge-question-container hidden">
+          <div class="card">
+            <h3 id="selected-badge-name"></h3>
+            <p id="selected-badge-question" class="badge-question-text"></p>
+            <form id="badge-answer-form" class="auth-form">
+              <label for="badge-answer-input">Ta réponse</label>
+              <textarea id="badge-answer-input" rows="3" placeholder="Écris ta réponse ici..."></textarea>
+              <button type="submit" class="primary">Valider</button>
+            </form>
+            <p id="badge-answer-message" class="message"></p>
+          </div>
+        </div>
+
+        <!-- Section des badges répondu mais non débloqués -->
+        <div id="blocked-badges-section" class="blocked-badges-section">
+          <h3>Badges à retenter</h3>
+          <p class="muted section-description">Ces badges ont été répondu mais n'ont pas été débloqués. Utilise un jeton pour retenter ta chance !</p>
+          <div id="blocked-badges-list" class="grid badges-grid"></div>
+        </div>
       </section>
 
       <section id="community" class="tab-content hidden">
@@ -161,17 +225,52 @@
           <span id="community-profile-privacy-indicator"></span>
           <button id="community-profile-close" class="ghost close-btn">×</button>
           <div class="profile-modal-content centered">
-            <img id="community-profile-avatar" src="./icons/logobl.png" alt="Avatar" class="logo medium">
+              <img id="community-profile-avatar" src="./icons/logobl.png" alt="Avatar" class="logo medium">
             <h3 id="community-profile-username" class="username-header">
-              <span>Utilisateur</span>
-            </h3>
-            <p id="community-profile-rank" class="muted">—</p>
-            <p class="muted" id="community-profile-badges">0 badge(s)</p>
-            <p class="muted" id="community-profile-mystery">0 skill(s)</p>
-          </div>
+                <span>Utilisateur</span>
+              </h3>
+              <p id="community-profile-rank" class="muted">—</p>
+              <p class="muted" id="community-profile-badges">0 badge(s)</p>
+              <p class="muted" id="community-profile-mystery">0 skill(s)</p>
+            </div>
           <div id="community-profile-badges-list" class="grid badges-grid"></div>
         </div>
       </div>
+
+      <!-- Panneau latéral calendrier -->
+      <div id="calendar-drawer" class="calendar-drawer hidden">
+        <div class="calendar-drawer-header">
+          <h2>Tes jours de connexion</h2>
+          <button id="calendar-close-btn" class="ghost icon-btn" aria-label="Fermer">✕</button>
+        </div>
+        <div class="calendar-content">
+          <div id="calendar-week" class="calendar-week">
+            <!-- 7 jours générés dynamiquement -->
+          </div>
+          <div class="calendar-info">
+            <p class="calendar-tooltip">💡 Si tu te connectes tous les jours, tu remportes 3 jetons supplémentaires !</p>
+          </div>
+          <button id="claim-bonus-btn" class="primary hidden">Bonus de connexion</button>
+        </div>
+      </div>
+      <div id="calendar-overlay" class="calendar-overlay hidden"></div>
+
+      <!-- Barre de navigation en bas (app mobile) -->
+      <nav id="bottom-nav" class="bottom-nav">
+        <button class="bottom-nav-item active" data-tab="my-badges" aria-label="Mon profil">
+          <span class="bottom-nav-icon">👤</span>
+          <span class="bottom-nav-label">Mon profil</span>
+        </button>
+        <button class="bottom-nav-item bottom-nav-center" data-tab="all-badges" aria-label="Roue des badges">
+          <div class="bottom-nav-wheel">
+            <img src="./icons/logobl.png" alt="Roue" class="wheel-logo">
+          </div>
+        </button>
+        <button class="bottom-nav-item" data-tab="community" aria-label="Communauté">
+          <span class="bottom-nav-icon">👥</span>
+          <span class="bottom-nav-label">Communauté</span>
+        </button>
+      </nav>
     </section>
   </div>
 </body>

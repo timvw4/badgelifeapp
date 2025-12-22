@@ -25,6 +25,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   cacheEls();
   bindAuth();
   bindForm();
+  bindTokensForm();
   await bootstrapSession();
 });
 
@@ -63,6 +64,7 @@ function cacheEls() {
   els.multiDisplayListToggle = document.getElementById('multi-display-list-toggle');
   els.displayPrefix = document.getElementById('display-prefix');
   els.displaySuffix = document.getElementById('display-suffix');
+  els.blockedMessage = document.getElementById('blocked-message');
   els.lowSkillHidden = document.getElementById('badge-low-skill');
   els.lowSkillToggle = document.getElementById('badge-low-skill-toggle');
   els.ghostHidden = document.getElementById('badge-ghost');
@@ -85,6 +87,9 @@ function cacheEls() {
     singleSelect: document.getElementById('block-single'),
   };
   els.nonGhostOnly = Array.from(document.querySelectorAll('.non-ghost-only'));
+  els.tokensForm = document.getElementById('tokens-form');
+  els.tokensAmount = document.getElementById('tokens-amount');
+  els.tokensMessage = document.getElementById('tokens-message');
 }
 
 function bindAuth() {
@@ -724,6 +729,7 @@ function fillForm(b) {
   setLowSkillState(Boolean(b.low_skill));
   if (els.displayPrefix) els.displayPrefix.value = '';
   els.displaySuffix.value = '';
+  if (els.blockedMessage) els.blockedMessage.value = '';
   if (els.boolDisplayText) els.boolDisplayText.value = '';
   if (els.boolDisplayTextFalse) els.boolDisplayTextFalse.value = '';
   setMultiDisplayListState(false);
@@ -769,6 +775,8 @@ function fillForm(b) {
   if (els.displayPrefix) els.displayPrefix.value = parsed.displayPrefix ?? '';
   // Ancien displaySuffix: on continue de le lire pour compat
   els.displaySuffix.value = parsed.displaySuffix ?? '';
+  // Charger le message personnalisé si non débloqué
+  if (els.blockedMessage) els.blockedMessage.value = parsed.blockedMessage ?? '';
   const type = parsed.type;
   els.answerType.value = type;
   showBlock(type);
@@ -853,6 +861,7 @@ function buildPayloadFromForm() {
   const type = els.answerType.value;
   const displayPrefix = (els.displayPrefix?.value || '').trim();
   const displaySuffix = (els.displaySuffix?.value || '').trim();
+  const blockedMessage = (els.blockedMessage?.value || '').trim();
   const multiDisplayMode = Boolean(Number(els.multiDisplayListHidden?.value || '0')) ? 'list' : 'count';
   const isGhost = Boolean(Number(els.ghostHidden?.value || '0'));
   const requiredBadges = isGhost 
@@ -907,6 +916,14 @@ function buildPayloadFromForm() {
         ...(ghostDisplayText ? { ghostDisplayText } : {}),
         ...(displayPrefix ? { displayPrefix } : {}),
         ...(displaySuffix ? { displaySuffix } : {}),
+        ...(blockedMessage ? { blockedMessage } : {}),
+      });
+    } else if (blockedMessage) {
+      // Badge texte normal avec message personnalisé
+      payload.answer = JSON.stringify({
+        type: 'text',
+        answer: els.answerText.value.trim(),
+        blockedMessage,
       });
     } else {
       payload.answer = els.answerText.value.trim();
@@ -924,6 +941,7 @@ function buildPayloadFromForm() {
       expected: true,
       ...(els.boolDisplayText?.value?.trim() ? { booleanDisplayText: els.boolDisplayText.value.trim() } : {}),
       ...(els.boolDisplayTextFalse?.value?.trim() ? { booleanDisplayTextFalse: els.boolDisplayTextFalse.value.trim() } : {}),
+      ...(blockedMessage ? { blockedMessage } : {}),
     };
     // Ajouter skillPoints seulement si le champ est rempli (pour badges normaux ou fantômes)
     const skillPointsValue = isGhost ? ghostSkillPoints : (els.boolSkillPoints?.value?.trim() || '');
@@ -944,6 +962,7 @@ function buildPayloadFromForm() {
       levels,
       ...(displayPrefix ? { displayPrefix } : {}),
       ...(displaySuffix ? { displaySuffix } : {}),
+      ...(blockedMessage ? { blockedMessage } : {}),
     }));
     return payload;
   }
@@ -966,6 +985,7 @@ function buildPayloadFromForm() {
       multiDisplayMode,
       ...(displayPrefix ? { displayPrefix } : {}),
       ...(displaySuffix ? { displaySuffix } : {}),
+      ...(blockedMessage ? { blockedMessage } : {}),
     }));
     return payload;
   }
@@ -982,6 +1002,7 @@ function buildPayloadFromForm() {
       levels,
       ...(displayPrefix ? { displayPrefix } : {}),
       ...(displaySuffix ? { displaySuffix } : {}),
+      ...(blockedMessage ? { blockedMessage } : {}),
     }));
     return payload;
   }
@@ -1173,6 +1194,7 @@ function resetForm() {
   setMultiSkillByOptionState(false);
   if (els.multiOptionSkills) els.multiOptionSkills.value = '';
   if (els.theme) els.theme.value = '';
+  if (els.blockedMessage) els.blockedMessage.value = '';
 }
 
 function setMultiDisplayListState(isList) {
@@ -1251,5 +1273,67 @@ function setGhostState(isGhost) {
 function toggleGhost() {
   const current = Boolean(Number(els.ghostHidden?.value || '0'));
   setGhostState(!current);
+}
+
+function bindTokensForm() {
+  if (!els.tokensForm) return;
+  
+  els.tokensForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (!state.session || !state.session.user) {
+      setTokensMsg('Connecte-toi d\'abord.', true);
+      return;
+    }
+    
+    const amount = parseInt(els.tokensAmount.value, 10);
+    if (isNaN(amount) || amount < 1) {
+      setTokensMsg('Entre un nombre valide (minimum 1).', true);
+      return;
+    }
+    
+    setTokensMsg('Ajout des jetons...');
+    
+    // Récupérer le profil actuel pour connaître le nombre de jetons actuels
+    const { data: profile, error: fetchError } = await supabase
+      .from('profiles')
+      .select('tokens')
+      .eq('id', state.session.user.id)
+      .single();
+    
+    if (fetchError) {
+      console.error('Erreur lors de la récupération du profil:', fetchError);
+      setTokensMsg('Erreur lors de la récupération du profil.', true);
+      return;
+    }
+    
+    const currentTokens = profile?.tokens || 0;
+    const newTokens = currentTokens + amount;
+    
+    // Mettre à jour les jetons dans Supabase
+    const { error: updateError } = await supabase
+      .from('profiles')
+      .update({ tokens: newTokens })
+      .eq('id', state.session.user.id);
+    
+    if (updateError) {
+      console.error('Erreur lors de la mise à jour des jetons:', updateError);
+      setTokensMsg('Erreur lors de l\'ajout des jetons.', true);
+      return;
+    }
+    
+    setTokensMsg(`✅ ${amount} jeton(s) ajouté(s) ! Tu as maintenant ${newTokens} jeton(s).`, false);
+    els.tokensAmount.value = '10'; // Réinitialiser à 10
+  });
+}
+
+function setTokensMsg(text, isError = false) {
+  if (!els.tokensMessage) return;
+  els.tokensMessage.textContent = text;
+  els.tokensMessage.classList.toggle('error', isError);
+  if (!isError) {
+    setTimeout(() => {
+      if (els.tokensMessage) els.tokensMessage.textContent = '';
+    }, 5000);
+  }
 }
 
