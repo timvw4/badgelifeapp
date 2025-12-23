@@ -137,6 +137,8 @@ document.addEventListener('DOMContentLoaded', () => {
   attachTokensTooltip();
   attachSpinButtonTooltip();
   attachCalendarListeners();
+  setupPullToRefresh();
+  lockOrientation();
   bootstrapSession();
 });
 
@@ -5258,5 +5260,146 @@ function closeCalendarDrawer() {
   
   els.calendarDrawer.classList.add('hidden');
   els.calendarOverlay.classList.add('hidden');
+}
+
+// Verrouiller l'orientation en mode portrait sur mobile
+function lockOrientation() {
+  // Utiliser l'API Screen Orientation si disponible
+  if (screen.orientation && screen.orientation.lock) {
+    screen.orientation.lock('portrait').catch(() => {
+      // L'API peut échouer si elle n'est pas supportée ou si l'utilisateur l'a désactivée
+      console.log('Lock orientation non disponible');
+    });
+  }
+  
+  // Écouter les changements d'orientation et afficher un message si nécessaire
+  window.addEventListener('orientationchange', () => {
+    if (window.orientation === 90 || window.orientation === -90) {
+      // Mode paysage détecté
+      console.log('Mode paysage détecté - veuillez tourner en mode portrait');
+    }
+  });
+}
+
+// Configuration du pull-to-refresh pour mobile
+function setupPullToRefresh() {
+  const pullToRefreshEl = document.getElementById('pull-to-refresh');
+  if (!pullToRefreshEl || !els.appView) return;
+  
+  let startY = 0;
+  let currentY = 0;
+  let isPulling = false;
+  let isRefreshing = false;
+  const threshold = 80; // Distance en pixels pour déclencher le refresh
+  
+  const handleTouchStart = (e) => {
+    // Ne fonctionne que si on est en haut de la page et pas en train de rafraîchir
+    if (isRefreshing || window.scrollY > 10) return;
+    
+    startY = e.touches[0].clientY;
+    isPulling = false;
+  };
+  
+  const handleTouchMove = (e) => {
+    if (isRefreshing) return;
+    
+    currentY = e.touches[0].clientY;
+    const deltaY = currentY - startY;
+    
+    // Ne fonctionne que si on tire vers le bas depuis le haut
+    if (deltaY > 0 && window.scrollY === 0) {
+      isPulling = true;
+      e.preventDefault();
+      
+      const pullDistance = Math.min(deltaY, threshold * 1.5);
+      const progress = Math.min(pullDistance / threshold, 1);
+      
+      // Afficher l'indicateur
+      pullToRefreshEl.classList.remove('hidden');
+      pullToRefreshEl.style.transform = `translateX(-50%) translateY(${pullDistance - 100}px)`;
+      pullToRefreshEl.style.opacity = progress;
+      
+      // Rotation du spinner basée sur la progression
+      const spinner = pullToRefreshEl.querySelector('.pull-to-refresh-spinner');
+      if (spinner) {
+        spinner.style.transform = `rotate(${progress * 360}deg)`;
+      }
+      
+      // Changer le texte si on dépasse le seuil
+      const textEl = pullToRefreshEl.querySelector('.pull-to-refresh-text');
+      if (textEl) {
+        if (progress >= 1) {
+          textEl.textContent = 'Relâcher pour actualiser';
+        } else {
+          textEl.textContent = 'Tirer pour actualiser';
+        }
+      }
+    } else if (isPulling && deltaY <= 0) {
+      // Réinitialiser si on remonte
+      resetPullToRefresh();
+    }
+  };
+  
+  const handleTouchEnd = async (e) => {
+    if (isRefreshing || !isPulling) {
+      resetPullToRefresh();
+      return;
+    }
+    
+    const deltaY = currentY - startY;
+    
+    if (deltaY >= threshold) {
+      // Déclencher le refresh
+      isRefreshing = true;
+      const textEl = pullToRefreshEl.querySelector('.pull-to-refresh-text');
+      if (textEl) {
+        textEl.textContent = 'Actualisation...';
+      }
+      
+      // Animer le spinner
+      const spinner = pullToRefreshEl.querySelector('.pull-to-refresh-spinner');
+      if (spinner) {
+        spinner.classList.add('spinning');
+      }
+      
+      // Recharger les données
+      try {
+        await loadAppData();
+      } catch (error) {
+        console.error('Erreur lors du rafraîchissement:', error);
+      }
+      
+      // Attendre un peu puis cacher l'indicateur
+      setTimeout(() => {
+        resetPullToRefresh();
+        isRefreshing = false;
+      }, 500);
+    } else {
+      resetPullToRefresh();
+    }
+  };
+  
+  const resetPullToRefresh = () => {
+    isPulling = false;
+    pullToRefreshEl.style.transform = '';
+    pullToRefreshEl.style.opacity = '';
+    pullToRefreshEl.classList.add('hidden');
+    
+    const spinner = pullToRefreshEl.querySelector('.pull-to-refresh-spinner');
+    if (spinner) {
+      spinner.style.transform = '';
+      spinner.classList.remove('spinning');
+    }
+    
+    const textEl = pullToRefreshEl.querySelector('.pull-to-refresh-text');
+    if (textEl) {
+      textEl.textContent = 'Tirer pour actualiser';
+    }
+  };
+  
+  // Ajouter les event listeners
+  els.appView.addEventListener('touchstart', handleTouchStart, { passive: true });
+  els.appView.addEventListener('touchmove', handleTouchMove, { passive: false });
+  els.appView.addEventListener('touchend', handleTouchEnd, { passive: true });
 }
 
