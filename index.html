@@ -49,6 +49,15 @@
         <div class="pull-to-refresh-spinner"></div>
         <span class="pull-to-refresh-text">Tirer pour actualiser</span>
       </div>
+      
+      <!-- Overlay global pour la modification de badge (Joker Bonus) -->
+      <div id="modify-badge-overlay" class="modify-badge-overlay hidden">
+        <div class="modify-badge-modal">
+          <div class="card">
+            <!-- Le contenu sera injecté par JavaScript -->
+          </div>
+        </div>
+      </div>
       <div class="app-logo-container">
         <img src="./icons/logobadgelifeB.png" alt="BadgeLife" class="app-logo-main">
         <img src="./icons/tavieenbadge.png" alt="Ta vie en badges" class="app-tagline-image">
@@ -132,23 +141,24 @@
       </section>
 
       <section id="all-badges" class="tab-content hidden">
-        <h2 class="section-title">Roue des badges</h2>
         <div class="section-header-with-actions">
           <div>
+            <h2 class="section-title">Roue des badges</h2>
             <p class="muted section-description">Tourne la roue pour débloquer un badge et réponds à sa question pour le débloquer !</p>
           </div>
-          <!-- Bouton calendrier déplacé dans le header -->
-        </div>
-        
-        <!-- Compteur de jetons -->
-        <div id="tokens-counter" class="tokens-counter clickable" title="Clique pour plus d'infos">
-          <span class="token-emoji">🪙</span>
-          <span id="tokens-count" class="tokens-count">0</span>
-          <!-- Infobulle des jetons -->
-          <div id="tokens-tooltip" class="tokens-tooltip hidden">
-            <p>Reçois 2 jetons chaque jour à ta première connexion. Si tu ne te connectes pas, les jetons sont perdus. Utilise-les pour tourner la roue et débloquer de nouveaux badges !</p>
+          <!-- Compteur de jetons en haut à droite -->
+          <div id="tokens-counter" class="tokens-counter clickable" title="Clique pour plus d'infos">
+            <span class="token-emoji">🪙</span>
+            <span id="tokens-count" class="tokens-count">0</span>
+            <!-- Infobulle des jetons -->
+            <div id="tokens-tooltip" class="tokens-tooltip hidden">
+              <p>Obtient des jetons dans le calendrier. Utilise-les pour tourner la roue et débloquer de nouveaux badges !</p>
+            </div>
           </div>
         </div>
+
+        <!-- Titre de la roue -->
+        <h3 class="wheel-title">Tourne la roue</h3>
 
         <!-- Interface de la roue -->
         <div id="wheel-container" class="wheel-container">
@@ -160,7 +170,7 @@
             <button id="spin-button" class="primary spin-button" disabled>Tourner la roue (1 jeton)</button>
             <!-- Infobulle pour le bouton tourner la roue -->
             <div id="spin-button-tooltip" class="tokens-tooltip hidden">
-              <p>Tu n'as pas assez de jetons pour tourner la roue. Tu recevras 2 jetons d'expérience chaque jour. Reviens demain pour continuer à débloquer des badges !</p>
+              <p>Tu n'as pas assez de jetons pour tourner la roue. Tu recevras 2 jetons chaque jour. Reviens demain pour continuer à débloquer des badges !</p>
             </div>
           </div>
         </div>
@@ -181,7 +191,7 @@
 
         <!-- Section des badges répondu mais non débloqués -->
         <div id="blocked-badges-section" class="blocked-badges-section">
-          <h3>Badges à retenter</h3>
+          <h3>Badges non-débloqués</h3>
           <p class="muted section-description">Ces badges ont été répondu mais n'ont pas été débloqués. Utilise un jeton pour retenter ta chance !</p>
           <div id="blocked-badges-list" class="grid badges-grid"></div>
         </div>
@@ -266,6 +276,7 @@
         <button class="bottom-nav-item bottom-nav-center" data-tab="all-badges" aria-label="Roue des badges">
           <div class="bottom-nav-wheel">
             <img src="./icons/wheel.png" alt="Roue" class="wheel-logo">
+            <span id="wheel-badge" class="wheel-badge hidden">0</span>
           </div>
         </button>
         <button class="bottom-nav-item" data-tab="community" aria-label="Communauté">

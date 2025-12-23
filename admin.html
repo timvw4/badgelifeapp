@@ -20,9 +20,6 @@
           <strong>Gestion des badges</strong>
         </div>
       </div>
-      <div>
-        <a class="ghost" href="./index.html">← Retour app</a>
-      </div>
     </header>
 
     <!-- Section connexion admin -->
@@ -43,7 +40,10 @@
     <section id="admin-app" class="card hidden">
       <div class="admin-header">
         <h2>Badges</h2>
-        <button id="admin-logout" class="ghost">Se déconnecter</button>
+        <div style="display: flex; gap: 8px;">
+          <a href="./index.html" class="ghost">Revenir au profil</a>
+          <button id="admin-logout" class="ghost">Se déconnecter</button>
+        </div>
       </div>
       
       <!-- Section gestion des jetons -->

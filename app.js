@@ -43,6 +43,8 @@ const state = {
   badgeQuestionAnswered: false, // Flag pour indiquer si une réponse a été donnée au badge de la roue
   wheelBadgeIds: null, // Signature des badges dans la roue (pour éviter de remélanger inutilement)
   wheelOrder: [], // Ordre des éléments dans la roue
+  isClaimingTokens: false, // Verrou pour empêcher les appels multiples simultanés à claimDailyTokens
+  claimingDay: null, // Jour en cours de réclamation (pour éviter les doubles clics)
 };
 
 const els = {};
@@ -226,11 +228,13 @@ function cacheElements() {
   els.badgeAnswerMessage = document.getElementById('badge-answer-message');
   els.blockedBadgesSection = document.getElementById('blocked-badges-section');
   els.blockedBadgesList = document.getElementById('blocked-badges-list');
+  els.modifyBadgeOverlay = document.getElementById('modify-badge-overlay');
   els.tokensTooltip = document.getElementById('tokens-tooltip');
   els.spinButtonTooltip = document.getElementById('spin-button-tooltip');
   // Éléments du calendrier
   els.calendarBtn = document.getElementById('calendar-btn');
   els.calendarBadge = document.getElementById('calendar-badge');
+  els.wheelBadge = document.getElementById('wheel-badge');
   // Bouton calendrier déplacé dans le header (utilise calendar-btn)
   // els.calendarBtnWheel = document.getElementById('calendar-btn-wheel');
   // els.calendarBadgeWheel = document.getElementById('calendar-badge-wheel');
@@ -1100,6 +1104,30 @@ function showTokenRewardNotification(amount = 2, type = 'daily') {
   }, 3000);
 }
 
+// Affiche une notification "Jetons insuffisants"
+function showInsufficientTokensNotification() {
+  // Créer une infobulle temporaire
+  const notification = document.createElement('div');
+  notification.className = 'token-reward-notification insufficient-tokens-notification';
+  
+  notification.innerHTML = `
+    <div class="token-reward-content">
+      <span class="token-emoji">⚠️</span>
+      <span>Jetons insuffisants</span>
+    </div>
+  `;
+  document.body.appendChild(notification);
+  
+  // Animation d'apparition
+  setTimeout(() => notification.classList.add('show'), 10);
+  
+  // Disparition après 3 secondes
+  setTimeout(() => {
+    notification.classList.remove('show');
+    setTimeout(() => notification.remove(), 300);
+  }, 3000);
+}
+
 // Crée une animation légère lors de la récupération de jetons sur une case du calendrier
 function createTokenClaimAnimation(element, amount) {
   if (!element) return;
@@ -1151,6 +1179,71 @@ function createTokenClaimAnimation(element, amount) {
   }, 1500);
 }
 
+// Affiche une infobulle "Badge débloqué !" pour les badges non-débloqués
+function showBadgeUnlockedNotification() {
+  // Créer une infobulle temporaire
+  const notification = document.createElement('div');
+  notification.className = 'badge-unlocked-notification';
+  
+  notification.innerHTML = `
+    <div class="badge-unlocked-content">
+      <span class="badge-emoji-large">🎉</span>
+      <span>Badge débloqué !</span>
+    </div>
+  `;
+  document.body.appendChild(notification);
+  
+  // Animation d'apparition
+  setTimeout(() => notification.classList.add('show'), 10);
+  
+  // Disparition après 3 secondes
+  setTimeout(() => {
+    notification.classList.remove('show');
+    setTimeout(() => notification.remove(), 300);
+  }, 3000);
+}
+
+// Scroll vers un badge dans la section "Mon profil"
+function scrollToBadgeInProfile(badgeId) {
+  // Basculer vers l'onglet "Mon profil" si on n'y est pas déjà
+  const currentTab = document.querySelector('.tab-content:not(.hidden)');
+  if (!currentTab || currentTab.id !== 'my-badges') {
+    showTab('my-badges');
+  }
+  
+  // Attendre que le rendu soit terminé
+  setTimeout(() => {
+    // Re-rendre les badges pour s'assurer que le badge est affiché
+    renderMyBadges();
+    
+    // Attendre un peu plus pour que le DOM soit mis à jour
+    setTimeout(() => {
+      // Trouver la carte du badge dans "Mon profil"
+      const badgeCard = els.myBadgesList?.querySelector(`[data-badge-id="${badgeId}"]`);
+      
+      if (badgeCard) {
+        // Ajouter un effet visuel temporaire (highlight)
+        badgeCard.classList.add('badge-just-unlocked');
+        
+        // Scroller vers le badge avec un offset pour la navigation en bas
+        const offset = 100; // Espace pour la barre de navigation
+        const cardPosition = badgeCard.getBoundingClientRect().top + window.pageYOffset;
+        const offsetPosition = cardPosition - offset;
+        
+        window.scrollTo({
+          top: offsetPosition,
+          behavior: 'smooth'
+        });
+        
+        // Retirer l'effet visuel après 3 secondes
+        setTimeout(() => {
+          badgeCard.classList.remove('badge-just-unlocked');
+        }, 3000);
+      }
+    }, 100);
+  }, 100);
+}
+
 // Affiche une notification pour les 3 jetons d'inscription
 function showSignupTokensNotification() {
   // Créer une infobulle temporaire
@@ -1159,7 +1252,7 @@ function showSignupTokensNotification() {
   notification.innerHTML = `
     <div class="token-reward-content">
       <span class="token-emoji">🪙</span>
-      <span>Bienvenue ! Tu as reçu 3 jetons d'expérience pour t'être inscrit !</span>
+      <span>Bienvenue ! Tu as reçu 3 jetons pour t'être inscrit !</span>
     </div>
   `;
   document.body.appendChild(notification);
@@ -1204,6 +1297,9 @@ function updateTokensDisplay() {
       els.spinButton.style.cursor = '';
     }
   }
+  
+  // Mettre à jour la pastille sur le bouton de l'onglet roue
+  updateWheelBadge();
 }
 
 async function fetchBadges() {
@@ -2140,6 +2236,14 @@ function handleJokerBonus() {
     // Basculer vers l'onglet "Mes badges"
     showTab('my-badges');
     
+    // Scroll automatique vers le haut de la section "Ma collection"
+    setTimeout(() => {
+      const myBadgesSection = document.getElementById('my-badges');
+      if (myBadgesSection) {
+        myBadgesSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }, 100);
+    
     // Afficher un message d'instruction
     renderMyBadges();
   });
@@ -2533,8 +2637,22 @@ function renderBlockedBadges() {
     
     // Attacher l'événement au clic sur la carte pour ouvrir/fermer
     card.addEventListener('click', (e) => {
-      // Ne pas ouvrir si on clique sur le bouton
-      if (e.target.closest('.retry-badge-btn')) return;
+      // Ne pas ouvrir/fermer si on clique sur :
+      // - Le bouton retenter
+      // - Les boutons oui/non (bool-btn)
+      // - Les champs de formulaire (input, textarea, select)
+      // - Le conteneur de question
+      // - Les boutons de validation
+      if (e.target.closest('.retry-badge-btn') ||
+          e.target.closest('.bool-btn') ||
+          e.target.closest('input') ||
+          e.target.closest('textarea') ||
+          e.target.closest('select') ||
+          e.target.closest('.blocked-badge-question-container') ||
+          e.target.closest('button[type="submit"]') ||
+          e.target.closest('.badge-answer-form')) {
+        return;
+      }
       
       const details = card.querySelector('.blocked-badge-details');
       const isHidden = details.classList.contains('hidden');
@@ -2581,6 +2699,8 @@ async function handleRetryBadge(badge) {
   
   // Vérifier si l'utilisateur a des jetons
   if ((state.tokens || 0) < 1) {
+    // Afficher une notification "Jetons insuffisants"
+    showInsufficientTokensNotification();
     return;
   }
   
@@ -2730,7 +2850,8 @@ function showBadgeQuestionInCard(badge, card) {
   // Attacher les événements pour les boutons booléens
   const boolButtons = questionContainer.querySelectorAll('.bool-btn');
   boolButtons.forEach(btn => {
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation(); // Empêcher la propagation pour éviter la fermeture de la carte
       // Retirer la classe active de tous les boutons
       boolButtons.forEach(b => b.classList.remove('active'));
       // Ajouter la classe active au bouton cliqué
@@ -2749,10 +2870,22 @@ function showBadgeQuestionInCard(badge, card) {
   if (form) {
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
+      e.stopPropagation(); // Empêcher la propagation pour éviter la fermeture de la carte
       const messageDiv = form.querySelector('.message');
       // Créer un objet event factice pour handleBadgeAnswer
       const fakeEvent = { target: form, preventDefault: () => {} };
       await handleBadgeAnswer(fakeEvent, badge, null, messageDiv, card);
+    });
+    
+    // Empêcher la propagation des clics sur les champs de formulaire
+    const formInputs = form.querySelectorAll('input, textarea, select');
+    formInputs.forEach(input => {
+      input.addEventListener('click', (e) => {
+        e.stopPropagation();
+      });
+      input.addEventListener('focus', (e) => {
+        e.stopPropagation();
+      });
     });
   }
   
@@ -2777,8 +2910,8 @@ function handleModifyBadgeAnswer(badge) {
   const oldLevel = state.userBadgeLevels.get(badge.id);
   const oldAnswer = state.userBadgeAnswers.get(badge.id);
   
-  // Afficher le formulaire de réponse dans une modal
-  if (!els.badgeQuestionContainer) return;
+  // Afficher le formulaire de réponse dans l'overlay global
+  if (!els.modifyBadgeOverlay) return;
   
   state.badgeQuestionAnswered = false;
   
@@ -2786,8 +2919,8 @@ function handleModifyBadgeAnswer(badge) {
   const title = stripEmojis(badge.name || '');
   const config = parseConfig(badge.answer);
   
-  const card = els.badgeQuestionContainer.querySelector('.card');
-  if (!card) return;
+  const modal = els.modifyBadgeOverlay.querySelector('.modify-badge-modal .card');
+  if (!modal) return;
   
   // Générer le formulaire selon le type de badge
   let formContent = '';
@@ -2831,11 +2964,17 @@ function handleModifyBadgeAnswer(badge) {
     `;
   }
   
-  card.innerHTML = `
-    <h3 style="text-align: center; font-size: 60px; margin: 10px 0;">${emoji}</h3>
-    <p style="text-align: center; font-size: 18px; font-weight: bold;">${title}</p>
-    <p class="badge-question-text" style="text-align: center; margin: 15px 0;">${badge.question || ''}</p>
-    <p class="muted" style="text-align: center; font-size: 12px;">Réponse actuelle : ${oldAnswer || 'Aucune'}</p>
+  modal.innerHTML = `
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+      <h3 style="margin: 0; font-size: 20px;">Modifier le badge</h3>
+      <button id="modify-badge-close" class="ghost icon-btn" aria-label="Fermer" style="width: 32px; height: 32px; padding: 0; font-size: 20px;">✕</button>
+    </div>
+    <div style="text-align: center; margin-bottom: 20px;">
+      <div style="font-size: 60px; margin: 10px 0;">${emoji}</div>
+      <p style="font-size: 18px; font-weight: bold; margin: 10px 0;">${title}</p>
+      <p class="badge-question-text" style="margin: 15px 0;">${badge.question || ''}</p>
+      <p class="muted" style="font-size: 12px; margin-top: 10px;">Réponse actuelle : ${oldAnswer || 'Aucune'}</p>
+    </div>
     <form id="modify-badge-form" class="auth-form" style="margin-top: 15px;">
       <label>Nouvelle réponse</label>
       ${formContent}
@@ -2844,12 +2983,12 @@ function handleModifyBadgeAnswer(badge) {
     <p id="modify-badge-message" class="message" style="text-align: center;"></p>
   `;
   
-  els.badgeQuestionContainer.classList.remove('hidden');
+  els.modifyBadgeOverlay.classList.remove('hidden');
   
   // Attacher les événements pour les boutons boolean
   if (config?.type === 'boolean') {
-    const hiddenInput = card.querySelector('input[name="answer"]');
-    const boolBtns = card.querySelectorAll('.bool-btn');
+    const hiddenInput = modal.querySelector('input[name="answer"]');
+    const boolBtns = modal.querySelectorAll('.bool-btn');
     boolBtns.forEach(btn => {
         btn.addEventListener('click', () => {
         if (hiddenInput) hiddenInput.value = btn.getAttribute('data-bool') || '';
@@ -2859,9 +2998,26 @@ function handleModifyBadgeAnswer(badge) {
       });
     }
   
+  // Attacher le gestionnaire de fermeture
+  const closeBtn = modal.querySelector('#modify-badge-close');
+  if (closeBtn) {
+    closeBtn.addEventListener('click', () => {
+      closeModifyBadgeOverlay();
+    });
+  }
+  
+  // Attacher le gestionnaire de clic sur l'overlay (fermer si réponse donnée)
+  const overlayClickHandler = (e) => {
+    if (e.target === els.modifyBadgeOverlay && state.badgeQuestionAnswered) {
+      closeModifyBadgeOverlay();
+      els.modifyBadgeOverlay.removeEventListener('click', overlayClickHandler);
+    }
+  };
+  els.modifyBadgeOverlay.addEventListener('click', overlayClickHandler);
+  
   // Attacher le gestionnaire de soumission
-  const form = card.querySelector('#modify-badge-form');
-  const messageEl = card.querySelector('#modify-badge-message');
+  const form = modal.querySelector('#modify-badge-form');
+  const messageEl = modal.querySelector('#modify-badge-message');
   
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -2936,17 +3092,25 @@ function handleModifyBadgeAnswer(badge) {
     }
     
     state.badgeQuestionAnswered = true;
-    attachBadgeQuestionCloseHandler();
     
     // Re-rendre les badges après un délai
     setTimeout(() => {
-      closeBadgeQuestion();
+      closeModifyBadgeOverlay();
       renderMyBadges();
     }, 2500);
   });
-  
-  // Attacher le gestionnaire de fermeture
-  attachBadgeQuestionCloseHandler();
+}
+
+// Ferme l'overlay de modification de badge
+function closeModifyBadgeOverlay() {
+  if (els.modifyBadgeOverlay) {
+    els.modifyBadgeOverlay.classList.add('hidden');
+    const modal = els.modifyBadgeOverlay.querySelector('.modify-badge-modal .card');
+    if (modal) {
+      modal.innerHTML = '';
+    }
+  }
+  state.badgeQuestionAnswered = false;
 }
 
 function renderMyBadges() {
@@ -3062,6 +3226,7 @@ function renderMyBadges() {
 
       const card = document.createElement('article');
       card.className = `card-badge clickable compact all-badge-card my-catalog-card${unlocked ? '' : ' locked'}${isBlocked ? ' blocked' : ''}${isReblocked ? ' reblocked' : ''}`;
+      card.dataset.badgeId = badge.id; // Ajouter un identifiant pour pouvoir scroller vers le badge
 
       // Afficher les badges selon leur état :
       // - débloqués : normalement
@@ -3516,6 +3681,10 @@ async function handleBadgeAnswer(event, badge, providedAnswer = null, feedbackEl
       feedback.classList.remove('error');
       feedback.classList.add('success');
     }
+    // Afficher une infobulle "Badge débloqué !" pour les badges non-débloqués
+    showBadgeUnlockedNotification();
+    // Basculer vers l'onglet "Mon profil" et scroller vers le badge débloqué
+    scrollToBadgeInProfile(badge.id);
     // Mettre à jour la roue immédiatement
     renderWheelBadges();
     // Re-rendre les badges bloqués après un délai (pour laisser voir le message de succès)
@@ -4926,18 +5095,56 @@ function renderCalendar() {
     const dayStr = dayEl.getAttribute('data-day');
     console.log('Clic sur jour:', dayStr);
     
-    if (dayStr) {
-      const dayData = days.find(d => d.dateStr === dayStr);
-      console.log('Données du jour:', dayData);
-      if (dayData) {
-        if (dayData.state === 'bonus-available') {
-          console.log('Récupération du bonus hebdomadaire');
-          handleClaimBonus();
-        } else if (dayData.state === 'available') {
-          console.log('Récupération des jetons journaliers pour:', dayStr);
-          claimDailyTokens(dayStr);
-        }
-      }
+    if (!dayStr) return;
+    
+    // Vérifier si une réclamation est déjà en cours (verrou)
+    if (state.isClaimingTokens) {
+      console.warn('Une réclamation est déjà en cours, veuillez patienter...');
+      return;
+    }
+    
+    // Vérifier si ce jour est déjà en cours de réclamation
+    if (state.claimingDay === dayStr) {
+      console.warn('Ce jour est déjà en cours de réclamation');
+      return;
+    }
+    
+    // Vérifier directement le state actuel (pas seulement le tableau days)
+    // Cela évite les problèmes si l'utilisateur clique rapidement plusieurs fois
+    const isConnected = state.connectionDays && state.connectionDays.includes(dayStr);
+    const isClaimed = state.claimedDailyTokens && state.claimedDailyTokens.includes(dayStr);
+    const allDaysConnected = state.connectionDays && state.connectionDays.length === 7;
+    
+    // Vérifier aussi dans le profil pour éviter les problèmes de synchronisation
+    const isClaimedInProfile = Array.isArray(state.profile?.claimed_daily_tokens) && 
+                                state.profile.claimed_daily_tokens.includes(dayStr);
+    
+    if (isClaimed || isClaimedInProfile) {
+      console.warn('Jetons déjà récupérés pour ce jour');
+      renderCalendar();
+      return;
+    }
+    
+    // Vérifier si c'est le dimanche avec bonus disponible
+    // Le dimanche est le 7ème jour de la semaine (lundi = jour 0, dimanche = jour 6 dans le tableau)
+    const day = new Date(dayStr + 'T00:00:00');
+    const dayOfWeek = day.getDay(); // 0 = dimanche, 1 = lundi, etc.
+    const isSunday = dayOfWeek === 0; // Dimanche = 0
+    
+    if (isSunday && allDaysConnected && !state.weekBonusClaimed && !state.profile?.week_bonus_claimed) {
+      console.log('Récupération du bonus hebdomadaire');
+      handleClaimBonus();
+      return;
+    }
+    
+    // Vérifier que le jour est connecté et pas déjà réclamé
+    if (isConnected && !isClaimed && !isClaimedInProfile) {
+      console.log('Récupération des jetons journaliers pour:', dayStr);
+      claimDailyTokens(dayStr);
+    } else {
+      console.warn('Jour non disponible pour récupération:', { isConnected, isClaimed, isClaimedInProfile, dayStr });
+      // Re-rendre le calendrier pour mettre à jour l'affichage
+      renderCalendar();
     }
   };
   
@@ -4958,8 +5165,22 @@ async function claimDailyTokens(dayStr) {
     profile: !!state.profile,
     connectionDays: state.connectionDays,
     claimedDailyTokens: state.claimedDailyTokens,
-    tokens: state.tokens
+    tokens: state.tokens,
+    isClaimingTokens: state.isClaimingTokens,
+    claimingDay: state.claimingDay
   });
+  
+  // Vérifier le verrou : si une réclamation est déjà en cours, ignorer
+  if (state.isClaimingTokens) {
+    console.warn('Une réclamation est déjà en cours, ignorer ce nouvel appel');
+    return;
+  }
+  
+  // Vérifier si ce jour est déjà en cours de réclamation
+  if (state.claimingDay === dayStr) {
+    console.warn('Ce jour est déjà en cours de réclamation');
+    return;
+  }
   
   if (!state.user || !state.profile) {
     console.warn('Utilisateur ou profil non disponible');
@@ -4976,112 +5197,163 @@ async function claimDailyTokens(dayStr) {
     state.claimedDailyTokens = [];
   }
   
-  if (state.claimedDailyTokens.includes(dayStr)) {
+  // Vérifier si les jetons ont déjà été récupérés pour ce jour
+  // Vérifier à la fois dans le state local ET dans le profil (pour éviter les problèmes de synchronisation)
+  const isClaimedInState = state.claimedDailyTokens.includes(dayStr);
+  const isClaimedInProfile = Array.isArray(state.profile.claimed_daily_tokens) && 
+                             state.profile.claimed_daily_tokens.includes(dayStr);
+  
+  if (isClaimedInState || isClaimedInProfile) {
     console.warn('Jetons déjà récupérés pour ce jour');
+    // Recharger le profil depuis Supabase pour s'assurer de la synchronisation
+    await fetchProfile();
+    renderCalendar();
+    updateCalendarBadge();
     return;
   }
   
-  // Ajouter 2 jetons
-  const newTokens = (state.tokens || 0) + 2;
+  // ACTIVER LE VERROU : empêcher les appels multiples simultanés
+  state.isClaimingTokens = true;
+  state.claimingDay = dayStr;
   
-  // Mettre à jour les jetons récupérés
-  const updatedClaimed = [...state.claimedDailyTokens, dayStr];
+  try {
+    // IMPORTANT : Mettre à jour le state local IMMÉDIATEMENT pour éviter les doubles clics
+    // Cela empêche l'utilisateur de cliquer plusieurs fois avant que la sauvegarde soit terminée
+    const newTokens = (state.tokens || 0) + 2;
+    const updatedClaimed = [...state.claimedDailyTokens, dayStr];
+    
+    // Mettre à jour le state local AVANT la sauvegarde Supabase
+    state.tokens = newTokens;
+    state.profile.tokens = newTokens;
+    state.claimedDailyTokens = updatedClaimed;
+    if (!state.profile.claimed_daily_tokens) {
+      state.profile.claimed_daily_tokens = [];
+    }
+    state.profile.claimed_daily_tokens = updatedClaimed;
+    
+    // Re-rendre le calendrier immédiatement pour désactiver le bouton
+    renderCalendar();
+    updateCalendarBadge();
+    
+    console.log('Mise à jour des jetons (state local):', { newTokens, updatedClaimed });
   
-  console.log('Mise à jour des jetons:', { newTokens, updatedClaimed });
-  
-  // Mettre à jour dans Supabase
-  const { error } = await supabase
-    .from('profiles')
-    .update({ 
-      tokens: newTokens,
-      claimed_daily_tokens: updatedClaimed
-    })
-    .eq('id', state.user.id);
-  
-  if (error) {
-    console.error('Erreur lors de la réclamation des jetons journaliers:', error);
-    // Si la colonne n'existe pas, essayer sans
-    if (error.message && error.message.includes('claimed_daily_tokens')) {
-      console.warn('Colonne claimed_daily_tokens absente dans la base de données. Veuillez exécuter le script SQL add_tokens_columns.sql pour ajouter cette colonne.');
-      console.warn('En attendant, les jetons sont mis à jour mais les données de récupération sont stockées localement uniquement.');
-      
-      // Mettre à jour uniquement les jetons (sans la colonne claimed_daily_tokens)
-      const { error: retryError } = await supabase
-        .from('profiles')
-        .update({ tokens: newTokens })
-        .eq('id', state.user.id);
-      
-      if (!retryError) {
-        // Mettre à jour localement même si la colonne n'existe pas
-        state.tokens = newTokens;
-        state.profile.tokens = newTokens;
-        state.claimedDailyTokens = updatedClaimed;
-        if (!state.profile.claimed_daily_tokens) {
-          state.profile.claimed_daily_tokens = [];
-        }
-        state.profile.claimed_daily_tokens = updatedClaimed;
+    // Mettre à jour dans Supabase
+    const { error: updateError } = await supabase
+      .from('profiles')
+      .update({ 
+        tokens: newTokens,
+        claimed_daily_tokens: updatedClaimed
+      })
+      .eq('id', state.user.id);
+    
+    if (updateError) {
+      console.error('Erreur lors de la réclamation des jetons journaliers:', updateError);
+      // Si la colonne n'existe pas, essayer sans
+      if (updateError.message && updateError.message.includes('claimed_daily_tokens')) {
+        console.warn('Colonne claimed_daily_tokens absente dans la base de données. Veuillez exécuter le script SQL add_tokens_columns.sql pour ajouter cette colonne.');
+        console.warn('En attendant, les jetons sont mis à jour mais les données de récupération sont stockées localement uniquement.');
         
-        // Stocker aussi dans localStorage comme backup (si la colonne n'existe pas)
-        try {
-          localStorage.setItem(`claimed_tokens_${state.user.id}`, JSON.stringify(updatedClaimed));
-          console.log('Jetons sauvegardés dans localStorage comme backup');
-        } catch (e) {
-          console.warn('Impossible de stocker dans localStorage:', e);
-        }
+        // Mettre à jour uniquement les jetons (sans la colonne claimed_daily_tokens)
+        const { error: retryError } = await supabase
+          .from('profiles')
+          .update({ tokens: newTokens })
+          .eq('id', state.user.id);
         
-        // Animation sur la case du calendrier
-        const dayEl = els.calendarWeek?.querySelector(`[data-day="${dayStr}"]`);
-        if (dayEl) {
-          createTokenClaimAnimation(dayEl, 2);
+        if (!retryError) {
+          // Stocker aussi dans localStorage comme backup (si la colonne n'existe pas)
+          try {
+            localStorage.setItem(`claimed_tokens_${state.user.id}`, JSON.stringify(updatedClaimed));
+            console.log('Jetons sauvegardés dans localStorage comme backup');
+          } catch (e) {
+            console.warn('Impossible de stocker dans localStorage:', e);
+          }
+          
+          // Animation sur la case du calendrier
+          const dayEl = els.calendarWeek?.querySelector(`[data-day="${dayStr}"]`);
+          if (dayEl) {
+            createTokenClaimAnimation(dayEl, 2);
+          }
+          
+          // Mettre à jour l'affichage
+          updateTokensDisplay();
+          showTokenRewardNotification(2);
+        } else {
+          console.error('Erreur lors de la mise à jour des jetons:', retryError);
+          // En cas d'erreur, annuler les changements locaux
+          state.tokens = (state.tokens || 0) - 2;
+          state.profile.tokens = state.tokens;
+          state.claimedDailyTokens = state.claimedDailyTokens.filter(d => d !== dayStr);
+          state.profile.claimed_daily_tokens = state.claimedDailyTokens;
+          renderCalendar();
+          updateCalendarBadge();
         }
-        
-        // Mettre à jour l'affichage
-        updateTokensDisplay();
+      } else {
+        // En cas d'erreur, annuler les changements locaux
+        state.tokens = (state.tokens || 0) - 2;
+        state.profile.tokens = state.tokens;
+        state.claimedDailyTokens = state.claimedDailyTokens.filter(d => d !== dayStr);
+        state.profile.claimed_daily_tokens = state.claimedDailyTokens;
         renderCalendar();
         updateCalendarBadge();
-        showTokenRewardNotification(2);
-      } else {
-        console.error('Erreur lors de la mise à jour des jetons:', retryError);
       }
+    } else {
+      // Succès : sauvegarder aussi dans localStorage comme backup
+      try {
+        localStorage.setItem(`claimed_tokens_${state.user.id}`, JSON.stringify(updatedClaimed));
+        console.log('Jetons sauvegardés dans localStorage comme backup');
+      } catch (e) {
+        console.warn('Impossible de stocker dans localStorage:', e);
+      }
+      
+      // Recharger le profil depuis Supabase pour garantir la synchronisation
+      // Cela évite les problèmes si l'utilisateur rafraîchit la page
+      console.log('Jetons récupérés avec succès, rechargement du profil depuis Supabase...');
+      await fetchProfile();
+      
+      // Animation sur la case du calendrier
+      const dayEl = els.calendarWeek?.querySelector(`[data-day="${dayStr}"]`);
+      if (dayEl) {
+        createTokenClaimAnimation(dayEl, 2);
+      }
+      
+      // Mettre à jour l'affichage
+      updateTokensDisplay();
+      updateCalendarBadge(); // Mettre à jour la pastille du bouton calendrier
+      
+      // Afficher une notification
+      showTokenRewardNotification(2);
     }
-    return;
+  } finally {
+    // DÉSACTIVER LE VERROU : toujours libérer le verrou, même en cas d'erreur
+    state.isClaimingTokens = false;
+    state.claimingDay = null;
   }
-  
-  // Succès
-  console.log('Jetons récupérés avec succès');
-  state.tokens = newTokens;
-  state.profile.tokens = newTokens;
-  state.claimedDailyTokens = updatedClaimed;
-  state.profile.claimed_daily_tokens = updatedClaimed;
-  
-  // Animation sur la case du calendrier
-  const dayEl = els.calendarWeek?.querySelector(`[data-day="${dayStr}"]`);
-  if (dayEl) {
-    createTokenClaimAnimation(dayEl, 2);
-  }
-  
-  // Mettre à jour l'affichage
-  updateTokensDisplay();
-  renderCalendar(); // Re-rendre pour mettre à jour l'état
-  updateCalendarBadge(); // Mettre à jour la pastille du bouton calendrier
-  
-  // Afficher une notification
-  showTokenRewardNotification(2);
 }
 
 // Gère la réclamation du bonus de 3 jetons (depuis la case du dimanche)
 async function handleClaimBonus() {
   if (!state.user || !state.profile) return;
   
+  // Vérifier le verrou : si une réclamation est déjà en cours, ignorer
+  if (state.isClaimingTokens) {
+    console.warn('Une réclamation est déjà en cours, ignorer ce nouvel appel');
+    return;
+  }
+  
   // Vérifier que tous les jours sont connectés
-  if (state.connectionDays.length !== 7) {
+  if (!state.connectionDays || state.connectionDays.length !== 7) {
     console.warn('Tous les jours doivent être connectés pour récupérer le bonus');
     return;
   }
   
   // Vérifier que le bonus n'a pas déjà été récupéré
-  if (state.weekBonusClaimed) {
+  // Vérifier à la fois dans le state local ET dans le profil (pour éviter les problèmes de synchronisation)
+  if (state.weekBonusClaimed || state.profile?.week_bonus_claimed) {
     console.warn('Bonus déjà récupéré cette semaine');
+    // Recharger le profil depuis Supabase pour s'assurer de la synchronisation
+    await fetchProfile();
+    renderCalendar();
+    updateCalendarBadge();
     return;
   }
   
@@ -5093,24 +5365,17 @@ async function handleClaimBonus() {
   sunday.setDate(currentWeekStart.getDate() + 6); // Dimanche est le 7ème jour
   const sundayStr = sunday.toISOString().split('T')[0];
   
-  // Ajouter 3 jetons
-  const newTokens = (state.tokens || 0) + 3;
+  // ACTIVER LE VERROU : empêcher les appels multiples simultanés
+  state.isClaimingTokens = true;
+  state.claimingDay = sundayStr;
   
-  // Marquer le bonus comme récupéré et ajouter le dimanche aux jetons récupérés
-  const updatedClaimed = [...state.claimedDailyTokens, sundayStr];
-  
-  // Mettre à jour dans Supabase
-  const { error } = await supabase
-    .from('profiles')
-    .update({ 
-      tokens: newTokens,
-      week_bonus_available: false,
-      week_bonus_claimed: true,
-      claimed_daily_tokens: updatedClaimed
-    })
-    .eq('id', state.user.id);
-  
-  if (!error) {
+  try {
+    // IMPORTANT : Mettre à jour le state local IMMÉDIATEMENT pour éviter les doubles clics
+    // Cela empêche l'utilisateur de cliquer plusieurs fois avant que la sauvegarde soit terminée
+    const newTokens = (state.tokens || 0) + 3;
+    const updatedClaimed = [...(state.claimedDailyTokens || []), sundayStr];
+    
+    // Mettre à jour le state local AVANT la sauvegarde Supabase
     state.tokens = newTokens;
     state.profile.tokens = newTokens;
     state.canClaimBonus = false;
@@ -5118,24 +5383,71 @@ async function handleClaimBonus() {
     state.profile.week_bonus_available = false;
     state.profile.week_bonus_claimed = true;
     state.claimedDailyTokens = updatedClaimed;
+    if (!state.profile.claimed_daily_tokens) {
+      state.profile.claimed_daily_tokens = [];
+    }
     state.profile.claimed_daily_tokens = updatedClaimed;
     
-    // Animation sur la case du dimanche
-    const sundayEl = els.calendarWeek?.querySelector(`[data-day="${sundayStr}"]`);
-    if (sundayEl) {
-      createTokenClaimAnimation(sundayEl, 3);
-      createConfettiAnimation(sundayEl);
-    }
-    
-    // Mettre à jour l'affichage
-    updateTokensDisplay();
+    // Re-rendre le calendrier immédiatement pour désactiver le bouton
+    renderCalendar();
     updateCalendarBadge();
-    renderCalendar(); // Re-rendre pour mettre à jour l'état
     
-    // Afficher une notification
-    showTokenRewardNotification(3, 'bonus');
-  } else {
-    console.error('Erreur lors de la réclamation du bonus:', error);
+    // Mettre à jour dans Supabase
+    const { error } = await supabase
+      .from('profiles')
+      .update({ 
+        tokens: newTokens,
+        week_bonus_available: false,
+        week_bonus_claimed: true,
+        claimed_daily_tokens: updatedClaimed
+      })
+      .eq('id', state.user.id);
+    
+    if (error) {
+      console.error('Erreur lors de la réclamation du bonus:', error);
+      // En cas d'erreur, annuler les changements locaux
+      state.tokens = (state.tokens || 0) - 3;
+      state.profile.tokens = state.tokens;
+      state.canClaimBonus = true;
+      state.weekBonusClaimed = false;
+      state.profile.week_bonus_available = true;
+      state.profile.week_bonus_claimed = false;
+      state.claimedDailyTokens = state.claimedDailyTokens.filter(d => d !== sundayStr);
+      state.profile.claimed_daily_tokens = state.claimedDailyTokens;
+      renderCalendar();
+      updateCalendarBadge();
+    } else {
+      // Succès : sauvegarder aussi dans localStorage comme backup
+      try {
+        localStorage.setItem(`claimed_tokens_${state.user.id}`, JSON.stringify(updatedClaimed));
+        console.log('Bonus sauvegardé dans localStorage comme backup');
+      } catch (e) {
+        console.warn('Impossible de stocker dans localStorage:', e);
+      }
+      
+      // Recharger le profil depuis Supabase pour garantir la synchronisation
+      // Cela évite les problèmes si l'utilisateur rafraîchit la page
+      console.log('Bonus récupéré avec succès, rechargement du profil depuis Supabase...');
+      await fetchProfile();
+      
+      // Animation sur la case du dimanche
+      const sundayEl = els.calendarWeek?.querySelector(`[data-day="${sundayStr}"]`);
+      if (sundayEl) {
+        createTokenClaimAnimation(sundayEl, 3);
+        createConfettiAnimation(sundayEl);
+      }
+      
+      // Mettre à jour l'affichage
+      updateTokensDisplay();
+      updateCalendarBadge();
+      
+      // Afficher une notification
+      showTokenRewardNotification(3, 'bonus');
+    }
+  } finally {
+    // DÉSACTIVER LE VERROU : toujours libérer le verrou, même en cas d'erreur
+    state.isClaimingTokens = false;
+    state.claimingDay = null;
   }
 }
 
@@ -5239,6 +5551,22 @@ function updateCalendarBadge() {
       els.calendarBadge.classList.remove('hidden');
     } else {
       els.calendarBadge.classList.add('hidden');
+    }
+  }
+}
+
+// Met à jour la pastille sur le bouton de l'onglet roue
+function updateWheelBadge() {
+  if (els.wheelBadge) {
+    const hasTokens = (state.tokens || 0) >= 1;
+    
+    // Afficher la pastille uniquement si l'utilisateur a des jetons (peut tourner la roue)
+    if (hasTokens) {
+      els.wheelBadge.textContent = state.tokens || 0;
+      els.wheelBadge.classList.remove('hidden');
+    } else {
+      // Cacher la pastille si l'utilisateur n'a plus de jetons
+      els.wheelBadge.classList.add('hidden');
     }
   }
 }

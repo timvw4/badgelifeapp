@@ -109,9 +109,9 @@ body {
   }
   
   .app-logo-main {
-    height: 160px;
-    margin-bottom: -85px;
-    margin-top: 20px;
+    height: 190px;
+    margin-bottom: -90px;
+    margin-top: 15px;
   }
   
   .app-tagline-image {
@@ -1078,6 +1078,28 @@ button {
 .card-badge.expanded {
   border-color: var(--border);
 }
+
+/* Effet visuel pour un badge qui vient d'être débloqué */
+.card-badge.badge-just-unlocked {
+  animation: badgeUnlockPulse 0.6s ease-out;
+  border-color: var(--accent);
+  box-shadow: 0 0 20px rgba(6, 182, 212, 0.5);
+}
+
+@keyframes badgeUnlockPulse {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 0 rgba(6, 182, 212, 0);
+  }
+  50% {
+    transform: scale(1.05);
+    box-shadow: 0 0 30px rgba(6, 182, 212, 0.8);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 20px rgba(6, 182, 212, 0.5);
+  }
+}
 /* Surcharger la bordure pour les états spécifiques même quand la carte est ouverte */
 .my-catalog-card:not(.locked).expanded,
 .my-catalog-card.blocked.expanded,
@@ -1612,31 +1634,32 @@ button {
   /* Styles pour la roue et les jetons */
   .tokens-counter {
     position: relative;
-    display: flex;
+    display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 8px;
-    padding: 12px 20px;
-    background: rgba(6, 182, 212, 0.1);
-    border: 1px solid rgba(6, 182, 212, 0.3);
-    border-radius: 12px;
-    margin: 20px auto;
-    max-width: 200px;
+    gap: 6px;
+    padding: 8px 14px;
+    background: linear-gradient(135deg, rgba(251, 191, 36, 0.9), rgba(249, 115, 22, 0.9));
+    border: 1px solid rgba(251, 191, 36, 0.5);
+    border-radius: 10px;
+    margin: 0;
     animation: tokenAppear 0.5s ease-out;
     cursor: pointer;
     transition: all 0.2s ease;
+    flex-shrink: 0;
   }
 
   .tokens-counter:hover {
-    background: rgba(6, 182, 212, 0.15);
-    border-color: rgba(6, 182, 212, 0.5);
+    background: linear-gradient(135deg, rgba(251, 191, 36, 1), rgba(249, 115, 22, 1));
+    border-color: rgba(251, 191, 36, 0.7);
     transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(251, 191, 36, 0.3);
   }
 
 
   .tokens-tooltip {
     position: absolute;
-    bottom: calc(100% + 10px);
+    top: calc(100% + 10px);
     left: 50%;
     transform: translateX(-50%);
     max-width: 400px;
@@ -1653,6 +1676,14 @@ button {
     opacity: 0;
     pointer-events: none;
     transition: opacity 0.3s ease-out;
+  }
+
+  /* Ajuster la position de l'infobulle pour le compteur dans le header */
+  .section-header-with-actions .tokens-counter .tokens-tooltip {
+    top: calc(100% + 10px);
+    left: auto;
+    right: 0;
+    transform: translateX(0);
   }
 
   .tokens-tooltip:not(.hidden) {
@@ -1678,15 +1709,15 @@ button {
     color: var(--text);
   }
 
-  .token-emoji {
-    font-size: 24px;
+  .tokens-counter .token-emoji {
+    font-size: 18px;
     animation: tokenBounce 2s ease-in-out infinite;
   }
 
   .tokens-count {
-    font-size: 20px;
-    font-weight: 600;
-    color: var(--accent);
+    font-size: 16px;
+    font-weight: 700;
+    color: #0b1120;
   }
 
   @keyframes tokenAppear {
@@ -1707,6 +1738,14 @@ button {
     50% {
       transform: translateY(-5px);
     }
+  }
+
+  .wheel-title {
+    text-align: center;
+    font-size: 24px;
+    font-weight: 700;
+    margin: 24px 0 16px 0;
+    color: var(--text);
   }
 
   .wheel-container {
@@ -1878,6 +1917,48 @@ button {
   }
 
   .token-reward-content .token-emoji {
+    font-size: 28px;
+  }
+
+  .insufficient-tokens-notification {
+    background: linear-gradient(135deg, rgba(248, 113, 113, 0.95), rgba(239, 68, 68, 0.95));
+    border-color: rgba(248, 113, 113, 0.5);
+  }
+
+  .insufficient-tokens-notification .token-reward-content {
+    color: #0b1120;
+  }
+
+  .badge-unlocked-notification {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: linear-gradient(135deg, rgba(6, 182, 212, 0.95), rgba(139, 92, 246, 0.95));
+    border: 1px solid rgba(6, 182, 212, 0.5);
+    border-radius: 12px;
+    padding: 16px 24px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+    z-index: 1000;
+    opacity: 0;
+    transform: translateX(100%);
+    transition: all 0.3s ease-out;
+  }
+
+  .badge-unlocked-notification.show {
+    opacity: 1;
+    transform: translateX(0);
+  }
+
+  .badge-unlocked-content {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    color: #0b1120;
+    font-weight: 600;
+    font-size: 16px;
+  }
+
+  .badge-unlocked-content .badge-emoji-large {
     font-size: 28px;
   }
 
@@ -2790,12 +2871,36 @@ button {
   border-radius: 50%;
 }
 
+.bottom-nav-wheel {
+  position: relative;
+}
+
 .bottom-nav-wheel .wheel-logo {
   width: 48px;
   height: 48px;
   object-fit: contain;
   display: block;
   filter: brightness(0) invert(1); /* Rendre l'image blanche sur fond coloré */
+}
+
+.wheel-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  background: var(--accent);
+  color: var(--bg);
+  border-radius: 50%;
+  min-width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 0 6px;
+  box-shadow: 0 2px 8px rgba(6, 182, 212, 0.5);
+  z-index: 10;
+  border: 2px solid var(--bg);
 }
 
 /* Espacement pour éviter le chevauchement avec la barre de navigation */
@@ -2966,6 +3071,14 @@ button {
     height: 74px;
   }
   
+  .wheel-badge {
+    min-width: 22px;
+    height: 22px;
+    font-size: 12px;
+    top: -6px;
+    right: -6px;
+  }
+  
   #app-view {
     padding-bottom: 75px;
   }
@@ -3042,6 +3155,79 @@ button {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.5px;
+}
+
+/* Overlay global pour la modification de badge (Joker Bonus) */
+.modify-badge-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(4px);
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  opacity: 0;
+  transition: opacity 0.3s ease-out;
+  pointer-events: none;
+}
+
+.modify-badge-overlay:not(.hidden) {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.modify-badge-modal {
+  width: 100%;
+  max-width: 500px;
+  max-height: 90vh;
+  overflow-y: auto;
+  transform: scale(0.9);
+  transition: transform 0.3s ease-out;
+}
+
+.modify-badge-overlay:not(.hidden) .modify-badge-modal {
+  transform: scale(1);
+}
+
+.modify-badge-modal .card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 24px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+
+.modify-badge-modal .icon-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  transition: background 0.2s ease;
+}
+
+.modify-badge-modal .icon-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+/* Responsive pour mobile */
+@media (max-width: 768px) {
+  .modify-badge-overlay {
+    padding: 10px;
+  }
+  
+  .modify-badge-modal {
+    max-width: 100%;
+    max-height: 95vh;
+  }
+  
+  .modify-badge-modal .card {
+    padding: 20px;
+  }
 }
 
 /* Empêcher l'orientation horizontale sur mobile */
