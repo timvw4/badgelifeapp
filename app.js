@@ -5297,17 +5297,11 @@ async function claimDailyTokens(dayStr) {
         updateCalendarBadge();
       }
     } else {
-      // Succès : sauvegarder aussi dans localStorage comme backup
-      try {
-        localStorage.setItem(`claimed_tokens_${state.user.id}`, JSON.stringify(updatedClaimed));
-        console.log('Jetons sauvegardés dans localStorage comme backup');
-      } catch (e) {
-        console.warn('Impossible de stocker dans localStorage:', e);
-      }
+      // Succès : recharger le profil depuis Supabase pour s'assurer de la synchronisation
+      console.log('Jetons récupérés avec succès, rechargement du profil depuis Supabase...');
       
       // Recharger le profil depuis Supabase pour garantir la synchronisation
       // Cela évite les problèmes si l'utilisateur rafraîchit la page
-      console.log('Jetons récupérés avec succès, rechargement du profil depuis Supabase...');
       await fetchProfile();
       
       // Animation sur la case du calendrier
@@ -5417,17 +5411,11 @@ async function handleClaimBonus() {
       renderCalendar();
       updateCalendarBadge();
     } else {
-      // Succès : sauvegarder aussi dans localStorage comme backup
-      try {
-        localStorage.setItem(`claimed_tokens_${state.user.id}`, JSON.stringify(updatedClaimed));
-        console.log('Bonus sauvegardé dans localStorage comme backup');
-      } catch (e) {
-        console.warn('Impossible de stocker dans localStorage:', e);
-      }
+      // Succès : recharger le profil depuis Supabase pour s'assurer de la synchronisation
+      console.log('Bonus récupéré avec succès, rechargement du profil depuis Supabase...');
       
       // Recharger le profil depuis Supabase pour garantir la synchronisation
       // Cela évite les problèmes si l'utilisateur rafraîchit la page
-      console.log('Bonus récupéré avec succès, rechargement du profil depuis Supabase...');
       await fetchProfile();
       
       // Animation sur la case du dimanche
