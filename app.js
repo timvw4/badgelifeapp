@@ -38,6 +38,8 @@ const state = {
   connectionDays: [], // Array des dates de connexion de la semaine
   weekStartDate: null, // Date du lundi de la semaine en cours
   canClaimBonus: false, // Si les 3 jetons bonus sont disponibles (non réclamés)
+  claimedDailyTokens: [], // Array des dates où les jetons journaliers ont été récupérés
+  weekBonusClaimed: false, // Si le bonus hebdomadaire a été récupéré cette semaine
   badgeQuestionAnswered: false, // Flag pour indiquer si une réponse a été donnée au badge de la roue
   wheelBadgeIds: null, // Signature des badges dans la roue (pour éviter de remélanger inutilement)
   wheelOrder: [], // Ordre des éléments dans la roue
@@ -50,6 +52,7 @@ const els = {};
 const THEME_ORDER = [
   'Sport',
   'Voyage',
+  'Pays',
   'Relations',
   'Amour',
   'Études',
@@ -95,6 +98,30 @@ function pseudoToEmail(pseudo) {
   return `${cleaned || 'user'}@badgelife.dev`; // domaine valide pour Supabase
 }
 
+// Fonction pour ouvrir le drawer de profil
+function openProfileDrawer() {
+  if (!els.profilePanel || !els.profileOverlay) return;
+  els.profilePanel.classList.remove('hidden');
+  els.profileOverlay.classList.remove('hidden');
+  if (state.profile) {
+    if (els.profileName) els.profileName.value = state.profile.username || '';
+    updateAvatar(state.profile.avatar_url);
+  }
+  if (els.profilePassword) els.profilePassword.value = '';
+  if (els.profileMessage) els.profileMessage.textContent = ' ';
+}
+
+// Fonction pour fermer le drawer de profil
+function closeProfileDrawer() {
+  if (!els.profilePanel || !els.profileOverlay) return;
+  els.profilePanel.classList.add('hidden');
+  els.profileOverlay.classList.add('hidden');
+  // Fermer l'infobulle si elle est ouverte
+  if (els.profileNameTooltip) {
+    els.profileNameTooltip.classList.add('hidden');
+  }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   cacheElements();
   bindAllBadgesFilters();
@@ -135,10 +162,13 @@ function cacheElements() {
   els.profilePrivacyIndicator = document.getElementById('profile-privacy-indicator');
   els.profilePanel = document.getElementById('profile-panel');
   els.profileForm = document.getElementById('profile-form');
+  els.profileCloseBtn = document.getElementById('profile-close-btn');
+  els.profileOverlay = document.getElementById('profile-overlay');
   els.profileName = document.getElementById('profile-name');
   els.profilePassword = document.getElementById('profile-password');
   els.profileAvatar = document.getElementById('profile-avatar');
   els.profileMessage = document.getElementById('profile-message');
+  els.profileNameTooltip = document.getElementById('profile-name-tooltip');
   els.tabButtons = document.querySelectorAll('.tab-button[data-tab]');
   els.bottomNavItems = document.querySelectorAll('.bottom-nav-item[data-tab]');
   els.tabSections = {
@@ -199,6 +229,9 @@ function cacheElements() {
   // Éléments du calendrier
   els.calendarBtn = document.getElementById('calendar-btn');
   els.calendarBadge = document.getElementById('calendar-badge');
+  // Bouton calendrier déplacé dans le header (utilise calendar-btn)
+  // els.calendarBtnWheel = document.getElementById('calendar-btn-wheel');
+  // els.calendarBadgeWheel = document.getElementById('calendar-badge-wheel');
   els.calendarDrawer = document.getElementById('calendar-drawer');
   els.calendarOverlay = document.getElementById('calendar-overlay');
   els.calendarCloseBtn = document.getElementById('calendar-close-btn');
@@ -424,7 +457,7 @@ function attachSpinButtonTooltip() {
 
 // Attache les événements pour le calendrier
 function attachCalendarListeners() {
-  // Bouton pour ouvrir le calendrier
+  // Bouton pour ouvrir le calendrier (dans le header)
   if (els.calendarBtn) {
     els.calendarBtn.addEventListener('click', () => {
       openCalendarDrawer();
@@ -525,6 +558,11 @@ function attachFormListeners() {
     const userId = data.user?.id;
     if (userId) {
       // Donner 3 jetons aux nouveaux utilisateurs
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const currentWeekStart = getWeekStartDate(today);
+      const currentWeekStartStr = currentWeekStart.toISOString().split('T')[0];
+      
       await supabase.from('profiles').upsert({ 
         id: userId, 
         username, 
@@ -532,7 +570,12 @@ function attachFormListeners() {
         skill_points: 0, 
         rank: 'Minimaliste',
         tokens: 3,
-        last_token_date: null // Pas de date pour qu'ils reçoivent les jetons quotidiens au prochain minuit
+        last_token_date: null,
+        connection_days: [],
+        claimed_daily_tokens: [],
+        week_start_date: currentWeekStartStr,
+        week_bonus_available: false,
+        week_bonus_claimed: false
       });
     }
     state.session = data.session;
@@ -762,7 +805,7 @@ function resetState() {
   // Masquer le menu des réglages
   if (els.settingsMenu) els.settingsMenu.classList.add('hidden');
   // Masquer le panneau de profil
-  if (els.profilePanel) els.profilePanel.classList.add('hidden');
+  if (els.profilePanel) closeProfileDrawer();
   // Masquer le modal de profil communauté
   if (els.communityProfileModal) els.communityProfileModal.classList.add('hidden');
   // Masquer le conteneur de question de badge
@@ -927,10 +970,10 @@ async function loadAppData() {
 async function fetchProfile() {
   if (!state.user) return;
   // Essayer d'abord avec toutes les colonnes, sinon sans les nouvelles
-  let { data, error } = await supabase.from('profiles').select('username, badge_count, avatar_url, skill_points, rank, is_private, tokens, last_token_date, connection_days, week_start_date, week_bonus_available, badges_from_wheel').eq('id', state.user.id).single();
+  let { data, error } = await supabase.from('profiles').select('username, badge_count, avatar_url, skill_points, rank, is_private, tokens, last_token_date, connection_days, week_start_date, week_bonus_available, week_bonus_claimed, claimed_daily_tokens, badges_from_wheel').eq('id', state.user.id).single();
   
   // Si certaines colonnes n'existent pas, réessayer sans
-  if (error && error.message && (error.message.includes('is_private') || error.message.includes('tokens') || error.message.includes('last_token_date') || error.message.includes('connection_days') || error.message.includes('week_start_date') || error.message.includes('week_bonus_available') || error.message.includes('badges_from_wheel'))) {
+  if (error && error.message && (error.message.includes('is_private') || error.message.includes('tokens') || error.message.includes('last_token_date') || error.message.includes('connection_days') || error.message.includes('week_start_date') || error.message.includes('week_bonus_available') || error.message.includes('week_bonus_claimed') || error.message.includes('claimed_daily_tokens') || error.message.includes('badges_from_wheel'))) {
     const retry = await supabase.from('profiles').select('username, badge_count, avatar_url, skill_points, rank').eq('id', state.user.id).single();
     if (!retry.error) {
       data = retry.data;
@@ -944,13 +987,18 @@ async function fetchProfile() {
   }
   if (!data) {
     // Essayer d'insérer avec toutes les colonnes, sinon sans
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const currentWeekStart = getWeekStartDate(today);
+    const currentWeekStartStr = currentWeekStart.toISOString().split('T')[0];
+    
     const insertData = { id: state.user.id, username: 'Invité', badge_count: 0, avatar_url: null, skill_points: 0, rank: 'Minimaliste', tokens: 3 };
     try {
       await supabase.from('profiles').insert({ ...insertData, is_private: false });
-      state.profile = { ...insertData, is_private: false, tokens: 3, last_token_date: null, connection_days: [], week_start_date: null, week_bonus_available: false, badges_from_wheel: [] };
+      state.profile = { ...insertData, is_private: false, tokens: 3, last_token_date: null, connection_days: [], claimed_daily_tokens: [], week_start_date: currentWeekStartStr, week_bonus_available: false, week_bonus_claimed: false, badges_from_wheel: [] };
     } catch (e) {
       await supabase.from('profiles').insert(insertData);
-      state.profile = { ...insertData, is_private: false, tokens: 3, last_token_date: null, connection_days: [], week_start_date: null, week_bonus_available: false, badges_from_wheel: [] };
+      state.profile = { ...insertData, is_private: false, tokens: 3, last_token_date: null, connection_days: [], claimed_daily_tokens: [], week_start_date: currentWeekStartStr, week_bonus_available: false, week_bonus_claimed: false, badges_from_wheel: [] };
     }
   } else {
     state.profile = { 
@@ -959,8 +1007,10 @@ async function fetchProfile() {
       tokens: data.tokens ?? 3,
       last_token_date: data.last_token_date || null,
       connection_days: data.connection_days || [],
+      claimed_daily_tokens: data.claimed_daily_tokens || [],
       week_start_date: data.week_start_date || null,
       week_bonus_available: data.week_bonus_available ?? false,
+      week_bonus_claimed: data.week_bonus_claimed ?? false,
       badges_from_wheel: data.badges_from_wheel || []
     };
   }
@@ -1004,88 +1054,36 @@ async function saveBadgesFromWheel() {
   }
 }
 
-// Vérifie si on est passé à un nouveau jour (minuit) et attribue 2 jetons
-// Les jetons sont cumulables, mais seulement attribués lors de la PREMIÈRE connexion du jour
+// Enregistre la connexion du jour (sans attribuer de jetons automatiquement)
+// Les jetons doivent maintenant être récupérés manuellement dans le calendrier
 async function checkAndGrantTokens() {
   if (!state.user || !state.profile) return;
   
-  // Calculer la date d'aujourd'hui à minuit (format YYYY-MM-DD)
-  const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const todayStr = today.toISOString().split('T')[0]; // Format YYYY-MM-DD
+  // Mettre à jour le jour de connexion dans le calendrier
+  // Cela marque que l'utilisateur s'est connecté aujourd'hui
+  await checkAndUpdateConnectionDay();
   
-  // Récupérer la dernière date de jeton attribuée (ou null si première fois)
-  const lastTokenDateStr = state.profile.last_token_date || null;
-  
-  // Attribuer les jetons UNIQUEMENT si :
-  // 1. C'est la première connexion (last_token_date est null)
-  // 2. OU la dernière date de jeton est différente d'aujourd'hui (nouveau jour)
-  // Cela garantit qu'on ne donne les jetons qu'une seule fois par jour
-  if (!lastTokenDateStr || lastTokenDateStr !== todayStr) {
-    // Les jetons sont cumulables : on ajoute 2 aux jetons existants
-    const currentTokens = state.tokens || 0;
-    const newTokens = currentTokens + 2;
-    
-    // Mettre à jour dans Supabase
-    const { error } = await supabase
-      .from('profiles')
-      .update({ 
-        tokens: newTokens,
-        last_token_date: todayStr // Marquer qu'on a déjà donné les jetons aujourd'hui
-      })
-      .eq('id', state.user.id);
-    
-    if (!error) {
-      // Recharger le profil depuis la base de données pour s'assurer qu'on a les bonnes valeurs
-      // Cela protège contre les rafraîchissements multiples de page
-      const { data: updatedProfile, error: fetchError } = await supabase
-        .from('profiles')
-        .select('tokens, last_token_date')
-        .eq('id', state.user.id)
-        .single();
-      
-      if (!fetchError && updatedProfile) {
-        // Mettre à jour l'état local avec les valeurs de la base de données (source de vérité)
-        state.profile.tokens = updatedProfile.tokens;
-        state.profile.last_token_date = updatedProfile.last_token_date;
-        state.tokens = updatedProfile.tokens;
-        
-        // Vérifier si les jetons ont bien été attribués aujourd'hui
-        // (protection contre les cas où un autre processus aurait déjà mis à jour)
-        if (updatedProfile.last_token_date === todayStr && updatedProfile.tokens >= newTokens) {
-          // Afficher l'infobulle de récompense uniquement si c'est la première connexion du jour
-          showTokenRewardNotification();
-          
-          // Mettre à jour le jour de connexion dans le calendrier
-          await checkAndUpdateConnectionDay();
-        }
-        
-        updateTokensDisplay();
-      } else {
-        // En cas d'erreur de récupération, recharger le profil complet
-        await fetchProfile();
-      }
-    } else {
-      console.error('Erreur lors de la mise à jour des jetons:', error);
-      // Mettre à jour l'affichage même en cas d'erreur
-      updateTokensDisplay();
-    }
-  } else {
-    // L'utilisateur s'est déjà connecté aujourd'hui, pas de nouveaux jetons
-    // Mettre à jour l'affichage quand même
-    updateTokensDisplay();
-  }
+  // Mettre à jour l'affichage des jetons
+  updateTokensDisplay();
 }
 
 // Affiche une notification quand des jetons sont attribués
-function showTokenRewardNotification(amount = 2) {
+function showTokenRewardNotification(amount = 2, type = 'daily') {
   // Créer une infobulle temporaire
   const notification = document.createElement('div');
   notification.className = 'token-reward-notification';
+  
+  let message = '';
+  if (type === 'bonus') {
+    message = `+${amount} jeton${amount > 1 ? 's' : ''} bonus !`;
+  } else {
+    message = `+${amount} jeton${amount > 1 ? 's' : ''} d'expérience !`;
+  }
+  
   notification.innerHTML = `
     <div class="token-reward-content">
       <span class="token-emoji">🪙</span>
-      <span>+${amount} jeton${amount > 1 ? 's' : ''} ${amount === 3 ? 'reçus' : 'd\'expérience'} !</span>
+      <span>${message}</span>
     </div>
   `;
   document.body.appendChild(notification);
@@ -1098,6 +1096,57 @@ function showTokenRewardNotification(amount = 2) {
     notification.classList.remove('show');
     setTimeout(() => notification.remove(), 300);
   }, 3000);
+}
+
+// Crée une animation légère lors de la récupération de jetons sur une case du calendrier
+function createTokenClaimAnimation(element, amount) {
+  if (!element) return;
+  
+  // Animation de pulse et scale
+  element.style.transition = 'all 0.3s ease-out';
+  element.style.transform = 'scale(1.1)';
+  element.style.boxShadow = '0 0 20px rgba(6, 182, 212, 0.5)';
+  
+  setTimeout(() => {
+    element.style.transform = 'scale(1)';
+    element.style.boxShadow = '';
+    setTimeout(() => {
+      element.style.transition = '';
+    }, 300);
+  }, 300);
+  
+  // Afficher un indicateur visuel temporaire
+  const indicator = document.createElement('div');
+  indicator.className = 'token-claim-indicator';
+  indicator.textContent = `+${amount} 🪙`;
+  indicator.style.position = 'absolute';
+  indicator.style.top = '50%';
+  indicator.style.left = '50%';
+  indicator.style.transform = 'translate(-50%, -50%)';
+  indicator.style.color = '#06b6d4';
+  indicator.style.fontWeight = '700';
+  indicator.style.fontSize = '18px';
+  indicator.style.pointerEvents = 'none';
+  indicator.style.zIndex = '1000';
+  indicator.style.opacity = '0';
+  indicator.style.transition = 'all 0.5s ease-out';
+  
+  element.style.position = 'relative';
+  element.appendChild(indicator);
+  
+  // Animation d'apparition et disparition
+  setTimeout(() => {
+    indicator.style.opacity = '1';
+    indicator.style.transform = 'translate(-50%, -80%)';
+  }, 10);
+  
+  setTimeout(() => {
+    indicator.style.opacity = '0';
+    indicator.style.transform = 'translate(-50%, -120%)';
+    setTimeout(() => {
+      indicator.remove();
+    }, 500);
+  }, 1500);
 }
 
 // Affiche une notification pour les 3 jetons d'inscription
@@ -1170,13 +1219,15 @@ async function fetchBadges() {
       console.warn('Colonne emoji absente ? On retente sans emoji.', error);
       const retry = await supabase.from('badges').select(selectFallback);
       if (retry.error) {
-        console.error(retry.error);
+        console.error('Erreur lors du chargement des badges:', retry.error);
+        setMessage('Erreur lors du chargement des badges depuis Supabase. Vérifiez que la table "badges" existe et contient des données.', true);
       } else {
         data = retry.data;
       }
     }
 
     if (data) {
+      console.log(`✅ ${data.length} badges chargés depuis Supabase`);
       state.badges = data;
       buildBadgeMaps();
       return;
@@ -1186,10 +1237,11 @@ async function fetchBadges() {
   // Fallback local
   const localBadges = await loadLocalBadges();
   if (!localBadges.length && !useLocalOnly) {
-    setMessage('Impossible de charger les badges.', true);
+    setMessage('Impossible de charger les badges. Vérifiez que la table "badges" existe dans Supabase et contient des données.', true);
   }
   state.badges = localBadges;
   buildBadgeMaps();
+  console.log(`✅ ${localBadges.length} badges chargés (mode local)`);
 }
 
 function isLocalBadgesMode() {
@@ -1456,7 +1508,8 @@ async function fetchIdeas() {
 }
 function render() {
   if (state.profile) {
-    els.profileUsername.textContent = state.profile.username;
+    // Les éléments du header ont été supprimés, on met à jour uniquement ceux qui existent
+    if (els.profileUsername) els.profileUsername.textContent = state.profile.username;
     if (els.profileName) els.profileName.value = state.profile.username;
     updateAvatar(state.profile.avatar_url);
     updateCounters(false);
@@ -2897,9 +2950,16 @@ function handleModifyBadgeAnswer(badge) {
 function renderMyBadges() {
   // On affiche uniquement les badges qui ont été répondu (débloqués, bloqués, ou rebloqués)
   // Les badges jamais répondu ne sont pas affichés
+  if (!els.myBadgesList) {
+    console.error('❌ els.myBadgesList n\'existe pas !');
+    return;
+  }
+  
   const allBadges = state.badges.slice();
+  console.log(`🔍 renderMyBadges: ${allBadges.length} badges au total`);
+  
   if (!allBadges.length) {
-    els.myBadgesList.innerHTML = '<p class="muted">Aucun badge pour le moment.</p>';
+    els.myBadgesList.innerHTML = '<p class="muted">Aucun badge pour le moment. Vérifiez que la table "badges" existe dans Supabase et contient des données.</p>';
     return;
   }
   
@@ -2931,7 +2991,7 @@ function renderMyBadges() {
   }
 }
 
-  // Filtrer les badges : ne garder que ceux qui sont débloqués OU rebloqués
+  // Filtrer les badges : afficher tous les badges débloqués ET tous les badges qui ont été répondu
   const visibleBadges = allBadges.filter(badge => {
     const unlocked = state.userBadges.has(badge.id);
     const userAnswer = state.userBadgeAnswers.get(badge.id);
@@ -2939,8 +2999,8 @@ function renderMyBadges() {
     const wasEverUnlocked = state.wasEverUnlocked.has(badge.id);
     const isBlocked = !unlocked && hasAnswer;
     const isReblocked = isBlocked && wasEverUnlocked;
-    // Afficher uniquement si débloqué OU rebloqué
-    return unlocked || isReblocked;
+    // Afficher si débloqué OU si une réponse a été donnée (même si bloqué)
+    return unlocked || hasAnswer;
   });
 
   if (!visibleBadges.length) {
@@ -3975,14 +4035,42 @@ function attachProfileListeners() {
   if (!els.editProfileBtn || !els.profileForm) return;
   els.editProfileBtn.addEventListener('click', () => {
     const isHidden = els.profilePanel.classList.contains('hidden');
-    els.profilePanel.classList.toggle('hidden', !isHidden);
-    if (state.profile) {
-      els.profileName.value = state.profile.username || '';
-      updateAvatar(state.profile.avatar_url);
+    if (isHidden) {
+      openProfileDrawer();
+    } else {
+      closeProfileDrawer();
     }
-    els.profilePassword.value = '';
-    els.profileMessage.textContent = isHidden ? ' ' : '';
   });
+
+  // Fermer avec la croix
+  if (els.profileCloseBtn) {
+    els.profileCloseBtn.addEventListener('click', closeProfileDrawer);
+  }
+
+  // Fermer en cliquant sur l'overlay
+  if (els.profileOverlay) {
+    els.profileOverlay.addEventListener('click', closeProfileDrawer);
+  }
+
+  // Afficher l'infobulle au clic sur le champ pseudo
+  if (els.profileName && els.profileNameTooltip) {
+    els.profileName.addEventListener('click', () => {
+      els.profileNameTooltip.classList.remove('hidden');
+      // Masquer l'infobulle après 3 secondes
+      setTimeout(() => {
+        if (els.profileNameTooltip) {
+          els.profileNameTooltip.classList.add('hidden');
+        }
+      }, 3000);
+    });
+
+    // Masquer l'infobulle si on clique ailleurs
+    document.addEventListener('click', (e) => {
+      if (els.profileNameTooltip && !els.profileName.contains(e.target) && !els.profileNameTooltip.contains(e.target)) {
+        els.profileNameTooltip.classList.add('hidden');
+      }
+    });
+  }
 
   if (els.profileAvatar) {
     els.profileAvatar.addEventListener('change', (e) => {
@@ -4063,7 +4151,7 @@ async function handleProfileUpdate(e) {
   setProfileMessage('Profil mis à jour.', false);
   // Ferme le panneau profil après enregistrement réussi
   if (els.profilePanel) {
-    els.profilePanel.classList.add('hidden');
+    closeProfileDrawer();
   }
   await fetchCommunity(); // rafraîchit l’onglet communauté pour afficher l’avatar
 }
@@ -4512,13 +4600,14 @@ async function updateCounters(syncProfile = false) {
     }
   });
   
+  // Les éléments du header ont été supprimés, on met à jour uniquement ceux qui existent
   if (els.badgeCount) {
     els.badgeCount.innerHTML = `${badgeCount} <span class="badge-total">/ ${totalBadges}</span>`;
   }
   if (els.skillCount) els.skillCount.textContent = `${totalSkillPoints}`;
   state.currentSkillPoints = totalSkillPoints;
   
-  // Rang
+  // Rang (uniquement si l'élément existe, car le header a été supprimé)
   const rankMeta = getRankMeta(totalSkillPoints);
   if (els.profileRank) {
     els.profileRank.textContent = formatRankText(rankMeta.name);
@@ -4536,7 +4625,17 @@ async function updateCounters(syncProfile = false) {
     els.profileSectionUsername.textContent = state.profile.username || 'Utilisateur';
   }
   if (els.profileSectionBadgeCount) {
-    els.profileSectionBadgeCount.textContent = badgeCount;
+    // Calculer le total de badges (même logique que dans updateCounters)
+    let totalBadges = 0;
+    const allBadges = state.badges || [];
+    allBadges.forEach(badge => {
+      if (!isGhostBadge(badge)) {
+        // Badge normal : toujours compté
+        totalBadges++;
+      }
+    });
+    // Afficher le nombre de badges avec le total (ex: "5 / 43")
+    els.profileSectionBadgeCount.innerHTML = `${badgeCount}<span class="badge-total"> / ${totalBadges}</span>`;
   }
   if (els.profileSectionSkillCount) {
     els.profileSectionSkillCount.textContent = totalSkillPoints;
@@ -4595,17 +4694,24 @@ async function loadConnectionDays() {
     const savedWeekStartStr = savedWeekStart.toISOString().split('T')[0];
     
     if (savedWeekStartStr !== currentWeekStartStr) {
-      // Nouvelle semaine : réinitialiser les jours de connexion
+      // Nouvelle semaine : réinitialiser les jours de connexion ET les jetons récupérés
       state.connectionDays = [];
+      state.claimedDailyTokens = [];
+      state.weekBonusClaimed = false;
       state.weekStartDate = currentWeekStartStr;
       state.profile.connection_days = [];
+      state.profile.claimed_daily_tokens = [];
+      state.profile.week_bonus_claimed = false;
       state.profile.week_start_date = currentWeekStartStr;
       
-      // Sauvegarder dans Supabase
+      // Sauvegarder dans Supabase (les jetons non récupérés sont perdus)
       await supabase
         .from('profiles')
         .update({ 
           connection_days: [],
+          claimed_daily_tokens: [],
+          week_bonus_available: false,
+          week_bonus_claimed: false,
           week_start_date: currentWeekStartStr
         })
         .eq('id', state.user.id);
@@ -4619,13 +4725,50 @@ async function loadConnectionDays() {
   } else {
     // Pas de semaine enregistrée : initialiser
     state.connectionDays = [];
+    state.claimedDailyTokens = [];
+    state.weekBonusClaimed = false;
     state.weekStartDate = currentWeekStartStr;
     state.profile.connection_days = [];
+    state.profile.claimed_daily_tokens = [];
+    state.profile.week_bonus_claimed = false;
     state.profile.week_start_date = currentWeekStartStr;
   }
   
+  // Charger les jetons récupérés depuis le profil
+  if (!state.profile.claimed_daily_tokens) {
+    state.profile.claimed_daily_tokens = [];
+  }
+  state.claimedDailyTokens = Array.isArray(state.profile.claimed_daily_tokens)
+    ? state.profile.claimed_daily_tokens
+    : [];
+  
+  // Si la colonne n'existe pas dans la base, charger depuis localStorage comme backup
+  if (state.claimedDailyTokens.length === 0 && state.user) {
+    try {
+      const stored = localStorage.getItem(`claimed_tokens_${state.user.id}`);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed)) {
+          state.claimedDailyTokens = parsed;
+          state.profile.claimed_daily_tokens = parsed;
+        }
+      }
+    } catch (e) {
+      console.warn('Erreur lors du chargement depuis localStorage:', e);
+    }
+  }
+  
+  state.weekBonusClaimed = Boolean(state.profile.week_bonus_claimed);
+  
   // Vérifier si le bonus est disponible (non réclamé)
-  state.canClaimBonus = state.profile.week_bonus_available ?? false;
+  state.canClaimBonus = state.connectionDays.length === 7 && !state.weekBonusClaimed;
+  
+  console.log('loadConnectionDays - État chargé:', {
+    connectionDays: state.connectionDays,
+    claimedDailyTokens: state.claimedDailyTokens,
+    weekBonusClaimed: state.weekBonusClaimed,
+    canClaimBonus: state.canClaimBonus
+  });
   
   // Rendre le calendrier
   renderCalendar();
@@ -4646,8 +4789,12 @@ async function checkAndUpdateConnectionDay() {
   if (state.weekStartDate !== currentWeekStartStr) {
     // Nouvelle semaine : réinitialiser
     state.connectionDays = [];
+    state.claimedDailyTokens = [];
+    state.weekBonusClaimed = false;
     state.weekStartDate = currentWeekStartStr;
     state.profile.connection_days = [];
+    state.profile.claimed_daily_tokens = [];
+    state.profile.week_bonus_claimed = false;
     state.profile.week_start_date = currentWeekStartStr;
   }
   
@@ -4685,10 +4832,15 @@ function renderCalendar() {
   
   const today = new Date();
   today.setHours(0, 0, 0, 0);
+  const todayStr = today.toISOString().split('T')[0];
   const currentWeekStart = getWeekStartDate(today);
   
   const dayNames = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
   const days = [];
+  
+  // Vérifier si tous les jours sont connectés pour le bonus hebdomadaire
+  const allDaysConnected = state.connectionDays.length === 7;
+  const isSunday = (dayIndex) => dayIndex === 6; // Dimanche est le 7ème jour (index 6)
   
   // Générer les 7 jours de la semaine (lundi à dimanche)
   for (let i = 0; i < 7; i++) {
@@ -4696,47 +4848,263 @@ function renderCalendar() {
     day.setDate(currentWeekStart.getDate() + i);
     const dayStr = day.toISOString().split('T')[0];
     const isConnected = state.connectionDays.includes(dayStr);
+    const isClaimed = state.claimedDailyTokens.includes(dayStr);
+    const isToday = dayStr === todayStr;
+    
+    // Déterminer l'état du jour
+    let dayState = 'not-available'; // Par défaut : non disponible
+    let clickable = false;
+    let tokenInfo = '';
+    
+    if (isConnected) {
+      if (isClaimed) {
+        dayState = 'claimed'; // Déjà récupéré
+        clickable = false;
+        tokenInfo = '✓ Récupéré';
+      } else {
+        dayState = 'available'; // Disponible pour récupération
+        clickable = true;
+        tokenInfo = '🪙 +2';
+      }
+    } else {
+      dayState = 'not-available'; // Pas de connexion ce jour
+      clickable = false;
+      tokenInfo = '';
+    }
+    
+    // Pour le dimanche : vérifier le bonus hebdomadaire (priorité sur les jetons journaliers)
+    if (isSunday(i) && allDaysConnected) {
+      if (state.weekBonusClaimed) {
+        dayState = 'bonus-claimed';
+        clickable = false;
+        tokenInfo = '✓ Bonus récupéré';
+      } else {
+        // Bonus disponible (remplace les jetons journaliers du dimanche)
+        dayState = 'bonus-available';
+        clickable = true;
+        tokenInfo = '🪙 +3 bonus';
+      }
+    }
     
     days.push({
       name: dayNames[i],
       date: day.getDate(),
       dateStr: dayStr,
-      connected: isConnected
+      connected: isConnected,
+      state: dayState,
+      clickable: clickable,
+      tokenInfo: tokenInfo,
+      isToday: isToday
     });
   }
   
-  // Générer le HTML
+  // Générer le HTML avec les états et les clics
   els.calendarWeek.innerHTML = days.map(day => `
-    <div class="calendar-day ${day.connected ? 'connected' : 'not-connected'}">
+    <div class="calendar-day ${day.state} ${day.clickable ? 'clickable' : ''} ${day.isToday ? 'today' : ''}" 
+         ${day.clickable ? `data-day="${day.dateStr}"` : ''}>
       <span class="calendar-day-name">${day.name}</span>
       <span class="calendar-day-date">${day.date}</span>
       <span class="calendar-day-icon">${day.connected ? '✓' : '✗'}</span>
+      ${day.tokenInfo ? `<span class="calendar-day-tokens">${day.tokenInfo}</span>` : ''}
     </div>
   `).join('');
   
-  // Afficher/cacher le bouton bonus
-  if (els.claimBonusBtn) {
-    if (state.canClaimBonus) {
-      els.claimBonusBtn.classList.remove('hidden');
-    } else {
-      els.claimBonusBtn.classList.add('hidden');
+  // Utiliser la délégation d'événements pour éviter les problèmes de duplication
+  // Supprimer l'ancien gestionnaire d'événements s'il existe
+  if (els.calendarWeek._clickHandler) {
+    els.calendarWeek.removeEventListener('click', els.calendarWeek._clickHandler);
+  }
+  
+  // Créer un nouveau gestionnaire d'événements
+  els.calendarWeek._clickHandler = (e) => {
+    const dayEl = e.target.closest('.calendar-day.clickable');
+    if (!dayEl) return;
+    
+    e.stopPropagation();
+    const dayStr = dayEl.getAttribute('data-day');
+    console.log('Clic sur jour:', dayStr);
+    
+    if (dayStr) {
+      const dayData = days.find(d => d.dateStr === dayStr);
+      console.log('Données du jour:', dayData);
+      if (dayData) {
+        if (dayData.state === 'bonus-available') {
+          console.log('Récupération du bonus hebdomadaire');
+          handleClaimBonus();
+        } else if (dayData.state === 'available') {
+          console.log('Récupération des jetons journaliers pour:', dayStr);
+          claimDailyTokens(dayStr);
+        }
+      }
     }
+  };
+  
+  // Attacher le gestionnaire d'événements au conteneur
+  els.calendarWeek.addEventListener('click', els.calendarWeek._clickHandler);
+  
+  // Cacher le bouton bonus (maintenant intégré dans la case du dimanche)
+  if (els.claimBonusBtn) {
+    els.claimBonusBtn.classList.add('hidden');
   }
 }
 
-// Gère la réclamation du bonus de 3 jetons
-async function handleClaimBonus() {
-  if (!state.user || !state.canClaimBonus) return;
+// Récupère les jetons journaliers pour un jour spécifique
+async function claimDailyTokens(dayStr) {
+  console.log('claimDailyTokens appelé pour:', dayStr);
+  console.log('State:', { 
+    user: !!state.user, 
+    profile: !!state.profile,
+    connectionDays: state.connectionDays,
+    claimedDailyTokens: state.claimedDailyTokens,
+    tokens: state.tokens
+  });
   
-  // Ajouter 3 jetons
-  const newTokens = (state.tokens || 0) + 3;
+  if (!state.user || !state.profile) {
+    console.warn('Utilisateur ou profil non disponible');
+    return;
+  }
+  
+  // Vérifier que le jour est disponible (connecté et pas déjà récupéré)
+  if (!state.connectionDays || !state.connectionDays.includes(dayStr)) {
+    console.warn('Jour non connecté, impossible de récupérer les jetons. Jour:', dayStr, 'Jours connectés:', state.connectionDays);
+    return;
+  }
+  
+  if (!state.claimedDailyTokens) {
+    state.claimedDailyTokens = [];
+  }
+  
+  if (state.claimedDailyTokens.includes(dayStr)) {
+    console.warn('Jetons déjà récupérés pour ce jour');
+    return;
+  }
+  
+  // Ajouter 2 jetons
+  const newTokens = (state.tokens || 0) + 2;
+  
+  // Mettre à jour les jetons récupérés
+  const updatedClaimed = [...state.claimedDailyTokens, dayStr];
+  
+  console.log('Mise à jour des jetons:', { newTokens, updatedClaimed });
   
   // Mettre à jour dans Supabase
   const { error } = await supabase
     .from('profiles')
     .update({ 
       tokens: newTokens,
-      week_bonus_available: false
+      claimed_daily_tokens: updatedClaimed
+    })
+    .eq('id', state.user.id);
+  
+  if (error) {
+    console.error('Erreur lors de la réclamation des jetons journaliers:', error);
+    // Si la colonne n'existe pas, essayer sans
+    if (error.message && error.message.includes('claimed_daily_tokens')) {
+      console.warn('Colonne claimed_daily_tokens absente dans la base de données. Veuillez exécuter le script SQL add_tokens_columns.sql pour ajouter cette colonne.');
+      console.warn('En attendant, les jetons sont mis à jour mais les données de récupération sont stockées localement uniquement.');
+      
+      // Mettre à jour uniquement les jetons (sans la colonne claimed_daily_tokens)
+      const { error: retryError } = await supabase
+        .from('profiles')
+        .update({ tokens: newTokens })
+        .eq('id', state.user.id);
+      
+      if (!retryError) {
+        // Mettre à jour localement même si la colonne n'existe pas
+        state.tokens = newTokens;
+        state.profile.tokens = newTokens;
+        state.claimedDailyTokens = updatedClaimed;
+        if (!state.profile.claimed_daily_tokens) {
+          state.profile.claimed_daily_tokens = [];
+        }
+        state.profile.claimed_daily_tokens = updatedClaimed;
+        
+        // Stocker aussi dans localStorage comme backup (si la colonne n'existe pas)
+        try {
+          localStorage.setItem(`claimed_tokens_${state.user.id}`, JSON.stringify(updatedClaimed));
+          console.log('Jetons sauvegardés dans localStorage comme backup');
+        } catch (e) {
+          console.warn('Impossible de stocker dans localStorage:', e);
+        }
+        
+        // Animation sur la case du calendrier
+        const dayEl = els.calendarWeek?.querySelector(`[data-day="${dayStr}"]`);
+        if (dayEl) {
+          createTokenClaimAnimation(dayEl, 2);
+        }
+        
+        // Mettre à jour l'affichage
+        updateTokensDisplay();
+        renderCalendar();
+        updateCalendarBadge();
+        showTokenRewardNotification(2);
+      } else {
+        console.error('Erreur lors de la mise à jour des jetons:', retryError);
+      }
+    }
+    return;
+  }
+  
+  // Succès
+  console.log('Jetons récupérés avec succès');
+  state.tokens = newTokens;
+  state.profile.tokens = newTokens;
+  state.claimedDailyTokens = updatedClaimed;
+  state.profile.claimed_daily_tokens = updatedClaimed;
+  
+  // Animation sur la case du calendrier
+  const dayEl = els.calendarWeek?.querySelector(`[data-day="${dayStr}"]`);
+  if (dayEl) {
+    createTokenClaimAnimation(dayEl, 2);
+  }
+  
+  // Mettre à jour l'affichage
+  updateTokensDisplay();
+  renderCalendar(); // Re-rendre pour mettre à jour l'état
+  updateCalendarBadge(); // Mettre à jour la pastille du bouton calendrier
+  
+  // Afficher une notification
+  showTokenRewardNotification(2);
+}
+
+// Gère la réclamation du bonus de 3 jetons (depuis la case du dimanche)
+async function handleClaimBonus() {
+  if (!state.user || !state.profile) return;
+  
+  // Vérifier que tous les jours sont connectés
+  if (state.connectionDays.length !== 7) {
+    console.warn('Tous les jours doivent être connectés pour récupérer le bonus');
+    return;
+  }
+  
+  // Vérifier que le bonus n'a pas déjà été récupéré
+  if (state.weekBonusClaimed) {
+    console.warn('Bonus déjà récupéré cette semaine');
+    return;
+  }
+  
+  // Trouver la date du dimanche de la semaine
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const currentWeekStart = getWeekStartDate(today);
+  const sunday = new Date(currentWeekStart);
+  sunday.setDate(currentWeekStart.getDate() + 6); // Dimanche est le 7ème jour
+  const sundayStr = sunday.toISOString().split('T')[0];
+  
+  // Ajouter 3 jetons
+  const newTokens = (state.tokens || 0) + 3;
+  
+  // Marquer le bonus comme récupéré et ajouter le dimanche aux jetons récupérés
+  const updatedClaimed = [...state.claimedDailyTokens, sundayStr];
+  
+  // Mettre à jour dans Supabase
+  const { error } = await supabase
+    .from('profiles')
+    .update({ 
+      tokens: newTokens,
+      week_bonus_available: false,
+      week_bonus_claimed: true,
+      claimed_daily_tokens: updatedClaimed
     })
     .eq('id', state.user.id);
   
@@ -4744,38 +5112,26 @@ async function handleClaimBonus() {
     state.tokens = newTokens;
     state.profile.tokens = newTokens;
     state.canClaimBonus = false;
+    state.weekBonusClaimed = true;
     state.profile.week_bonus_available = false;
+    state.profile.week_bonus_claimed = true;
+    state.claimedDailyTokens = updatedClaimed;
+    state.profile.claimed_daily_tokens = updatedClaimed;
     
-    // Animation de confettis sur le bouton
-    if (els.claimBonusBtn) {
-      createConfettiAnimation(els.claimBonusBtn);
+    // Animation sur la case du dimanche
+    const sundayEl = els.calendarWeek?.querySelector(`[data-day="${sundayStr}"]`);
+    if (sundayEl) {
+      createTokenClaimAnimation(sundayEl, 3);
+      createConfettiAnimation(sundayEl);
     }
     
     // Mettre à jour l'affichage
     updateTokensDisplay();
     updateCalendarBadge();
-    if (els.claimBonusBtn) {
-      // Attendre un peu avant de cacher le bouton pour voir l'animation
-      setTimeout(() => {
-        els.claimBonusBtn.classList.add('hidden');
-      }, 1500);
-    }
+    renderCalendar(); // Re-rendre pour mettre à jour l'état
     
     // Afficher une notification
-    const notification = document.createElement('div');
-    notification.className = 'token-reward-notification';
-    notification.innerHTML = `
-      <div class="token-reward-content">
-        <span class="token-emoji">🪙</span>
-        <span>+3 jetons bonus !</span>
-      </div>
-    `;
-    document.body.appendChild(notification);
-    setTimeout(() => notification.classList.add('show'), 10);
-    setTimeout(() => {
-      notification.classList.remove('show');
-      setTimeout(() => notification.remove(), 300);
-    }, 3000);
+    showTokenRewardNotification(3, 'bonus');
   } else {
     console.error('Erreur lors de la réclamation du bonus:', error);
   }
@@ -4858,12 +5214,30 @@ function createConfettiAnimation(element) {
 
 // Met à jour la pastille sur le bouton calendrier
 function updateCalendarBadge() {
-  if (!els.calendarBadge) return;
-  
-  if (state.canClaimBonus) {
-    els.calendarBadge.classList.remove('hidden');
-  } else {
-    els.calendarBadge.classList.add('hidden');
+  // Mettre à jour le badge du bouton calendrier (dans le header)
+  if (els.calendarBadge) {
+    // Compter les jours avec des jetons disponibles mais non récupérés
+    let availableTokensCount = 0;
+    
+    if (state.connectionDays && state.claimedDailyTokens) {
+      // Compter les jours connectés mais non récupérés
+      availableTokensCount = state.connectionDays.filter(dayStr => 
+        !state.claimedDailyTokens.includes(dayStr)
+      ).length;
+    }
+    
+    // Ajouter 1 si le bonus hebdomadaire est disponible
+    if (state.canClaimBonus && !state.weekBonusClaimed) {
+      availableTokensCount += 1;
+    }
+    
+    // Afficher la pastille s'il y a des jetons disponibles
+    if (availableTokensCount > 0) {
+      els.calendarBadge.textContent = availableTokensCount;
+      els.calendarBadge.classList.remove('hidden');
+    } else {
+      els.calendarBadge.classList.add('hidden');
+    }
   }
 }
 

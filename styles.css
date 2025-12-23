@@ -41,9 +41,169 @@ body {
   margin-top: 24px;
 }
 
+/* Container pour le logo de l'app (remplace l'ancien header) */
+.app-logo-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 20px 18px;
+  margin-bottom: 10px;
+  width: 100%;
+  position: relative;
+}
+
+/* Actions du header (bouton réglage en haut à droite) */
+.app-header-actions {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 10;
+}
+
+.app-header-actions .settings-wrapper {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.app-header-actions .settings-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 200px;
+}
+
+.app-logo-main {
+  width: auto;
+  height: 200px;
+  object-fit: contain;
+  background: transparent !important;
+  border: none !important;
+  display: block;
+  /* Assurer que la transparence est préservée */
+  opacity: 1;
+  mix-blend-mode: normal;
+  margin-bottom: 8px;
+}
+
+.app-tagline-image {
+  width: auto;
+  height: 130px; /* Plus grande pour être bien visible */
+  object-fit: contain;
+  background: transparent !important;
+  border: none !important;
+  display: block;
+  /* Assurer que la transparence est préservée */
+  opacity: 1;
+  mix-blend-mode: normal;
+  margin-top: -85px;
+  margin-bottom: -70px;
+}
+
+/* Responsive pour le logo */
+@media (max-width: 768px) {
+  .app-logo-container {
+    padding: 16px;
+    margin-bottom: 8px;
+  }
+  
+  .app-logo-main {
+    height: 160px;
+    margin-bottom: -85px;
+  }
+  
+  .app-tagline-image {
+    height: 115px; /* Plus grande pour être bien visible sur mobile */
+    margin-top: 10px;
+    margin-bottom: -45px;
+  }
+  
+  .app-header-actions {
+    top: -5px;
+    right: 12px;
+  }
+}
+
+/* Titre des sections (onglets) */
+.section-title {
+  margin: 0 0 20px 0;
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--text);
+  text-align: left;
+  padding: 0 18px;
+}
+
+/* Responsive pour les titres de section */
+@media (max-width: 768px) {
+  .section-title {
+    font-size: 24px;
+    padding: 0 16px;
+    margin-bottom: 16px;
+  }
+}
+
 .hero {
   text-align: center;
   margin-bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.hero .logo {
+  width: auto;
+  height: 200px;
+  object-fit: contain;
+  background: transparent !important;
+  border: none !important;
+  display: block;
+  opacity: 1;
+  mix-blend-mode: normal;
+}
+
+.hero .app-tagline-image {
+  width: auto;
+  height: 180px;
+  object-fit: contain;
+  background: transparent !important;
+  border: none !important;
+  display: block;
+  opacity: 1;
+  mix-blend-mode: normal;
+  margin-top: -75px;
+}
+
+/* Responsive pour le hero */
+@media (max-width: 768px) {
+  .hero .logo {
+    height: 160px;
+  }
+  
+  .hero .app-tagline-image {
+    height: 100px;
+  }
+}
+
+/* Titre des sections (onglets) */
+.section-title {
+  margin: 0 0 20px 0;
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--text);
+  text-align: left;
+  padding: 0 18px;
+}
+
+/* Responsive pour les titres de section */
+@media (max-width: 768px) {
+  .section-title {
+    font-size: 24px;
+    padding: 0 16px;
+    margin-bottom: 16px;
+  }
 }
 
 .logo {
@@ -99,9 +259,121 @@ p {
   border: 2px solid rgba(255, 255, 255, 0.15);
 }
 
-#profile-panel {
-  position: relative;
-  overflow: visible;
+/* Panneau latéral profil (drawer) */
+#profile-panel.profile-drawer {
+  position: fixed !important;
+  top: 0 !important;
+  right: 0 !important;
+  left: auto !important;
+  bottom: auto !important;
+  width: 400px !important;
+  max-width: 90vw !important;
+  height: 100vh !important;
+  min-height: 100vh !important;
+  background: rgba(17, 24, 39, 0.98) !important;
+  border: none !important;
+  border-left: 1px solid rgba(6, 182, 212, 0.3) !important;
+  border-radius: 0 !important;
+  box-shadow: -4px 0 24px rgba(0, 0, 0, 0.5) !important;
+  z-index: 1000 !important;
+  transform: translateX(100%) !important;
+  transition: transform 0.3s ease-out !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  display: flex !important;
+  flex-direction: column !important;
+  pointer-events: none;
+  margin: 0 !important;
+  padding: 0 !important;
+  backdrop-filter: none !important;
+}
+
+#profile-panel.profile-drawer.hidden {
+  transform: translateX(100%) !important;
+  pointer-events: none;
+}
+
+#profile-panel.profile-drawer:not(.hidden) {
+  transform: translateX(0) !important;
+  pointer-events: auto;
+}
+
+.profile-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 999;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease-out;
+}
+
+.profile-overlay:not(.hidden) {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.profile-drawer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  flex-shrink: 0;
+  background: transparent;
+}
+
+.profile-drawer-header h3 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.profile-drawer-content {
+  padding: 20px;
+  flex: 1;
+  overflow-y: auto;
+  background: transparent;
+}
+
+/* Infobulle pour le champ pseudo */
+.profile-name-tooltip {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 8px;
+  padding: 10px 14px;
+  background: rgba(17, 24, 39, 0.95);
+  border: 1px solid rgba(6, 182, 212, 0.4);
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 14px;
+  white-space: nowrap;
+  z-index: 1001;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(-5px);
+  transition: opacity 0.2s ease-out, transform 0.2s ease-out;
+}
+
+.profile-name-tooltip:not(.hidden) {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.profile-name-tooltip::before {
+  content: '';
+  position: absolute;
+  bottom: 100%;
+  left: 20px;
+  border: 6px solid transparent;
+  border-bottom-color: rgba(6, 182, 212, 0.4);
+  margin-bottom: -1px;
 }
 
 .tabs {
@@ -421,10 +693,10 @@ button {
 }
 
 .ghost.icon-btn {
-  padding: 8px;
-  width: 36px;
-  height: 36px;
-  border-radius: 8px;
+  padding: 10px;
+  width: 48px;
+  height: 48px;
+  border-radius: 10px;
 }
 
 .hidden {
@@ -437,16 +709,9 @@ button {
   color: var(--muted);
 }
 
+/* Header supprimé */
 .topbar {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 14px 18px;
-  background: rgba(17,24,39,0.8);
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  margin-bottom: 14px;
+  display: none !important;
 }
 
 .rank-wrapper {
@@ -633,11 +898,11 @@ button {
 }
 
 .icon-btn {
-  padding: 8px;
-  width: 36px;
-  height: 36px;
-  border-radius: 8px;
-  font-size: 15px;
+  padding: 10px;
+  width: 48px;
+  height: 48px;
+  border-radius: 10px;
+  font-size: 20px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1245,12 +1510,7 @@ button {
     height: 10px;
   }
   
-  .topbar {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 12px;
-    position: relative; /* pour ancrer le bouton réglage */
-  }
+  /* Header supprimé */
   .user-stats {
     width: 100%;
     flex-wrap: wrap;
@@ -1961,6 +2221,104 @@ button {
   color: rgba(107, 114, 128, 0.6);
 }
 
+/* Nouveaux états du calendrier */
+.calendar-day.available {
+  background: rgba(6, 182, 212, 0.2);
+  border-color: rgba(6, 182, 212, 0.5);
+  cursor: pointer;
+}
+
+.calendar-day.available:hover {
+  background: rgba(6, 182, 212, 0.3);
+  border-color: rgba(6, 182, 212, 0.7);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(6, 182, 212, 0.3);
+}
+
+.calendar-day.claimed {
+  background: rgba(34, 197, 94, 0.15);
+  border-color: rgba(34, 197, 94, 0.4);
+  opacity: 0.7;
+}
+
+.calendar-day.bonus-available {
+  background: rgba(139, 92, 246, 0.25);
+  border-color: rgba(139, 92, 246, 0.6);
+  cursor: pointer;
+  position: relative;
+}
+
+.calendar-day.bonus-available:hover {
+  background: rgba(139, 92, 246, 0.35);
+  border-color: rgba(139, 92, 246, 0.8);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 16px rgba(139, 92, 246, 0.4);
+}
+
+.calendar-day.bonus-claimed {
+  background: rgba(34, 197, 94, 0.2);
+  border-color: rgba(34, 197, 94, 0.5);
+  opacity: 0.8;
+}
+
+.calendar-day.not-available {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.calendar-day.today {
+  border-width: 2px;
+}
+
+.calendar-day.today.available {
+  border-color: rgba(6, 182, 212, 0.8);
+}
+
+.calendar-day.today.bonus-available {
+  border-color: rgba(139, 92, 246, 0.8);
+}
+
+.calendar-day-tokens {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  margin-top: 4px;
+}
+
+.calendar-day.available .calendar-day-tokens,
+.calendar-day.bonus-available .calendar-day-tokens {
+  color: #06b6d4;
+}
+
+.calendar-day.bonus-available .calendar-day-tokens {
+  color: rgba(139, 92, 246, 0.9);
+}
+
+.calendar-day.claimed .calendar-day-tokens,
+.calendar-day.bonus-claimed .calendar-day-tokens {
+  color: rgba(34, 197, 94, 0.9);
+}
+
+/* Animation pour la récupération de jetons */
+.token-claim-indicator {
+  animation: tokenClaimFloat 1.5s ease-out forwards;
+}
+
+@keyframes tokenClaimFloat {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.8);
+  }
+  20% {
+    opacity: 1;
+    transform: translate(-50%, -80%) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -120%) scale(0.9);
+  }
+}
+
 .calendar-info {
   padding: 16px;
   background: rgba(6, 182, 212, 0.1);
@@ -2435,7 +2793,8 @@ button {
   width: 40px;
   height: 40px;
   object-fit: contain;
-  filter: brightness(0) invert(1);
+  display: block;
+  filter: brightness(0) invert(1); /* Rendre l'image blanche sur fond coloré */
 }
 
 /* Espacement pour éviter le chevauchement avec la barre de navigation */
@@ -2444,30 +2803,7 @@ button {
   min-height: calc(100vh - 80px);
 }
 
-/* Simplifier le header pour l'app mobile */
-.topbar .user-stats {
-  display: none; /* Les stats sont maintenant dans la section Mon profil */
-}
-
-/* Ajustements pour le header sur mobile */
-@media (max-width: 768px) {
-  .topbar {
-    padding: 12px 16px;
-  }
-  
-  .topbar .brand {
-    gap: 12px;
-  }
-  
-  .topbar .brand .logo.small {
-    width: 40px;
-    height: 40px;
-  }
-  
-  .topbar .brand strong {
-    font-size: 16px;
-  }
-}
+/* Header supprimé - styles inutiles */
 
 /* Header profil dans la section Mon profil */
 .profile-section-header {
@@ -2476,31 +2812,54 @@ button {
   border-radius: 16px;
   padding: 20px;
   margin-bottom: 24px;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
+  position: relative;
 }
 
 .profile-section-main {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 16px;
+  padding-right: 60px; /* Espace pour les boutons en haut à droite */
+}
+
+.profile-section-main .logo.medium {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+  align-self: flex-start;
 }
 
 .profile-section-info {
   flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0; /* Permet au texte de se rétrécir si nécessaire */
 }
 
 .profile-section-info h2 {
-  margin: 0 0 12px 0;
+  margin: 0;
   font-size: 24px;
   font-weight: 700;
+  line-height: 1.2;
+}
+
+.profile-section-info .profile-rank-below {
+  margin: 0 0 0 -12px;
+  padding: 4px 12px;
+  font-size: 14px;
+  align-self: flex-start;
+  width: auto;
 }
 
 .profile-section-stats {
   display: flex;
   gap: 16px;
   flex-wrap: wrap;
+  margin-top: 16px;
+  padding-left: 0; /* Aligné tout à gauche de la section */
 }
 
 .profile-stat {
@@ -2516,6 +2875,13 @@ button {
   color: var(--accent);
 }
 
+.profile-stat span .badge-total {
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--muted);
+  margin-left: 1px;
+}
+
 .profile-stat small {
   font-size: 12px;
   color: var(--muted);
@@ -2524,9 +2890,9 @@ button {
 }
 
 .profile-section-actions {
-  display: flex;
-  justify-content: flex-end;
-  position: relative;
+  position: absolute;
+  top: 20px;
+  right: 20px;
 }
 
 .settings-buttons-row {
@@ -2544,6 +2910,29 @@ button {
   top: calc(100% + 8px);
   right: 0;
   z-index: 100;
+}
+
+/* Header avec actions pour la section roue */
+.section-header-with-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.section-header-with-actions h2 {
+  margin: 0 0 8px 0;
+}
+
+.section-header-with-actions .section-description {
+  margin: 0;
+}
+
+.wheel-section-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
 }
 
 /* Responsive pour la barre de navigation */
@@ -2585,7 +2974,17 @@ button {
   }
   
   .profile-section-main {
-    flex-direction: column;
+    flex-direction: row;
     align-items: flex-start;
+    padding-right: 50px; /* Espace pour les boutons sur mobile */
+  }
+  
+  .profile-section-main .logo.medium {
+    width: 55px;
+    height: 55px;
+  }
+  
+  .profile-section-info h2 {
+    font-size: 20px;
   }
 }

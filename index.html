@@ -7,7 +7,7 @@
   <link rel="stylesheet" href="./styles.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Poppins:wght@600;700&family=Orbitron:wght@500;700&family=Cinzel:wght@600;700&family=Pacifico&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Poppins:wght@600;700&family=Orbitron:wght@500;700&family=Cinzel:wght@600;700&family=Pacifico&family=Montserrat:wght@500;600;700&family=Nunito:wght@600;700&family=Quicksand:wght@500;600;700&family=Raleway:wght@500;600;700&family=Comfortaa:wght@500;600;700&family=Fredoka+One&family=Bebas+Neue&family=Righteous&family=Lilita+One&family=Dancing+Script:wght@400;500;600;700&family=Great+Vibes&family=Satisfy&family=Allura&family=Caveat:wght@400;500;600;700&family=Lobster+Two:ital,wght@0,400;0,700;1,400;1,700&display=swap" rel="stylesheet">
   <script type="module" src="./app.js" defer></script>
   <link rel="apple-touch-icon" href="/icons/logobl.png">
 </head>
@@ -15,9 +15,8 @@
   <div class="page">
     <section id="auth-view" class="panel">
       <div class="hero">
-        <img src="./icons/logobl.png" alt="BadgeLife" class="logo">
-        <h1>BadgeLife</h1>
-        <p>Gagne des badgelife et partage tes succès avec tes potes.</p>
+        <img src="./icons/logobadgelifeB.png" alt="BadgeLife" class="logo">
+        <img src="./icons/tavieenbadge.png" alt="Ta vie en badges" class="app-tagline-image">
       </div>
       <div class="card">
         <div class="tabs small">
@@ -43,100 +42,96 @@
     </section>
 
     <section id="app-view" class="panel hidden">
-      <header class="topbar">
-        <span id="profile-privacy-indicator"></span>
-        <div class="brand">
-          <img id="avatar-img" src="./icons/logobl.png" alt="Avatar" class="logo small">
-          <div>
-            <strong id="profile-username">Utilisateur</strong>
-            <div class="rank-wrapper">
-              <button id="profile-rank" type="button" class="muted ghost rank-button">—</button>
-              <div id="rank-tooltip" class="rank-tooltip hidden" role="dialog" aria-label="Type de vie"></div>
+      <div class="app-logo-container">
+        <img src="./icons/logobadgelifeB.png" alt="BadgeLife" class="app-logo-main">
+        <img src="./icons/tavieenbadge.png" alt="Ta vie en badges" class="app-tagline-image">
+        <div class="app-header-actions">
+          <div class="settings-wrapper">
+            <div class="settings-buttons-row">
+              <button id="calendar-btn" class="ghost icon-btn calendar-btn" aria-label="Tes jours de connexion">
+                📅
+                <span id="calendar-badge" class="calendar-badge hidden">3</span>
+              </button>
+              <button id="settings-toggle" class="ghost icon-btn" aria-label="Réglages">⚙️</button>
+            </div>
+            <div id="settings-menu" class="settings-menu hidden">
+              <a id="admin-link" class="ghost full-width hidden" href="./admin.html">Admin</a>
+              <button id="edit-profile-btn" class="ghost full-width">Modifier mon profil</button>
+              <button id="profile-privacy-btn" class="ghost full-width">Profil: Public</button>
+              <button id="logout-btn" class="ghost full-width">Se déconnecter</button>
             </div>
           </div>
         </div>
-        <div class="user-stats">
-          <div class="badge-count">
-            <span id="badge-count">0</span>
-            <small>badges</small>
-          </div>
-          <div class="skill-count">
-            <span id="skill-count">0</span>
-            <small>skills</small>
-          </div>
+      </div>
+
+      <!-- Panneau latéral profil -->
+      <div id="profile-panel" class="profile-drawer hidden">
+        <div class="profile-drawer-header">
+          <h3>Modifier mon profil</h3>
+          <button id="profile-close-btn" class="ghost icon-btn" aria-label="Fermer">✕</button>
         </div>
-      </header>
+        <div class="profile-drawer-content">
+          <form id="profile-form" class="auth-form">
+            <label for="profile-name">Ton pseudo</label>
+            <div style="position: relative;">
+              <input id="profile-name" type="text" readonly>
+              <div id="profile-name-tooltip" class="profile-name-tooltip hidden">Il n'est pas possible de changer ton nom pseudo.</div>
+            </div>
 
-      <section id="profile-panel" class="card hidden">
-        <h3>Profil</h3>
-        <form id="profile-form" class="auth-form">
-          <label for="profile-name">Ton pseudo</label>
-          <input id="profile-name" type="text" readonly>
+            <label for="profile-password">Nouveau mot de passe</label>
+            <input id="profile-password" type="password" minlength="6" placeholder="Laisse vide pour ne pas changer">
 
-          <label for="profile-password">Nouveau mot de passe</label>
-          <input id="profile-password" type="password" minlength="6" placeholder="Laisse vide pour ne pas changer">
+            <label for="profile-avatar">Photo de profil</label>
+            <input id="profile-avatar" type="file" accept="image/*">
+            <small class="muted">Formats image, taille conseillée &lt; 4 Mo.</small>
+            <div class="avatar-preview">
+              <img id="avatar-preview-img" src="./icons/logobl.png" alt="Aperçu" class="logo small">
+            </div>
 
-          <label for="profile-avatar">Photo de profil</label>
-          <input id="profile-avatar" type="file" accept="image/*">
-          <small class="muted">Formats image, taille conseillée &lt; 4 Mo.</small>
-          <div class="avatar-preview">
-            <img id="avatar-preview-img" src="./icons/logobl.png" alt="Aperçu" class="logo small">
-          </div>
-
-          <button type="submit" class="primary">Enregistrer</button>
-          <p id="profile-message" class="message"></p>
-        </form>
-      </section>
+            <button type="submit" class="primary">Enregistrer</button>
+            <p id="profile-message" class="message"></p>
+          </form>
+        </div>
+      </div>
+      <div id="profile-overlay" class="profile-overlay hidden"></div>
 
 
       <section id="my-badges" class="tab-content">
+        <h2 class="section-title">Profil</h2>
         <!-- Header profil dans la section -->
         <div class="profile-section-header">
           <div class="profile-section-main">
             <img id="profile-section-avatar" src="./icons/logobl.png" alt="Avatar" class="logo medium">
             <div class="profile-section-info">
               <h2 id="profile-section-username">Utilisateur</h2>
-              <div class="profile-section-stats">
-                <div class="profile-stat">
-                  <span id="profile-section-badge-count">0</span>
-                  <small>badges</small>
-                </div>
-                <div class="profile-stat">
-                  <span id="profile-section-skill-count">0</span>
-                  <small>skills</small>
-                </div>
-                <div class="profile-stat">
-                  <button id="profile-section-rank" type="button" class="ghost rank-button">—</button>
-                </div>
-              </div>
+              <button id="profile-section-rank" type="button" class="ghost rank-button profile-rank-below">—</button>
             </div>
           </div>
-          <div class="profile-section-actions">
-            <div class="settings-wrapper">
-              <div class="settings-buttons-row">
-                <button id="settings-toggle" class="ghost icon-btn" aria-label="Réglages">⚙️</button>
-                <button id="calendar-btn" class="ghost icon-btn calendar-btn" aria-label="Tes jours de connexion">
-                  📅
-                  <span id="calendar-badge" class="calendar-badge hidden">3</span>
-                </button>
-              </div>
-              <div id="settings-menu" class="settings-menu hidden">
-                <a id="admin-link" class="ghost full-width hidden" href="./admin.html">Admin</a>
-                <button id="edit-profile-btn" class="ghost full-width">Modifier mon profil</button>
-                <button id="profile-privacy-btn" class="ghost full-width">Profil: Public</button>
-                <button id="logout-btn" class="ghost full-width">Se déconnecter</button>
-              </div>
+          <div class="profile-section-stats">
+            <div class="profile-stat">
+              <span id="profile-section-badge-count">0<span class="badge-total">/ 0</span></span>
+              <small>badges</small>
+            </div>
+            <div class="profile-stat">
+              <span id="profile-section-skill-count">0</span>
+              <small>skills</small>
             </div>
           </div>
+          <!-- Bouton calendrier déplacé dans le header -->
         </div>
         <h3>Ma collection</h3>
-        <p class="muted section-description first">Découvre tous les badges et thèmes que tu as débloqués.</p>
+        <p class="muted section-description first">Découvre tous les badges que tu as débloqués.</p>
         <div id="my-badges-list" class="grid badges-grid"></div>
       </section>
 
       <section id="all-badges" class="tab-content hidden">
-        <h2>Roue des badges</h2>
-        <p class="muted section-description">Tourne la roue pour débloquer un badge et réponds à sa question pour le débloquer !</p>
+        <h2 class="section-title">Roue des badges</h2>
+        <div class="section-header-with-actions">
+          <div>
+            <p class="muted section-description">Tourne la roue pour débloquer un badge et réponds à sa question pour le débloquer !</p>
+          </div>
+          <!-- Bouton calendrier déplacé dans le header -->
+        </div>
         
         <!-- Compteur de jetons -->
         <div id="tokens-counter" class="tokens-counter clickable" title="Clique pour plus d'infos">
@@ -186,20 +181,20 @@
       </section>
 
       <section id="community" class="tab-content hidden">
-        <h2>Communauté</h2>
+        <h2 class="section-title">Communauté</h2>
         <div class="subtabs">
           <button id="community-tab-discover" class="subtab-button active" data-community-tab="discover">Découvrir</button>
           <button id="community-tab-share" class="subtab-button" data-community-tab="share">Partager</button>
         </div>
         <div id="community-profiles-panel" class="community-subtab-content">
-          <p class="muted section-description community">Découvre les badges et les skills des potes.</p>
+          <p class="muted section-description community">Partage tes badges avec tes potes et découvre les types de vie des autres !</p>
           <div class="search-bar">
             <input id="community-search" type="search" placeholder="Rechercher un utilisateur..." aria-label="Rechercher un utilisateur">
           </div>
           <div id="community-list" class="list"></div>
         </div>
         <div id="community-ideas-panel" class="community-subtab-content hidden">
-          <p class="muted section-description community">Partage tes idées de badges à la comunauté et vote pour les idées qui te plaisent pour tenter de les ajouter à la collection.</p>
+          <p class="muted section-description community">Partage tes idées de badges à la comunauté et vote pour élire les meilleures idées de badges qui pourraient peut-être faire partie de la collection.</p>
           <form id="idea-form" class="auth-form form-compact">
             <label for="idea-title">Nom du badge</label>
             <input id="idea-title" type="text" maxlength="80" required placeholder="Ex: Explorateur nocturne">
@@ -230,8 +225,8 @@
                 <span>Utilisateur</span>
               </h3>
               <p id="community-profile-rank" class="muted">—</p>
-              <p class="muted" id="community-profile-badges">0 badge(s)</p>
-              <p class="muted" id="community-profile-mystery">0 skill(s)</p>
+              <p class="muted" id="community-profile-badges">0 badges</p>
+              <p class="muted" id="community-profile-mystery">0 skills</p>
             </div>
           <div id="community-profile-badges-list" class="grid badges-grid"></div>
         </div>
@@ -240,7 +235,7 @@
       <!-- Panneau latéral calendrier -->
       <div id="calendar-drawer" class="calendar-drawer hidden">
         <div class="calendar-drawer-header">
-          <h2>Tes jours de connexion</h2>
+          <h2>Jours de connexion</h2>
           <button id="calendar-close-btn" class="ghost icon-btn" aria-label="Fermer">✕</button>
         </div>
         <div class="calendar-content">
@@ -248,7 +243,7 @@
             <!-- 7 jours générés dynamiquement -->
           </div>
           <div class="calendar-info">
-            <p class="calendar-tooltip">💡 Si tu te connectes tous les jours, tu remportes 3 jetons supplémentaires !</p>
+            <p class="calendar-tooltip">💡 Si tu te connectes tous les jours, tu remportera 3 jetons supplémentaires à la in de la semaine !</p>
           </div>
           <button id="claim-bonus-btn" class="primary hidden">Bonus de connexion</button>
         </div>
@@ -263,7 +258,7 @@
         </button>
         <button class="bottom-nav-item bottom-nav-center" data-tab="all-badges" aria-label="Roue des badges">
           <div class="bottom-nav-wheel">
-            <img src="./icons/logobl.png" alt="Roue" class="wheel-logo">
+            <img src="./icons/wheel.png" alt="Roue" class="wheel-logo">
           </div>
         </button>
         <button class="bottom-nav-item" data-tab="community" aria-label="Communauté">
