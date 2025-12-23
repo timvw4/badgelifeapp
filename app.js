@@ -2032,6 +2032,8 @@ async function handleSpinWheel() {
       // Badge normal
       state.badgesFromWheel.add(selectedElement.id);
       await saveBadgesFromWheel();
+      // Mettre à jour la roue immédiatement pour refléter que ce badge n'est plus disponible
+      renderWheelBadges();
       showBadgeQuestion(selectedElement.badge);
     }
   }, 3000);
@@ -3588,26 +3590,30 @@ async function handleBadgeAnswer(event, badge, providedAnswer = null, feedbackEl
     if (isRetry) {
       // Retirer de badgesFromWheel pour qu'il retourne dans la roue
       state.badgesFromWheel.delete(badge.id);
-      // Sauvegarder dans la base de données
-      await saveBadgesFromWheel();
+      
       // Afficher le message de retour dans la roue
       if (feedback) {
         feedback.textContent = 'Badge non débloqué, retourné dans la roue.';
         feedback.classList.add('error');
       }
-      // Mettre à jour l'affichage
-      // Si on est dans une carte, masquer le formulaire et réafficher le bouton retenter
+      
+      // Si on est dans une carte, la supprimer immédiatement pour un feedback visuel instantané
       if (cardElement) {
-        const questionContainer = cardElement.querySelector('.blocked-badge-question-container');
-        const retryBtn = cardElement.querySelector('.retry-badge-btn');
-        const answerDiv = cardElement.querySelector('.blocked-badge-answer');
-        if (questionContainer) questionContainer.classList.add('hidden');
-        if (retryBtn) retryBtn.style.display = 'block';
-        if (answerDiv) answerDiv.style.display = 'block';
+        // Ajouter une animation de disparition avant de supprimer
+        cardElement.style.transition = 'opacity 0.3s ease-out, transform 0.3s ease-out';
+        cardElement.style.opacity = '0';
+        cardElement.style.transform = 'scale(0.95)';
+        setTimeout(() => {
+          cardElement.remove();
+        }, 300);
       }
-      // Mettre à jour la roue et les badges bloqués IMMÉDIATEMENT
+      
+      // Mettre à jour la roue et les badges bloqués IMMÉDIATEMENT (avant la sauvegarde pour un feedback instantané)
       renderWheelBadges();
       renderBlockedBadges();
+      
+      // Sauvegarder dans la base de données après la mise à jour visuelle
+      await saveBadgesFromWheel();
     } else if (isFromWheel) {
       // Première réponse depuis la roue qui échoue : garder dans badgesFromWheel pour la section retenter
       // Sauvegarder dans la base de données pour s'assurer qu'il est bien stocké
