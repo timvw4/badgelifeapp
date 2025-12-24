@@ -4707,21 +4707,30 @@ async function loadConnectionDays() {
       .eq('id', state.user.id);
   }
   
-  // Si la colonne n'existe pas dans la base, charger depuis localStorage comme backup
-  if (state.claimedDailyTokens.length === 0 && state.user) {
+  // IMPORTANT : Ne charger depuis localStorage QUE si les données ne sont pas dans Supabase
+  // Si state.profile.claimed_daily_tokens existe mais est vide après filtrage, c'est normal (autre semaine)
+  // Ne pas charger depuis localStorage dans ce cas car cela écraserait les données de Supabase
+  // localStorage est seulement un backup si la colonne n'existe pas dans Supabase
+  const hasClaimedTokensInProfile = state.profile.claimed_daily_tokens && 
+                                     Array.isArray(state.profile.claimed_daily_tokens) && 
+                                     state.profile.claimed_daily_tokens.length > 0;
+  
+  // Charger depuis localStorage UNIQUEMENT si :
+  // 1. state.claimedDailyTokens est vide (après filtrage)
+  // 2. ET state.profile.claimed_daily_tokens n'existe pas ou est vide (colonne absente dans Supabase)
+  // 3. ET localStorage contient des données
+  if (state.claimedDailyTokens.length === 0 && !hasClaimedTokensInProfile && state.user) {
     try {
       const stored = localStorage.getItem(`claimed_tokens_${state.user.id}`);
       if (stored) {
         const parsed = JSON.parse(stored);
         if (Array.isArray(parsed)) {
           // Filtrer aussi les dates du localStorage pour ne garder que celles de la semaine actuelle
-          // S'assurer que currentWeekStartStr est défini (défini au début de la fonction)
           if (typeof currentWeekStartStr !== 'undefined') {
             const filteredParsed = filterDatesByCurrentWeek(parsed, currentWeekStartStr);
             state.claimedDailyTokens = filteredParsed;
             state.profile.claimed_daily_tokens = filteredParsed;
           } else {
-            // Si currentWeekStartStr n'est pas défini, utiliser les dates telles quelles (fallback)
             console.warn('currentWeekStartStr non défini, utilisation des dates sans filtre');
             state.claimedDailyTokens = parsed;
             state.profile.claimed_daily_tokens = parsed;
@@ -4740,8 +4749,8 @@ async function loadConnectionDays() {
   
   // État chargé depuis localStorage ou initialisé
   
-  // Rendre le calendrier
-  renderCalendar();
+  // Ne PAS rendre le calendrier ici car il sera rendu par loadConnectionDays()
+  // Cela évite les doubles rendus et les problèmes de synchronisation
   updateCalendarBadge();
 }
 
@@ -4816,8 +4825,11 @@ async function checkAndUpdateConnectionDay() {
     }
   }
   
-  // Rendre le calendrier
-  renderCalendar();
+  // Rendre le calendrier seulement si nécessaire (pas de double rendu)
+  // Le calendrier est déjà rendu par loadConnectionDays(), donc on ne le rend que si on a modifié quelque chose
+  if (state.connectionDays && state.connectionDays.length > 0) {
+    renderCalendar();
+  }
   updateCalendarBadge();
 }
 
@@ -4833,10 +4845,9 @@ function renderCalendar() {
     state.connectionDays = [];
   }
   
-  // IMPORTANT : Ne PAS réinitialiser claimedDailyTokens ici car il est chargé par loadConnectionDays()
-  // Si claimedDailyTokens n'est pas défini, c'est que loadConnectionDays() n'a pas encore fini
-  // Dans ce cas, on utilise un tableau vide temporairement pour l'affichage, mais on ne modifie pas le state
-  const claimedDailyTokensForDisplay = state.claimedDailyTokens || [];
+  // IMPORTANT : Toujours utiliser isDayClaimed() pour vérifier si un jour est réclamé
+  // Cette fonction vérifie à la fois dans state.claimedDailyTokens ET dans state.profile.claimed_daily_tokens
+  // Cela garantit la synchronisation même si renderCalendar() est appelé plusieurs fois
   
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -4862,24 +4873,8 @@ function renderCalendar() {
     // Vérifier que le jour est dans la semaine actuelle avant de vérifier s'il est réclamé
     const isInCurrentWeek = isDateInCurrentWeek(dayStr, currentWeekStartStr);
     
-    // Vérifier si le jour est réclamé
-    // Utiliser les données du state si disponibles, sinon vérifier dans le profil
-    let isClaimed = false;
-    if (isInCurrentWeek) {
-      // Vérifier d'abord dans le state local
-      if (claimedDailyTokensForDisplay.includes(dayStr)) {
-        isClaimed = true;
-      } else {
-        // Si pas dans le state local, vérifier dans le profil (pour éviter les problèmes de synchronisation)
-        const claimedInProfile = filterDatesByCurrentWeek(
-          Array.isArray(state.profile?.claimed_daily_tokens) 
-            ? state.profile.claimed_daily_tokens 
-            : [],
-          currentWeekStartStr
-        ).includes(dayStr);
-        isClaimed = claimedInProfile;
-      }
-    }
+    // Vérifier si le jour est réclamé (utilise la fonction utilitaire qui vérifie state ET profil)
+    const isClaimed = isInCurrentWeek && isDayClaimed(dayStr, currentWeekStartStr);
     const isToday = dayStr === todayStr;
     
     // Déterminer l'état du jour
