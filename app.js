@@ -2,6 +2,8 @@
 // Utilise Supabase (base de données + auth) et une UI 100% front.
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm';
 import { SUPABASE_URL, SUPABASE_ANON_KEY, ADMIN_USER_IDS } from './config.js';
+import { isMysteryLevel } from './badgeCalculations.js';
+import { parseBadgeAnswer, parseConfig, safeSupabaseSelect } from './utils.js';
 
 // Nom du bucket d'avatars dans Supabase Storage
 const AVATAR_BUCKET = 'avatars';
@@ -23,7 +25,6 @@ const state = {
   userBadgeAnswers: new Map(), // stocke la réponse saisie par badge
   attemptedBadges: new Set(),
   wasEverUnlocked: new Set(), // badges qui ont déjà été débloqués au moins une fois
-  allBadgesFilter: 'all', // all | unlocked | blocked
   themesEnabled: false,
   selectedThemes: null, // null => aucun thème sélectionné (pas de filtre). Set non-vide => filtre.
   currentSkillPoints: 0, // calculé dans updateCounters
@@ -126,7 +127,6 @@ function closeProfileDrawer() {
 
 document.addEventListener('DOMContentLoaded', () => {
   cacheElements();
-  bindAllBadgesFilters();
   bindRankTooltip();
   attachAuthTabListeners();
   attachFormListeners();
@@ -188,9 +188,6 @@ function cacheElements() {
   els.profileSectionRank = document.getElementById('profile-section-rank');
   els.myBadgesList = document.getElementById('my-badges-list');
   els.allBadgesList = document.getElementById('all-badges-list');
-  els.filterAll = document.getElementById('filter-all');
-  els.filterUnlocked = document.getElementById('filter-unlocked');
-  els.filterBlocked = document.getElementById('filter-blocked');
   els.communityList = document.getElementById('community-list');
   els.communityProfileModal = document.getElementById('community-profile-modal');
   els.communityProfileClose = document.getElementById('community-profile-close');
@@ -235,9 +232,6 @@ function cacheElements() {
   els.calendarBtn = document.getElementById('calendar-btn');
   els.calendarBadge = document.getElementById('calendar-badge');
   els.wheelBadge = document.getElementById('wheel-badge');
-  // Bouton calendrier déplacé dans le header (utilise calendar-btn)
-  // els.calendarBtnWheel = document.getElementById('calendar-btn-wheel');
-  // els.calendarBadgeWheel = document.getElementById('calendar-badge-wheel');
   els.calendarDrawer = document.getElementById('calendar-drawer');
   els.calendarOverlay = document.getElementById('calendar-overlay');
   els.calendarCloseBtn = document.getElementById('calendar-close-btn');
@@ -305,11 +299,14 @@ function bindRankTooltip() {
   }
 
   document.addEventListener('click', (e) => {
+    if (!els.rankTooltip) return;
     if (els.rankTooltip.classList.contains('hidden')) return;
     const clickedInside = e.target === els.rankTooltip || 
                          els.rankTooltip.contains(e.target) || 
                          e.target === els.profileRank ||
-                         e.target === els.profileSectionRank;
+                         e.target === els.profileSectionRank ||
+                         (els.profileRank && els.profileRank.contains(e.target)) ||
+                         (els.profileSectionRank && els.profileSectionRank.contains(e.target));
     if (!clickedInside) els.rankTooltip.classList.add('hidden');
   });
 }
@@ -340,9 +337,6 @@ function attachTokensTooltip() {
 // Attache l'événement pour afficher/masquer l'infobulle du bouton tourner la roue
 function attachSpinButtonTooltip() {
   if (!els.spinButton || !els.spinButtonTooltip) {
-    console.log('attachSpinButtonTooltip - éléments non trouvés');
-    console.log('spinButton:', els.spinButton);
-    console.log('spinButtonTooltip:', els.spinButtonTooltip);
     return;
   }
   
@@ -351,17 +345,11 @@ function attachSpinButtonTooltip() {
     return;
   }
   
-  console.log('attachSpinButtonTooltip - attachement de l\'événement');
-  
   // Trouver le wrapper parent (comme pour tokens-counter)
   const wrapper = els.spinButton.parentElement;
   if (!wrapper) {
-    console.error('Wrapper parent non trouvé pour spin-button');
     return;
   }
-  
-  console.log('Wrapper trouvé:', wrapper);
-  console.log('Wrapper classes:', wrapper.className);
   
   // S'assurer que le wrapper est cliquable
   wrapper.style.cursor = 'pointer';
@@ -457,8 +445,6 @@ function attachSpinButtonTooltip() {
   
   // Marquer que les listeners sont attachés
   els.spinButton.setAttribute('data-tooltip-attached', 'true');
-  
-  console.log('attachSpinButtonTooltip - événements attachés sur document');
 }
 
 // Attache les événements pour le calendrier
@@ -492,10 +478,6 @@ function attachCalendarListeners() {
   }
 }
 
-function bindAllBadgesFilters() {
-  // Les filtres ne sont plus utilisés avec la roue, mais on garde la fonction pour éviter les erreurs
-  // Cette fonction peut être supprimée si nécessaire
-}
 
 function attachAuthTabListeners() {
   document.querySelectorAll('[data-auth-tab]').forEach(btn => {
@@ -975,17 +957,14 @@ async function loadAppData() {
 
 async function fetchProfile() {
   if (!state.user) return;
-  // Essayer d'abord avec toutes les colonnes, sinon sans les nouvelles
-  let { data, error } = await supabase.from('profiles').select('username, badge_count, avatar_url, skill_points, rank, is_private, tokens, last_token_date, connection_days, week_start_date, week_bonus_available, week_bonus_claimed, claimed_daily_tokens, badges_from_wheel').eq('id', state.user.id).single();
-  
-  // Si certaines colonnes n'existent pas, réessayer sans
-  if (error && error.message && (error.message.includes('is_private') || error.message.includes('tokens') || error.message.includes('last_token_date') || error.message.includes('connection_days') || error.message.includes('week_start_date') || error.message.includes('week_bonus_available') || error.message.includes('week_bonus_claimed') || error.message.includes('claimed_daily_tokens') || error.message.includes('badges_from_wheel'))) {
-    const retry = await supabase.from('profiles').select('username, badge_count, avatar_url, skill_points, rank').eq('id', state.user.id).single();
-    if (!retry.error) {
-      data = retry.data;
-      error = null;
-    }
-  }
+  // Utiliser safeSupabaseSelect pour gérer automatiquement les colonnes optionnelles
+  const { data, error } = await safeSupabaseSelect(
+    supabase,
+    'profiles',
+    'username, badge_count, avatar_url, skill_points, rank, is_private, tokens, last_token_date, connection_days, week_start_date, week_bonus_available, week_bonus_claimed, claimed_daily_tokens, badges_from_wheel',
+    'username, badge_count, avatar_url, skill_points, rank',
+    (query) => query.eq('id', state.user.id).single()
+  );
   
   if (error && error.code !== 'PGRST116') {
     console.error('Erreur fetchProfile:', error);
@@ -1090,6 +1069,30 @@ function showTokenRewardNotification(amount = 2, type = 'daily') {
     <div class="token-reward-content">
       <span class="token-emoji">🪙</span>
       <span>${message}</span>
+    </div>
+  `;
+  document.body.appendChild(notification);
+  
+  // Animation d'apparition
+  setTimeout(() => notification.classList.add('show'), 10);
+  
+  // Disparition après 3 secondes
+  setTimeout(() => {
+    notification.classList.remove('show');
+    setTimeout(() => notification.remove(), 300);
+  }, 3000);
+}
+
+// Affiche une notification quand un badge est retourné dans la roue
+function showBadgeReturnedToWheelNotification() {
+  // Créer une infobulle temporaire
+  const notification = document.createElement('div');
+  notification.className = 'badge-unlocked-notification';
+  
+  notification.innerHTML = `
+    <div class="badge-unlocked-content">
+      <span class="badge-emoji-large">🔄</span>
+      <span>Badge retourné dans la roue</span>
     </div>
   `;
   document.body.appendChild(notification);
@@ -1276,7 +1279,6 @@ function updateTokensDisplay() {
   if (els.spinButton) {
     const hasTokens = (state.tokens || 0) >= 1;
     const shouldDisable = !hasTokens || state.isWheelSpinning;
-    console.log('updateTokensDisplay - hasTokens:', hasTokens, 'shouldDisable:', shouldDisable);
     els.spinButton.disabled = shouldDisable;
     els.spinButton.textContent = state.isWheelSpinning 
       ? 'Roue en cours...' 
@@ -1311,21 +1313,19 @@ async function fetchBadges() {
   const useLocalOnly = typeof window !== 'undefined' && window.USE_LOCAL_BADGES === true;
 
   if (!useLocalOnly) {
-    let { data, error } = await supabase.from('badges').select(selectWithEmoji);
+    const { data, error } = await safeSupabaseSelect(
+      supabase,
+      'badges',
+      selectWithEmoji,
+      selectFallback
+    );
 
     if (error) {
-      console.warn('Colonne emoji absente ? On retente sans emoji.', error);
-      const retry = await supabase.from('badges').select(selectFallback);
-      if (retry.error) {
-        console.error('Erreur lors du chargement des badges:', retry.error);
-        setMessage('Erreur lors du chargement des badges depuis Supabase. Vérifiez que la table "badges" existe et contient des données.', true);
-      } else {
-        data = retry.data;
-      }
+      console.error('Erreur lors du chargement des badges:', error);
+      setMessage('Erreur lors du chargement des badges depuis Supabase. Vérifiez que la table "badges" existe et contient des données.', true);
     }
 
     if (data) {
-      console.log(`✅ ${data.length} badges chargés depuis Supabase`);
       state.badges = data;
       buildBadgeMaps();
       return;
@@ -1339,7 +1339,6 @@ async function fetchBadges() {
   }
   state.badges = localBadges;
   buildBadgeMaps();
-  console.log(`✅ ${localBadges.length} badges chargés (mode local)`);
 }
 
 function isLocalBadgesMode() {
@@ -1429,25 +1428,14 @@ async function fetchUserBadges() {
 }
 
 async function fetchCommunity() {
-  // Essayer d'abord avec is_private, sinon sans
-  let { data, error } = await supabase
-    .from('profiles')
-    .select('id,username,badge_count,avatar_url,skill_points,rank,is_private')
-    .order('badge_count', { ascending: false })
-    .limit(50);
-  
-  // Si la colonne is_private n'existe pas, réessayer sans
-  if (error && error.message && error.message.includes('is_private')) {
-    const retry = await supabase
-      .from('profiles')
-      .select('id,username,badge_count,avatar_url,skill_points,rank')
-      .order('badge_count', { ascending: false })
-      .limit(50);
-    if (!retry.error) {
-      data = retry.data;
-      error = null;
-    }
-  }
+  // Utiliser safeSupabaseSelect pour gérer automatiquement la colonne is_private optionnelle
+  const { data, error } = await safeSupabaseSelect(
+    supabase,
+    'profiles',
+    'id,username,badge_count,avatar_url,skill_points,rank,is_private',
+    'id,username,badge_count,avatar_url,skill_points,rank',
+    (query) => query.order('badge_count', { ascending: false }).limit(50)
+  );
   
   if (error) {
     console.error('Erreur fetchCommunity:', error);
@@ -1759,8 +1747,52 @@ function renderAllBadges() {
 
 // Affiche la roue avec les badges non débloqués (hors fantômes) + joker
 function renderWheelBadges() {
-  if (!els.wheelContainer || !els.wheelItems) {
+  if (!els.wheelContainer) {
     return;
+  }
+  
+  // Vérifier si wheelItems existe, sinon le recréer (peut arriver si la roue était vide)
+  if (!els.wheelItems) {
+    // Chercher si wheel existe déjà
+    let wheelEl = els.wheelContainer.querySelector('#wheel');
+    if (!wheelEl) {
+      // Recréer la structure complète de la roue
+      wheelEl = document.createElement('div');
+      wheelEl.id = 'wheel';
+      wheelEl.className = 'wheel';
+      els.wheelContainer.innerHTML = '';
+      els.wheelContainer.appendChild(wheelEl);
+    }
+    // Créer wheelItems s'il n'existe pas
+    els.wheelItems = document.createElement('div');
+    els.wheelItems.id = 'wheel-items';
+    els.wheelItems.className = 'wheel-items';
+    wheelEl.appendChild(els.wheelItems);
+    
+    // Recréer l'indicateur s'il n'existe pas
+    let indicatorEl = els.wheelContainer.querySelector('#wheel-indicator');
+    if (!indicatorEl) {
+      indicatorEl = document.createElement('div');
+      indicatorEl.id = 'wheel-indicator';
+      indicatorEl.className = 'wheel-indicator';
+      els.wheelContainer.appendChild(indicatorEl);
+    }
+    
+    // Recréer le wrapper du bouton spin s'il n'existe pas
+    let spinWrapper = els.wheelContainer.querySelector('.spin-button-wrapper');
+    if (!spinWrapper) {
+      spinWrapper = document.createElement('div');
+      spinWrapper.className = 'spin-button-wrapper';
+      const spinButton = document.createElement('button');
+      spinButton.id = 'spin-button';
+      spinButton.className = 'primary spin-button';
+      spinButton.disabled = true;
+      spinButton.textContent = 'Tourner la roue (1 jeton)';
+      spinWrapper.appendChild(spinButton);
+      els.wheelContainer.appendChild(spinWrapper);
+      // Mettre à jour la référence
+      els.spinButton = spinButton;
+    }
   }
   
   // Filtrer les badges pour la roue :
@@ -1787,10 +1819,39 @@ function renderWheelBadges() {
   });
   
   if (availableBadges.length === 0) {
-    els.wheelContainer.innerHTML = '<p class="muted">Aucun badge disponible dans la roue. Vérifie la section "Badges à retenter" ci-dessous ! 👇</p>';
+    // Cacher la roue et afficher un message, mais garder la structure pour pouvoir la recréer facilement
+    const wheelEl = els.wheelContainer.querySelector('#wheel');
+    const indicatorEl = els.wheelContainer.querySelector('#wheel-indicator');
+    const spinWrapper = els.wheelContainer.querySelector('.spin-button-wrapper');
+    
+    if (wheelEl) wheelEl.style.display = 'none';
+    if (indicatorEl) indicatorEl.style.display = 'none';
+    if (spinWrapper) spinWrapper.style.display = 'none';
+    
+    // Afficher le message seulement s'il n'existe pas déjà
+    let messageEl = els.wheelContainer.querySelector('.wheel-empty-message');
+    if (!messageEl) {
+      messageEl = document.createElement('p');
+      messageEl.className = 'muted wheel-empty-message';
+      messageEl.textContent = 'Aucun badge disponible dans la roue. Vérifie la section "Badges à retenter" ci-dessous ! 👇';
+      els.wheelContainer.appendChild(messageEl);
+    }
+    
     state.wheelBadgeIds = null; // Réinitialiser l'ordre
     return;
   }
+  
+  // Cacher le message et réafficher la roue
+  const messageEl = els.wheelContainer.querySelector('.wheel-empty-message');
+  if (messageEl) {
+    messageEl.remove();
+  }
+  const wheelEl = els.wheelContainer.querySelector('#wheel');
+  const indicatorEl = els.wheelContainer.querySelector('#wheel-indicator');
+  const spinWrapper = els.wheelContainer.querySelector('.spin-button-wrapper');
+  if (wheelEl) wheelEl.style.display = '';
+  if (indicatorEl) indicatorEl.style.display = '';
+  if (spinWrapper) spinWrapper.style.display = '';
   
   // Créer un tableau avec les badges + joker
   const JOKER_EMOJI = '🃏';
@@ -3124,7 +3185,6 @@ function renderMyBadges() {
   }
   
   const allBadges = state.badges.slice();
-  console.log(`🔍 renderMyBadges: ${allBadges.length} badges au total`);
   
   if (!allBadges.length) {
     els.myBadgesList.innerHTML = '<p class="muted">Aucun badge pour le moment. Vérifiez que la table "badges" existe dans Supabase et contient des données.</p>';
@@ -3555,7 +3615,10 @@ async function handleBadgeAnswer(event, badge, providedAnswer = null, feedbackEl
   }
 
   const result = evaluateBadgeAnswer(badge, rawAnswer, selectedOptions);
-  if (!result.ok) {
+  
+  // Vérifier explicitement que result.ok est false avant de traiter comme un échec
+  // Cela évite les problèmes de timing ou de logique incorrecte
+  if (!result || !result.ok) {
     // ÉTAT 2 : Badge bloqué (répondu mais non débloqué)
     // On enregistre aussi l'échec avec niveau 0 (badge bloqué)
     const level0 = 'niv 0'; // Niveau 0 = badge bloqué = 0 point
@@ -3587,18 +3650,28 @@ async function handleBadgeAnswer(event, badge, providedAnswer = null, feedbackEl
     // Gestion de badgesFromWheel :
     // - Si c'est un retry et que le badge échoue, le retirer de badgesFromWheel (retour dans la roue)
     // - Si c'est une première réponse depuis la roue et que ça échoue, garder dans badgesFromWheel (section retenter)
+    // IMPORTANT : Ce bloc est dans "ÉTAT 2 : Badge bloqué", donc result.ok est false
+    // La notification ne doit être affichée QUE si le badge est vraiment bloqué (échec)
     if (isRetry) {
-      // Retirer de badgesFromWheel pour qu'il retourne dans la roue
-      state.badgesFromWheel.delete(badge.id);
-      
-      // Afficher le message de retour dans la roue
-      if (feedback) {
-        feedback.textContent = 'Badge non débloqué, retourné dans la roue.';
-        feedback.classList.add('error');
+      // Vérifier une dernière fois que le badge n'est PAS débloqué avant d'afficher la notification
+      // (sécurité supplémentaire pour éviter d'afficher la notification si le badge est débloqué)
+      if (!result.ok) {
+        // Retirer de badgesFromWheel pour qu'il retourne dans la roue
+        state.badgesFromWheel.delete(badge.id);
+        
+        // Afficher le message de retour dans la roue
+        if (feedback) {
+          feedback.textContent = 'Badge non débloqué, retourné dans la roue.';
+          feedback.classList.add('error');
+        }
+        
+        // Afficher une notification globale pour informer que le badge est retourné dans la roue
+        // UNIQUEMENT si le badge est vraiment bloqué (échec)
+        showBadgeReturnedToWheelNotification();
       }
       
-      // Si on est dans une carte, la supprimer immédiatement pour un feedback visuel instantané
-      if (cardElement) {
+      // Si on est dans une carte et que le badge est vraiment bloqué, la supprimer immédiatement
+      if (cardElement && !result.ok) {
         // Ajouter une animation de disparition avant de supprimer
         cardElement.style.transition = 'opacity 0.3s ease-out, transform 0.3s ease-out';
         cardElement.style.opacity = '0';
@@ -3609,11 +3682,14 @@ async function handleBadgeAnswer(event, badge, providedAnswer = null, feedbackEl
       }
       
       // Mettre à jour la roue et les badges bloqués IMMÉDIATEMENT (avant la sauvegarde pour un feedback instantané)
-      renderWheelBadges();
-      renderBlockedBadges();
-      
-      // Sauvegarder dans la base de données après la mise à jour visuelle
-      await saveBadgesFromWheel();
+      // UNIQUEMENT si le badge est vraiment bloqué
+      if (!result.ok) {
+        renderWheelBadges();
+        renderBlockedBadges();
+        
+        // Sauvegarder dans la base de données après la mise à jour visuelle
+        await saveBadgesFromWheel();
+      }
     } else if (isFromWheel) {
       // Première réponse depuis la roue qui échoue : garder dans badgesFromWheel pour la section retenter
       // Sauvegarder dans la base de données pour s'assurer qu'il est bien stocké
@@ -3661,6 +3737,7 @@ async function handleBadgeAnswer(event, badge, providedAnswer = null, feedbackEl
       return;
     }
   }
+  // IMPORTANT : Mettre à jour le state AVANT tout rendu pour garantir que le badge est marqué comme débloqué
   state.userBadges.add(badge.id);
   state.wasEverUnlocked.add(badge.id); // Marquer comme ayant été débloqué au moins une fois
   if (result.level) state.userBadgeLevels.set(badge.id, result.level);
@@ -3674,7 +3751,7 @@ async function handleBadgeAnswer(event, badge, providedAnswer = null, feedbackEl
     await saveBadgesFromWheel();
   }
   
-  // Si on est dans une carte, masquer le formulaire et mettre à jour l'affichage
+  // Si on est dans une carte (section "Badges non-débloqués"), masquer le formulaire et mettre à jour l'affichage
   if (cardElement) {
     const questionContainer = cardElement.querySelector('.blocked-badge-question-container');
     if (questionContainer) {
@@ -3689,14 +3766,24 @@ async function handleBadgeAnswer(event, badge, providedAnswer = null, feedbackEl
     }
     // Afficher une infobulle "Badge débloqué !" pour les badges non-débloqués
     showBadgeUnlockedNotification();
-    // Basculer vers l'onglet "Mon profil" et scroller vers le badge débloqué
-    scrollToBadgeInProfile(badge.id);
-    // Mettre à jour la roue immédiatement
-    renderWheelBadges();
-    // Re-rendre les badges bloqués après un délai (pour laisser voir le message de succès)
+    
+    // Supprimer la carte immédiatement avec animation
+    cardElement.style.transition = 'opacity 0.3s ease-out, transform 0.3s ease-out';
+    cardElement.style.opacity = '0';
+    cardElement.style.transform = 'scale(0.95)';
     setTimeout(() => {
-      renderBlockedBadges();
-    }, 2000);
+      cardElement.remove();
+    }, 300);
+    
+    // Mettre à jour la roue et les badges bloqués IMMÉDIATEMENT
+    // Le badge ne devrait pas apparaître dans la roue car il est débloqué (filtré par renderWheelBadges)
+    // Le state.userBadges a été mis à jour AVANT, donc le filtre fonctionnera correctement
+    renderWheelBadges();
+    renderBlockedBadges();
+    
+    // Basculer vers l'onglet "Mon profil" et scroller vers le badge débloqué IMMÉDIATEMENT
+    // Ne pas attendre, car le badge est débloqué et ne doit PAS aller dans la roue
+    scrollToBadgeInProfile(badge.id);
   }
   
   await updateCounters(false);
@@ -3718,12 +3805,7 @@ async function handleBadgeAnswer(event, badge, providedAnswer = null, feedbackEl
   }
 }
 
-function isMysteryLevel(label) {
-  if (typeof label !== 'string') return false;
-  const lower = label.toLowerCase();
-  // Compat anciennes données: "mystère/mystere/secret" + nouveau libellé "expert"
-  return lower.includes('mystère') || lower.includes('mystere') || lower.includes('secret') || lower.includes('expert');
-}
+// isMysteryLevel est maintenant importé du module badgeCalculations.js
 
 function formatLevelTag(unlocked, levelLabel, config) {
   const normalizeSkillText = (text) => {
@@ -3920,13 +4002,7 @@ function formatRankText(rankName) {
   return rankName === 'Rêve' ? `Vie de ${rankName}` : `Vie ${rankName}`;
 }
 
-function parseConfig(answer) {
-  try {
-    return JSON.parse(answer ?? '');
-  } catch (_) {
-    return null;
-  }
-}
+// parseConfig est maintenant importé du module utils.js
 
 function evaluateBadgeAnswer(badge, rawAnswer, selectedOptions = []) {
   const lower = rawAnswer.trim().toLowerCase();
@@ -4818,7 +4894,14 @@ async function updateCounters(syncProfile = false) {
     els.profileSectionSkillCount.textContent = totalSkillPoints;
   }
   if (els.profileSectionRank) {
+    // S'assurer que le bouton est visible
+    els.profileSectionRank.style.display = '';
+    els.profileSectionRank.classList.remove('hidden');
+    
+    // Mettre à jour le texte du rang
     els.profileSectionRank.textContent = formatRankText(rankMeta.name);
+    
+    // Appliquer les styles selon le type de rang
     els.profileSectionRank.classList.remove('rank-gold');
     if (rankMeta.isGold) {
       els.profileSectionRank.classList.add('rank-gold');
@@ -4953,18 +5036,26 @@ async function loadConnectionDays() {
         const parsed = JSON.parse(stored);
         if (Array.isArray(parsed)) {
           // Filtrer aussi les dates du localStorage pour ne garder que celles de la semaine actuelle
-          const filteredParsed = parsed.filter(dateStr => {
-            try {
-              const date = new Date(dateStr + 'T00:00:00');
-              const dateWeekStart = getWeekStartDate(date);
-              const dateWeekStartStr = dateWeekStart.toISOString().split('T')[0];
-              return dateWeekStartStr === currentWeekStartStr;
-            } catch (e) {
-              return false;
-            }
-          });
-          state.claimedDailyTokens = filteredParsed;
-          state.profile.claimed_daily_tokens = filteredParsed;
+          // S'assurer que currentWeekStartStr est défini (défini au début de la fonction)
+          if (typeof currentWeekStartStr !== 'undefined') {
+            const filteredParsed = parsed.filter(dateStr => {
+              try {
+                const date = new Date(dateStr + 'T00:00:00');
+                const dateWeekStart = getWeekStartDate(date);
+                const dateWeekStartStr = dateWeekStart.toISOString().split('T')[0];
+                return dateWeekStartStr === currentWeekStartStr;
+              } catch (e) {
+                return false;
+              }
+            });
+            state.claimedDailyTokens = filteredParsed;
+            state.profile.claimed_daily_tokens = filteredParsed;
+          } else {
+            // Si currentWeekStartStr n'est pas défini, utiliser les dates telles quelles (fallback)
+            console.warn('currentWeekStartStr non défini, utilisation des dates sans filtre');
+            state.claimedDailyTokens = parsed;
+            state.profile.claimed_daily_tokens = parsed;
+          }
         }
       }
     } catch (e) {
@@ -4977,12 +5068,7 @@ async function loadConnectionDays() {
   // Vérifier si le bonus est disponible (non réclamé)
   state.canClaimBonus = state.connectionDays.length === 7 && !state.weekBonusClaimed;
   
-  console.log('loadConnectionDays - État chargé:', {
-    connectionDays: state.connectionDays,
-    claimedDailyTokens: state.claimedDailyTokens,
-    weekBonusClaimed: state.weekBonusClaimed,
-    canClaimBonus: state.canClaimBonus
-  });
+  // État chargé depuis localStorage ou initialisé
   
   // Rendre le calendrier
   renderCalendar();
@@ -4999,17 +5085,24 @@ async function checkAndUpdateConnectionDay() {
   const currentWeekStart = getWeekStartDate(today);
   const currentWeekStartStr = currentWeekStart.toISOString().split('T')[0];
   
+  // S'assurer que connectionDays est initialisé
+  if (!state.connectionDays) {
+    state.connectionDays = [];
+  }
+  
   // Vérifier si on est dans une nouvelle semaine
-  if (state.weekStartDate !== currentWeekStartStr) {
-    // Nouvelle semaine : réinitialiser
+  if (!state.weekStartDate || state.weekStartDate !== currentWeekStartStr) {
+    // Nouvelle semaine ou première initialisation : réinitialiser
     state.connectionDays = [];
     state.claimedDailyTokens = [];
     state.weekBonusClaimed = false;
     state.weekStartDate = currentWeekStartStr;
-    state.profile.connection_days = [];
-    state.profile.claimed_daily_tokens = [];
-    state.profile.week_bonus_claimed = false;
-    state.profile.week_start_date = currentWeekStartStr;
+    if (state.profile) {
+      state.profile.connection_days = [];
+      state.profile.claimed_daily_tokens = [];
+      state.profile.week_bonus_claimed = false;
+      state.profile.week_start_date = currentWeekStartStr;
+    }
   }
   
   // Ajouter la date d'aujourd'hui si pas déjà présente
@@ -5042,12 +5135,28 @@ async function checkAndUpdateConnectionDay() {
 
 // Rend le calendrier des 7 jours
 function renderCalendar() {
-  if (!els.calendarWeek) return;
+  if (!els.calendarWeek) {
+    console.warn('renderCalendar: els.calendarWeek n\'existe pas');
+    return;
+  }
+  
+  // S'assurer que connectionDays est initialisé
+  if (!state.connectionDays) {
+    state.connectionDays = [];
+  }
+  
+  // S'assurer que claimedDailyTokens est initialisé
+  if (!state.claimedDailyTokens) {
+    state.claimedDailyTokens = [];
+  }
   
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const todayStr = today.toISOString().split('T')[0];
   const currentWeekStart = getWeekStartDate(today);
+  const currentWeekStartStr = currentWeekStart.toISOString().split('T')[0];
+  
+  // Rendu du calendrier
   
   const dayNames = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
   const days = [];
@@ -5117,7 +5226,13 @@ function renderCalendar() {
     });
   }
   
+  
   // Générer le HTML avec les états et les clics
+  if (days.length === 0) {
+    console.error('renderCalendar: Aucun jour généré !');
+    return;
+  }
+  
   els.calendarWeek.innerHTML = days.map(day => `
     <div class="calendar-day ${day.state} ${day.clickable ? 'clickable' : ''} ${day.isToday ? 'today' : ''}" 
          ${day.clickable ? `data-day="${day.dateStr}"` : ''}>
@@ -5141,7 +5256,6 @@ function renderCalendar() {
     
     e.stopPropagation();
     const dayStr = dayEl.getAttribute('data-day');
-    console.log('Clic sur jour:', dayStr);
     
     if (!dayStr) return;
     
@@ -5208,14 +5322,12 @@ function renderCalendar() {
     const isSunday = dayOfWeek === 0; // Dimanche = 0
     
     if (isSunday && allDaysConnected && !state.weekBonusClaimed && !state.profile?.week_bonus_claimed) {
-      console.log('Récupération du bonus hebdomadaire');
       handleClaimBonus();
       return;
     }
     
     // Vérifier que le jour est connecté et pas déjà réclamé
     if (isConnected && !isClaimed && !isClaimedInProfile) {
-      console.log('Récupération des jetons journaliers pour:', dayStr);
       claimDailyTokens(dayStr);
     } else {
       console.warn('Jour non disponible pour récupération:', { isConnected, isClaimed, isClaimedInProfile, dayStr });
@@ -5235,16 +5347,7 @@ function renderCalendar() {
 
 // Récupère les jetons journaliers pour un jour spécifique
 async function claimDailyTokens(dayStr) {
-  console.log('claimDailyTokens appelé pour:', dayStr);
-  console.log('State:', { 
-    user: !!state.user, 
-    profile: !!state.profile,
-    connectionDays: state.connectionDays,
-    claimedDailyTokens: state.claimedDailyTokens,
-    tokens: state.tokens,
-    isClaimingTokens: state.isClaimingTokens,
-    claimingDay: state.claimingDay
-  });
+  // Réclamation des jetons journaliers
   
   // Vérifier le verrou : si une réclamation est déjà en cours, ignorer
   if (state.isClaimingTokens) {
@@ -5291,21 +5394,27 @@ async function claimDailyTokens(dayStr) {
   }
   
   // Vérifier si les jetons ont déjà été récupérés pour ce jour
+  // IMPORTANT : Le state local a la priorité car il est mis à jour immédiatement
   // Vérifier à la fois dans le state local ET dans le profil (pour éviter les problèmes de synchronisation)
-  const isClaimedInState = state.claimedDailyTokens && state.claimedDailyTokens.includes(dayStr);
+  if (!state.claimedDailyTokens) {
+    state.claimedDailyTokens = [];
+  }
+  if (!state.profile.claimed_daily_tokens) {
+    state.profile.claimed_daily_tokens = [];
+  }
+  
+  const isClaimedInState = state.claimedDailyTokens.includes(dayStr);
   const isClaimedInProfile = Array.isArray(state.profile.claimed_daily_tokens) && 
                              state.profile.claimed_daily_tokens.includes(dayStr);
   
+  // Vérification avant réclamation
+  
   if (isClaimedInState || isClaimedInProfile) {
-    console.warn('Jetons déjà récupérés pour ce jour:', dayStr);
-    console.log('État actuel:', {
-      claimedDailyTokens: state.claimedDailyTokens,
-      profileClaimed: state.profile.claimed_daily_tokens,
-      isClaimedInState,
-      isClaimedInProfile
-    });
-    // Recharger le profil depuis Supabase pour s'assurer de la synchronisation
-    await fetchProfile();
+    console.warn('❌ Jetons déjà récupérés pour ce jour:', dayStr);
+    // Si le state local et le profil sont désynchronisés, recharger depuis Supabase
+    if (isClaimedInState !== isClaimedInProfile) {
+      await fetchProfile();
+    }
     renderCalendar();
     updateCalendarBadge();
     return;
@@ -5334,7 +5443,6 @@ async function claimDailyTokens(dayStr) {
     renderCalendar();
     updateCalendarBadge();
     
-    console.log('Mise à jour des jetons (state local):', { newTokens, updatedClaimed });
   
     // Mettre à jour dans Supabase
     const { error: updateError } = await supabase
@@ -5378,30 +5486,32 @@ async function claimDailyTokens(dayStr) {
           showTokenRewardNotification(2);
         } else {
           console.error('Erreur lors de la mise à jour des jetons:', retryError);
-          // En cas d'erreur, annuler les changements locaux
+          // En cas d'erreur, annuler les changements locaux et recharger depuis Supabase
           state.tokens = (state.tokens || 0) - 2;
           state.profile.tokens = state.tokens;
           state.claimedDailyTokens = state.claimedDailyTokens.filter(d => d !== dayStr);
           state.profile.claimed_daily_tokens = state.claimedDailyTokens;
+          // Recharger depuis Supabase pour récupérer l'état réel
+          await fetchProfile();
           renderCalendar();
           updateCalendarBadge();
         }
       } else {
-        // En cas d'erreur, annuler les changements locaux
+        // En cas d'erreur, annuler les changements locaux et recharger depuis Supabase
         state.tokens = (state.tokens || 0) - 2;
         state.profile.tokens = state.tokens;
         state.claimedDailyTokens = state.claimedDailyTokens.filter(d => d !== dayStr);
         state.profile.claimed_daily_tokens = state.claimedDailyTokens;
+        // Recharger depuis Supabase pour récupérer l'état réel
+        await fetchProfile();
         renderCalendar();
         updateCalendarBadge();
       }
     } else {
-      // Succès : recharger le profil depuis Supabase pour s'assurer de la synchronisation
-      console.log('Jetons récupérés avec succès, rechargement du profil depuis Supabase...');
-      
-      // Recharger le profil depuis Supabase pour garantir la synchronisation
-      // Cela évite les problèmes si l'utilisateur rafraîchit la page
-      await fetchProfile();
+      // Succès : les données sont déjà dans le state local et sauvegardées dans Supabase
+      // Ne PAS recharger le profil immédiatement car cela pourrait causer des problèmes de synchronisation
+      // Le state local est déjà à jour avec les bonnes données
+      // Jetons récupérés avec succès
       
       // Animation sur la case du calendrier
       const dayEl = els.calendarWeek?.querySelector(`[data-day="${dayStr}"]`);
@@ -5415,6 +5525,12 @@ async function claimDailyTokens(dayStr) {
       
       // Afficher une notification
       showTokenRewardNotification(2);
+      
+      // Ne PAS recharger fetchProfile() ici car :
+      // 1. Le state local est déjà correct et à jour
+      // 2. La sauvegarde Supabase vient d'être faite avec succès
+      // 3. Recharger immédiatement pourrait récupérer des données non synchronisées
+      // 4. Le rechargement se fera naturellement au prochain chargement de page
     }
   } finally {
     // DÉSACTIVER LE VERROU : toujours libérer le verrou, même en cas d'erreur
@@ -5498,7 +5614,7 @@ async function handleClaimBonus() {
     
     if (error) {
       console.error('Erreur lors de la réclamation du bonus:', error);
-      // En cas d'erreur, annuler les changements locaux
+      // En cas d'erreur, annuler les changements locaux et recharger depuis Supabase
       state.tokens = (state.tokens || 0) - 3;
       state.profile.tokens = state.tokens;
       state.canClaimBonus = true;
@@ -5507,15 +5623,14 @@ async function handleClaimBonus() {
       state.profile.week_bonus_claimed = false;
       state.claimedDailyTokens = state.claimedDailyTokens.filter(d => d !== sundayStr);
       state.profile.claimed_daily_tokens = state.claimedDailyTokens;
+      // Recharger depuis Supabase pour récupérer l'état réel
+      await fetchProfile();
       renderCalendar();
       updateCalendarBadge();
     } else {
-      // Succès : recharger le profil depuis Supabase pour s'assurer de la synchronisation
-      console.log('Bonus récupéré avec succès, rechargement du profil depuis Supabase...');
-      
-      // Recharger le profil depuis Supabase pour garantir la synchronisation
-      // Cela évite les problèmes si l'utilisateur rafraîchit la page
-      await fetchProfile();
+      // Succès : les données sont déjà dans le state local et sauvegardées dans Supabase
+      // Ne PAS recharger le profil immédiatement car le state local est déjà à jour
+      // Le rechargement se fera naturellement au prochain chargement de page
       
       // Animation sur la case du dimanche
       const sundayEl = els.calendarWeek?.querySelector(`[data-day="${sundayStr}"]`);

@@ -120,7 +120,11 @@
             <img id="profile-section-avatar" src="./icons/logobl.png" alt="Avatar" class="logo medium">
             <div class="profile-section-info">
               <h2 id="profile-section-username">Utilisateur</h2>
-              <button id="profile-section-rank" type="button" class="ghost rank-button profile-rank-below">—</button>
+              <div style="position: relative;">
+                <button id="profile-section-rank" type="button" class="ghost rank-button profile-rank-below">—</button>
+                <!-- Infobulle des rangs -->
+                <div id="rank-tooltip" class="rank-tooltip hidden"></div>
+              </div>
             </div>
           </div>
           <div class="profile-section-stats">
