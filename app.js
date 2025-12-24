@@ -214,6 +214,9 @@ function cacheElements() {
   els.wheelItems = document.getElementById('wheel-items');
   els.wheelIndicator = document.getElementById('wheel-indicator');
   els.spinButton = document.getElementById('spin-button');
+  els.badgeProgressGauge = document.getElementById('badge-progress-gauge');
+  els.gaugeFill = document.getElementById('gauge-fill');
+  els.gaugeCount = document.getElementById('gauge-count');
   els.badgeQuestionContainer = document.getElementById('badge-question-container');
   els.selectedBadgeName = document.getElementById('selected-badge-name');
   els.selectedBadgeQuestion = document.getElementById('selected-badge-question');
@@ -4379,6 +4382,15 @@ function setMessage(text, isError = false) {
   els.authMessage.classList.toggle('error', isError);
 }
 
+// Met à jour la jauge de progression des badges
+function updateBadgeProgressGauge(unlockedCount, totalCount) {
+  if (!els.gaugeFill || !els.gaugeCount) return;
+  
+  const percentage = totalCount > 0 ? (unlockedCount / totalCount) * 100 : 0;
+  els.gaugeFill.style.height = `${percentage}%`;
+  els.gaugeCount.textContent = `${unlockedCount}`;
+}
+
 async function updateCounters(syncProfile = false) {
   // Calculer d'abord les points pour tous les badges (nécessaire pour vérifier les conditions des badges fantômes)
   let tempSkillPoints = 0;
@@ -4465,6 +4477,9 @@ async function updateCounters(syncProfile = false) {
   }
   if (els.skillCount) els.skillCount.textContent = `${totalSkillPoints}`;
   state.currentSkillPoints = totalSkillPoints;
+  
+  // Mettre à jour la jauge de progression des badges
+  updateBadgeProgressGauge(badgeCount, totalBadges);
   
   // Rang (uniquement si l'élément existe, car le header a été supprimé)
   const rankMeta = getRankMeta(totalSkillPoints);
