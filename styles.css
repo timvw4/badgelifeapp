@@ -2413,7 +2413,6 @@ button {
 }
 
 .calendar-tooltip {
-  margin: 0;
   font-size: 14px;
   line-height: 1.5;
   color: var(--text);
@@ -2437,6 +2436,8 @@ button {
   .calendar-day {
     min-height: 70px;
     padding: 10px 6px;
+    aspect-ratio: 1;
+    min-height: 0;
   }
 
   .calendar-day-name {
