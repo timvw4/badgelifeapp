@@ -163,18 +163,22 @@
 
         <!-- Interface de la roue -->
         <div class="wheel-wrapper">
-          <!-- Texte d'information au-dessus de la roue -->
-          <p class="wheel-info-text" style="text-align: center; color: white; margin: 0 0 20px 0; font-size: 14px; line-height: 1.5; width: 100%; max-width: 400px;">
-            Répond à une question aléatoire et tente de débloquer un badge. Attention, certains badges te feront perdre des skills.
-          </p>
           <div class="wheel-wrapper-content">
             <div id="wheel-container" class="wheel-container">
+                <!-- Titre de la roue -->
+                <h3 class="wheel-title-text" style="text-align: center; color: white; margin: 0 0 4px 0; font-size: 20px; font-weight: 700; width: 100%;">
+                  Roue aux questions
+                </h3>
+                <!-- Texte d'information au-dessus de la roue -->
+                <p class="wheel-info-text" style="text-align: center; color: white; margin: 0 0 12px 0; font-size: 14px; line-height: 1.5; width: 100%;">
+                  Répond à une question aléatoire et tente de débloquer un badge. Attention, certains badges te feront perdre des skills.
+                </p>
             <div id="wheel" class="wheel">
               <div id="wheel-items" class="wheel-items"></div>
             </div>
             <div id="wheel-indicator" class="wheel-indicator"></div>
             <div class="spin-button-wrapper">
-              <button id="spin-button" class="primary spin-button" disabled>Tourner la roue (1 jeton)</button>
+              <button id="spin-button" class="primary spin-button" disabled>Tourne la roue (1 jeton)</button>
               <!-- Infobulle pour le bouton tourner la roue -->
               <div id="spin-button-tooltip" class="tokens-tooltip hidden">
                 <p>Tu n'as pas assez de jetons pour tourner la roue. Tu recevras 2 jetons chaque jour. Reviens demain pour continuer à débloquer des badges !</p>
