@@ -1228,7 +1228,7 @@ function updateTokensDisplay() {
     els.spinButton.disabled = shouldDisable;
     els.spinButton.textContent = state.isWheelSpinning 
       ? 'Roue en cours...' 
-      : `Tourner la roue (1 jeton)`;
+      : `Tourne la roue (1 jeton)`;
     
     // S'assurer que l'infobulle est cachée lors de la mise à jour de l'affichage
     // Elle ne s'affichera que lors d'un clic explicite sur le bouton
@@ -1732,7 +1732,7 @@ function renderWheelBadges() {
       spinButton.id = 'spin-button';
       spinButton.className = 'primary spin-button';
       spinButton.disabled = true;
-      spinButton.textContent = 'Tourner la roue (1 jeton)';
+      spinButton.textContent = 'Tourne la roue (1 jeton)';
       spinWrapper.appendChild(spinButton);
       els.wheelContainer.appendChild(spinWrapper);
       // Mettre à jour la référence
@@ -2504,11 +2504,28 @@ async function handleBadgeAnswerFromWheel(e) {
       // Récupérer le nom du badge (sans emoji)
       const badgeName = stripEmojis(state.selectedBadgeFromWheel.name || '');
       
-      // Message différent pour les badges Expert
-      const successMessage = isExpertLevel
-        ? '🏆 Badge Expert débloqué ! Il est ajouté à ta collection.'
-        : '🎉 Badge débloqué ! Il est ajouté à ta collection.';
+      // Formater le message selon le niveau
+      const config = parseConfig(state.selectedBadgeFromWheel.answer);
+      let successMessage = '';
       const messageColor = isExpertLevel ? '#a855f7' : '#10b981'; // Violet pour Expert, vert pour normal
+      
+      // Vérifier si le badge a plusieurs niveaux
+      const totalLevels = getLevelCount(config);
+      const hasMultipleLevels = totalLevels > 1;
+      
+      if (badgeLevel && hasMultipleLevels && !isExpertLevel) {
+        // Badge avec plusieurs niveaux : afficher le numéro du skill
+        const levelPosition = getLevelPosition(badgeLevel, config);
+        if (levelPosition !== null && levelPosition > 0) {
+          successMessage = `🎉 Badge débloqué !\n\nTu as obtenu le niveau ${levelPosition} de ce badge. Il est maintenant ajouté à ta collection.`;
+        } else {
+          // Si on ne peut pas déterminer la position, afficher le message simple
+          successMessage = '🎉 Badge débloqué !\n\nIl est maintenant ajouté à ta collection.';
+        }
+      } else {
+        // Badge sans niveau, avec un seul niveau, ou Expert : message simple
+        successMessage = '🎉 Badge débloqué !\n\nIl est maintenant ajouté à ta collection.';
+      }
       
       // Afficher d'abord le "?" puis animer vers l'emoji réel
       card.innerHTML = `
@@ -2521,6 +2538,11 @@ async function handleBadgeAnswerFromWheel(e) {
         <p class="badge-success-message" style="text-align: center; color: ${messageColor}; margin: 20px 0; font-size: 16px; opacity: 0;" id="badge-message-reveal">
           ${successMessage}
         </p>
+        <div style="display: flex; justify-content: center; margin-top: 20px; opacity: 0;" id="badge-button-reveal">
+          <button class="primary" id="view-badge-button" style="padding: 12px 24px; font-size: 16px;">
+            Voir dans ma collection
+          </button>
+        </div>
       `;
       
       // Mettre à jour la référence à selectedBadgeName après avoir modifié le HTML
@@ -2533,10 +2555,13 @@ async function handleBadgeAnswerFromWheel(e) {
           els.selectedBadgeName.style.color = 'inherit'; // Retirer la couleur grise
           els.selectedBadgeName.classList.add('badge-emoji-revealed');
           
-          // Afficher le nom et le message avec un léger délai
+          // Afficher le nom, le message et le bouton avec un léger délai
           setTimeout(() => {
             const nameEl = card.querySelector('#badge-name-reveal');
             const messageEl = card.querySelector('#badge-message-reveal');
+            const buttonEl = card.querySelector('#badge-button-reveal');
+            const viewButton = card.querySelector('#view-badge-button');
+            
             if (nameEl) {
               nameEl.classList.add('badge-name-revealed');
               nameEl.style.opacity = '1';
@@ -2545,11 +2570,17 @@ async function handleBadgeAnswerFromWheel(e) {
               messageEl.style.transition = 'opacity 0.5s ease-in';
               messageEl.style.opacity = '1';
             }
+            if (buttonEl) {
+              buttonEl.style.transition = 'opacity 0.5s ease-in';
+              buttonEl.style.opacity = '1';
+            }
             
-            // Rediriger vers le badge dans "Ma collection" après 2 secondes
-            setTimeout(() => {
-              scrollToBadgeInProfile(state.selectedBadgeFromWheel.id);
-            }, 2000);
+            // Attacher l'événement au bouton pour rediriger vers le badge
+            if (viewButton) {
+              viewButton.addEventListener('click', () => {
+                scrollToBadgeInProfile(state.selectedBadgeFromWheel.id);
+              });
+            }
           }, 500);
         }
       }, 100);
@@ -2562,11 +2593,8 @@ async function handleBadgeAnswerFromWheel(e) {
     renderWheelBadges();
     renderMyBadges();
     
-    // Masquer le conteneur après 3 secondes
+    // Le message reste affiché jusqu'à ce que l'utilisateur clique sur le bouton ou ferme manuellement
     // L'utilisateur peut aussi cliquer ailleurs pour fermer (géré par attachBadgeQuestionCloseHandler)
-    setTimeout(() => {
-      closeBadgeQuestion();
-    }, 3000);
   } else {
     // S'assurer que le conteneur est visible
     if (els.badgeQuestionContainer) {
