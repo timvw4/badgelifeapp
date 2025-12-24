@@ -2,7 +2,7 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm';
 import { SUPABASE_URL, SUPABASE_ANON_KEY, ADMIN_USER_IDS } from './config.js';
 import { isMysteryLevel, pickHighestLevel, extractSkillNumber, calculateMaxSkillPoints, calculateSkillsTotals as calculateSkillsTotalsShared } from './badgeCalculations.js';
-import { parseBadgeAnswer, safeSupabaseSelect } from './utils.js';
+import { parseBadgeAnswer, safeSupabaseSelect, pseudoToEmail, isAdminUser } from './utils.js';
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
@@ -12,16 +12,6 @@ const state = {
 };
 
 const els = {};
-
-function pseudoToEmail(pseudo) {
-  if (!pseudo) return '';
-  const cleaned = pseudo
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, '-')
-    .replace(/[^a-z0-9._-]/g, '');
-  return `${cleaned || 'user'}@badgelife.dev`;
-}
 
 document.addEventListener('DOMContentLoaded', async () => {
   cacheEls();
@@ -209,11 +199,6 @@ async function enterApp() {
 function toggleApp(isConnected) {
   els.authCard.classList.toggle('hidden', isConnected);
   els.app.classList.toggle('hidden', !isConnected);
-}
-
-function isAdminUser(user) {
-  if (!user || !user.id) return false;
-  return Array.isArray(ADMIN_USER_IDS) && ADMIN_USER_IDS.includes(user.id);
 }
 
 async function loadBadges() {

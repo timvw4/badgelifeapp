@@ -1,5 +1,31 @@
 // Module utilitaire partagé pour les fonctions communes
 // Utilisé par app.js et admin.js pour éviter la duplication de code
+import { ADMIN_USER_IDS } from './config.js';
+
+/**
+ * Convertit un pseudo en email valide pour Supabase
+ * @param {string} pseudo - Le pseudo à convertir
+ * @returns {string} - L'email généré (format: pseudo@badgelife.dev)
+ */
+export function pseudoToEmail(pseudo) {
+  if (!pseudo) return '';
+  const cleaned = pseudo
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '-')
+    .replace(/[^a-z0-9._-]/g, '');
+  return `${cleaned || 'user'}@badgelife.dev`;
+}
+
+/**
+ * Vérifie si un utilisateur est un administrateur
+ * @param {Object} user - L'objet utilisateur de Supabase
+ * @returns {boolean} - true si l'utilisateur est admin
+ */
+export function isAdminUser(user) {
+  if (!user || !user.id) return false;
+  return Array.isArray(ADMIN_USER_IDS) && ADMIN_USER_IDS.includes(user.id);
+}
 
 /**
  * Parse une réponse de badge (qui peut être une string JSON ou déjà un objet)
