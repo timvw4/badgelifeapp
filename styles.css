@@ -1642,7 +1642,7 @@ button {
     background: linear-gradient(135deg, rgba(251, 191, 36, 0.9), rgba(249, 115, 22, 0.9));
     border: 1px solid rgba(251, 191, 36, 0.5);
     border-radius: 10px;
-    margin: 0;
+    margin: 1px 0 0 0;
     animation: tokenAppear 0.5s ease-out;
     cursor: pointer;
     transition: all 0.2s ease;
@@ -1711,7 +1711,6 @@ button {
 
   .tokens-counter .token-emoji {
     font-size: 18px;
-    animation: tokenBounce 2s ease-in-out infinite;
   }
 
   .tokens-count {
@@ -1776,7 +1775,11 @@ button {
     will-change: transform;
   }
 
-  .wheel-item {
+  .wheel-item-badge {
+  color: #9ca3af; /* Gris pour le "?" des badges */
+}
+
+.wheel-item {
     height: 60px;
     display: flex;
     align-items: center;
@@ -1968,87 +1971,6 @@ button {
     max-width: 600px;
     font-size: 14px;
     line-height: 1.6;
-  }
-
-  .blocked-badges-section {
-    margin-top: 40px;
-    padding-top: 30px;
-    border-top: 1px solid rgba(255, 255, 255, 0.1);
-  }
-
-  .blocked-badges-section h3 {
-    margin-bottom: 12px;
-    font-size: 20px;
-  }
-
-  .blocked-badge-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-  }
-
-  .blocked-badge-header .badge-compact {
-    flex: 1;
-    display: flex;
-    align-items: center;
-    gap: 12px;
-  }
-
-  .blocked-badge-details {
-    margin-top: 16px;
-    padding-top: 16px;
-    border-top: 1px solid rgba(255, 255, 255, 0.1);
-    animation: slideIn 0.2s ease-out;
-  }
-
-  .blocked-badge-answer {
-    margin-bottom: 12px;
-    padding: 10px;
-    background: rgba(255, 255, 255, 0.03);
-    border-radius: 8px;
-    font-size: 13px;
-  }
-
-  /* Styles pour les badges bloqués dans la section retenter */
-  .blocked-badge-card.blocked .badge-emoji,
-  .blocked-badge-card.blocked .badge-title {
-    filter: none;
-    color: white;
-  }
-  
-  .blocked-badge-card.blocked {
-    border-color: rgba(255, 255, 255, 0.15);
-    opacity: 1;
-  }
-  
-  .blocked-badge-card.blocked.expanded {
-    border-color: rgba(255, 255, 255, 0.15) !important;
-  }
-
-  .blocked-badge-question-container {
-    margin-top: 16px;
-    padding-top: 16px;
-    border-top: 1px solid rgba(255, 255, 255, 0.1);
-  }
-
-  .blocked-badge-question-container .badge-question-text {
-    margin-bottom: 16px;
-  }
-
-  .blocked-badge-question-container .badge-question-text p {
-    margin: 8px 0;
-  }
-
-  .blocked-badge-question-container .badge-answer-form {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-  }
-
-  .retry-badge-btn {
-    width: 100%;
-    margin-top: 12px;
   }
 
   .no-tokens-message {
@@ -2591,6 +2513,59 @@ button {
 .my-catalog-card.modifiable:hover {
   transform: scale(1.02);
   box-shadow: 0 4px 20px rgba(139, 92, 246, 0.4);
+}
+
+@keyframes badgeEmojiReveal {
+  0% {
+    transform: scale(0.8) rotateY(0deg);
+    opacity: 0.7;
+  }
+  50% {
+    transform: scale(1.2) rotateY(180deg);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1) rotateY(360deg);
+    opacity: 1;
+  }
+}
+
+.badge-emoji-reveal {
+  transition: all 1s cubic-bezier(0.34, 1.56, 0.64, 1);
+  display: inline-block;
+  text-align: center;
+  margin: 0 auto;
+  transform-origin: center center;
+  position: relative;
+  width: 80px;
+  height: 80px;
+  line-height: 80px;
+}
+
+.badge-emoji-revealed {
+  animation: badgeEmojiReveal 1s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes badgeNameReveal {
+  0% {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+  100% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.badge-name-reveal {
+  display: inline-block;
+  text-align: center;
+  margin: 0 auto;
+  transform-origin: center center;
+}
+
+.badge-name-revealed {
+  animation: badgeNameReveal 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
 }
 
 @keyframes modifiableGlow {

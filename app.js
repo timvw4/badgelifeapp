@@ -33,9 +33,6 @@ const state = {
   tokens: 0, // Nombre de jetons de l'utilisateur
   selectedBadgeFromWheel: null, // Badge sélectionné par la roue
   isWheelSpinning: false, // État de la roue (en train de tourner ou non)
-  isRetryBadge: false, // Flag pour indiquer si on rerépond à un badge bloqué
-  retryBadgeId: null, // ID du badge en retry
-  badgesFromWheel: new Set(), // IDs des badges qui proviennent de la roue
   connectionDays: [], // Array des dates de connexion de la semaine
   weekStartDate: null, // Date du lundi de la semaine en cours
   canClaimBonus: false, // Si les 3 jetons bonus sont disponibles (non réclamés)
@@ -223,8 +220,6 @@ function cacheElements() {
   els.badgeAnswerForm = document.getElementById('badge-answer-form');
   els.badgeAnswerInput = document.getElementById('badge-answer-input');
   els.badgeAnswerMessage = document.getElementById('badge-answer-message');
-  els.blockedBadgesSection = document.getElementById('blocked-badges-section');
-  els.blockedBadgesList = document.getElementById('blocked-badges-list');
   els.modifyBadgeOverlay = document.getElementById('modify-badge-overlay');
   els.tokensTooltip = document.getElementById('tokens-tooltip');
   els.spinButtonTooltip = document.getElementById('spin-button-tooltip');
@@ -615,6 +610,9 @@ function showTab(tab) {
   Object.entries(els.tabSections).forEach(([key, section]) => {
     section.classList.toggle('hidden', key !== tab);
   });
+  
+  // Fermer le calendrier si un onglet est sélectionné
+  closeCalendarDrawer();
 }
 
 function attachSettingsMenuListeners() {
@@ -778,9 +776,6 @@ function resetState() {
   state.tokens = 0;
   state.selectedBadgeFromWheel = null;
   state.isWheelSpinning = false;
-  state.isRetryBadge = false;
-  state.retryBadgeId = null;
-  state.badgesFromWheel = new Set();
   state.selectedIsJoker = false;
   state.isModifyingBadge = false;
   state.jokerType = null;
@@ -961,7 +956,7 @@ async function fetchProfile() {
   const { data, error } = await safeSupabaseSelect(
     supabase,
     'profiles',
-    'username, badge_count, avatar_url, skill_points, rank, is_private, tokens, last_token_date, connection_days, week_start_date, week_bonus_available, week_bonus_claimed, claimed_daily_tokens, badges_from_wheel',
+    'username, badge_count, avatar_url, skill_points, rank, is_private, tokens, last_token_date, connection_days, week_start_date, week_bonus_available, week_bonus_claimed, claimed_daily_tokens',
     'username, badge_count, avatar_url, skill_points, rank',
     (query) => query.eq('id', state.user.id).single()
   );
@@ -980,10 +975,10 @@ async function fetchProfile() {
     const insertData = { id: state.user.id, username: 'Invité', badge_count: 0, avatar_url: null, skill_points: 0, rank: 'Minimaliste', tokens: 3 };
     try {
       await supabase.from('profiles').insert({ ...insertData, is_private: false });
-      state.profile = { ...insertData, is_private: false, tokens: 3, last_token_date: null, connection_days: [], claimed_daily_tokens: [], week_start_date: currentWeekStartStr, week_bonus_available: false, week_bonus_claimed: false, badges_from_wheel: [] };
+      state.profile = { ...insertData, is_private: false, tokens: 3, last_token_date: null, connection_days: [], claimed_daily_tokens: [], week_start_date: currentWeekStartStr, week_bonus_available: false, week_bonus_claimed: false };
     } catch (e) {
       await supabase.from('profiles').insert(insertData);
-      state.profile = { ...insertData, is_private: false, tokens: 3, last_token_date: null, connection_days: [], claimed_daily_tokens: [], week_start_date: currentWeekStartStr, week_bonus_available: false, week_bonus_claimed: false, badges_from_wheel: [] };
+      state.profile = { ...insertData, is_private: false, tokens: 3, last_token_date: null, connection_days: [], claimed_daily_tokens: [], week_start_date: currentWeekStartStr, week_bonus_available: false, week_bonus_claimed: false };
     }
   } else {
     state.profile = { 
@@ -995,18 +990,10 @@ async function fetchProfile() {
       claimed_daily_tokens: data.claimed_daily_tokens || [],
       week_start_date: data.week_start_date || null,
       week_bonus_available: data.week_bonus_available ?? false,
-      week_bonus_claimed: data.week_bonus_claimed ?? false,
-      badges_from_wheel: data.badges_from_wheel || []
+      week_bonus_claimed: data.week_bonus_claimed ?? false
     };
   }
   state.tokens = state.profile.tokens || 0;
-  
-  // Charger les badges de la section retenter depuis la base de données
-  if (Array.isArray(state.profile.badges_from_wheel)) {
-    state.badgesFromWheel = new Set(state.profile.badges_from_wheel);
-  } else {
-    state.badgesFromWheel = new Set();
-  }
   
   updatePrivacyButton();
   updatePrivacyIndicator();
@@ -1016,27 +1003,6 @@ async function fetchProfile() {
   // Cette fonction est appelée à chaque chargement de page (même si l'utilisateur n'a pas besoin de se reconnecter)
   // Elle vérifie automatiquement si last_token_date est différent d'aujourd'hui et attribue les jetons si nécessaire
   await checkAndGrantTokens();
-}
-
-// Sauvegarde les badges de la section retenter dans la base de données
-async function saveBadgesFromWheel() {
-  if (!state.user || !state.profile) return;
-  
-  // Convertir le Set en Array pour la base de données
-  const badgesArray = Array.from(state.badgesFromWheel);
-  
-  // Mettre à jour dans Supabase
-  const { error } = await supabase
-    .from('profiles')
-    .update({ badges_from_wheel: badgesArray })
-    .eq('id', state.user.id);
-  
-  if (error) {
-    console.error('Erreur lors de la sauvegarde des badges de la section retenter:', error);
-  } else {
-    // Mettre à jour le profil local
-    state.profile.badges_from_wheel = badgesArray;
-  }
 }
 
 // Enregistre la connexion du jour (sans attribuer de jetons automatiquement)
@@ -1084,29 +1050,6 @@ function showTokenRewardNotification(amount = 2, type = 'daily') {
 }
 
 // Affiche une notification quand un badge est retourné dans la roue
-function showBadgeReturnedToWheelNotification() {
-  // Créer une infobulle temporaire
-  const notification = document.createElement('div');
-  notification.className = 'badge-unlocked-notification';
-  
-  notification.innerHTML = `
-    <div class="badge-unlocked-content">
-      <span class="badge-emoji-large">🔄</span>
-      <span>Badge retourné dans la roue</span>
-    </div>
-  `;
-  document.body.appendChild(notification);
-  
-  // Animation d'apparition
-  setTimeout(() => notification.classList.add('show'), 10);
-  
-  // Disparition après 3 secondes
-  setTimeout(() => {
-    notification.classList.remove('show');
-    setTimeout(() => notification.remove(), 300);
-  }, 3000);
-}
-
 // Affiche une notification "Jetons insuffisants"
 function showInsufficientTokensNotification() {
   // Créer une infobulle temporaire
@@ -1602,7 +1545,6 @@ function render() {
   }
   renderAllBadges();
   renderMyBadges();
-  renderBlockedBadges();
   // Mettre à jour la roue si elle est visible (ne pas interférer si elle tourne)
   if (!state.isWheelSpinning) {
     renderWheelBadges();
@@ -1798,24 +1740,15 @@ function renderWheelBadges() {
   // Filtrer les badges pour la roue :
   // - Non fantômes
   // - Non débloqués
-  // - Soit sans réponse (nouveaux badges)
-  // - Soit avec réponse mais pas dans badgesFromWheel (anciens comptes avec badges bloqués)
+  // Tous les badges non débloqués peuvent être dans la roue, même s'ils ont déjà une réponse
   const availableBadges = state.badges.filter(badge => {
     const unlocked = state.userBadges.has(badge.id);
-    const userAnswer = state.userBadgeAnswers.get(badge.id);
-    const hasAnswer = userAnswer !== undefined && userAnswer !== null;
-    const isInRetrySection = state.badgesFromWheel.has(badge.id);
     
     // Exclure les badges fantômes et débloqués
     if (isGhostBadge(badge) || unlocked) return false;
     
-    // Inclure les badges sans réponse (nouveaux)
-    if (!hasAnswer) return true;
-    
-    // Inclure les badges bloqués (anciens comptes) SAUF s'ils sont déjà dans "Badges à retenter"
-    if (hasAnswer && !isInRetrySection) return true;
-    
-    return false;
+    // Inclure tous les badges non débloqués (avec ou sans réponse)
+    return true;
   });
   
   if (availableBadges.length === 0) {
@@ -1833,7 +1766,7 @@ function renderWheelBadges() {
     if (!messageEl) {
       messageEl = document.createElement('p');
       messageEl.className = 'muted wheel-empty-message';
-      messageEl.textContent = 'Aucun badge disponible dans la roue. Vérifie la section "Badges à retenter" ci-dessous ! 👇';
+      messageEl.textContent = 'Tous les badges sont débloqués ! 🎉';
       els.wheelContainer.appendChild(messageEl);
     }
     
@@ -1860,9 +1793,10 @@ function renderWheelBadges() {
   // Créer le tableau des éléments de la roue (badges + 1 joker)
   const wheelElements = [];
   availableBadges.forEach(badge => {
-    wheelElements.push({ type: 'badge', badge, emoji: getBadgeEmoji(badge), id: badge.id });
+    // Remplacer l'emoji du badge par "?" (gris) dans la roue
+    wheelElements.push({ type: 'badge', badge, emoji: '?', id: badge.id });
   });
-  // Ajouter un seul joker pour l'affichage
+  // Ajouter un seul joker pour l'affichage (garde son emoji 🃏)
   wheelElements.push({ type: 'joker', emoji: JOKER_EMOJI, id: JOKER_ID });
   
   // Vérifier si les badges ont changé (pour savoir si on doit remélanger)
@@ -1899,6 +1833,9 @@ function renderWheelBadges() {
       item.className = 'wheel-item';
       if (element.type === 'joker') {
         item.classList.add('wheel-item-joker');
+      } else {
+        // Ajouter une classe pour les badges (pour le style gris du "?")
+        item.classList.add('wheel-item-badge');
       }
       item.dataset.badgeId = element.id;
       item.dataset.type = element.type;
@@ -1940,24 +1877,15 @@ async function handleSpinWheel() {
   // Filtrer les badges disponibles pour la roue :
   // - Non fantômes
   // - Non débloqués
-  // - Soit sans réponse (nouveaux badges)
-  // - Soit avec réponse mais pas dans badgesFromWheel (anciens comptes avec badges bloqués)
+  // Tous les badges non débloqués peuvent être dans la roue, même s'ils ont déjà une réponse
   const availableBadges = state.badges.filter(badge => {
     const unlocked = state.userBadges.has(badge.id);
-    const userAnswer = state.userBadgeAnswers.get(badge.id);
-    const hasAnswer = userAnswer !== undefined && userAnswer !== null;
-    const isInRetrySection = state.badgesFromWheel.has(badge.id);
     
     // Exclure les badges fantômes et débloqués
     if (isGhostBadge(badge) || unlocked) return false;
     
-    // Inclure les badges sans réponse (nouveaux)
-    if (!hasAnswer) return true;
-    
-    // Inclure les badges bloqués (anciens comptes) SAUF s'ils sont déjà dans "Badges à retenter"
-    if (hasAnswer && !isInRetrySection) return true;
-    
-    return false;
+    // Inclure tous les badges non débloqués (avec ou sans réponse)
+    return true;
   });
   
   if (availableBadges.length === 0) {
@@ -2091,8 +2019,6 @@ async function handleSpinWheel() {
       }
     } else {
       // Badge normal
-      state.badgesFromWheel.add(selectedElement.id);
-      await saveBadgesFromWheel();
       // Mettre à jour la roue immédiatement pour refléter que ce badge n'est plus disponible
       renderWheelBadges();
       showBadgeQuestion(selectedElement.badge);
@@ -2401,14 +2327,16 @@ function showBadgeQuestion(badge) {
   
   if (!els.selectedBadgeName || !els.selectedBadgeQuestion) return;
   
-  // Afficher uniquement l'emoji, pas le nom
+  // Afficher "?" au lieu de l'emoji dans le formulaire
   // Mais garder le vrai emoji et nom dans les attributs title et data-*
   const emoji = getBadgeEmoji(badge);
   const title = stripEmojis(badge.name || '');
-  els.selectedBadgeName.textContent = emoji;
+  els.selectedBadgeName.textContent = '?';
   els.selectedBadgeName.setAttribute('title', `${emoji} ${title}`);
   els.selectedBadgeName.setAttribute('data-emoji', emoji);
   els.selectedBadgeName.setAttribute('data-title', title);
+  // Ajouter un style pour rendre le "?" gris
+  els.selectedBadgeName.style.color = '#9ca3af';
   els.selectedBadgeQuestion.textContent = badge.question || '';
   els.badgeAnswerMessage.textContent = '';
   els.badgeAnswerMessage.className = 'message';
@@ -2567,8 +2495,11 @@ async function handleBadgeAnswerFromWheel(e) {
     // Afficher uniquement l'emoji et un message de succès qui remplace le reste
     const card = els.badgeQuestionContainer?.querySelector('.card');
     if (card) {
-      // Récupérer l'emoji depuis le badge ou depuis l'élément existant
-      const emoji = els.selectedBadgeName?.textContent || getBadgeEmoji(state.selectedBadgeFromWheel);
+      // Récupérer le vrai emoji du badge
+      const realEmoji = getBadgeEmoji(state.selectedBadgeFromWheel);
+      
+      // Récupérer le nom du badge (sans emoji)
+      const badgeName = stripEmojis(state.selectedBadgeFromWheel.name || '');
       
       // Message différent pour les badges Expert
       const successMessage = isExpertLevel
@@ -2576,14 +2507,50 @@ async function handleBadgeAnswerFromWheel(e) {
         : '🎉 Badge débloqué ! Il est ajouté à ta collection.';
       const messageColor = isExpertLevel ? '#a855f7' : '#10b981'; // Violet pour Expert, vert pour normal
       
-    card.innerHTML = `
-        <h3 id="selected-badge-name" style="text-align: center; font-size: 80px; line-height: 1; margin: 20px 0; padding: 0;">${emoji}</h3>
-        <p class="badge-success-message" style="text-align: center; color: ${messageColor}; margin: 20px 0; font-size: 16px;">
+      // Afficher d'abord le "?" puis animer vers l'emoji réel
+      card.innerHTML = `
+        <div style="display: flex; justify-content: center; align-items: center; width: 100%;">
+          <h3 id="selected-badge-name" class="badge-emoji-reveal" style="text-align: center; font-size: 80px; line-height: 1; margin: 20px 0; padding: 0; color: #9ca3af;">?</h3>
+        </div>
+        <div style="display: flex; justify-content: center; align-items: center; width: 100%;">
+          <h4 class="badge-name-reveal" style="text-align: center; font-size: 24px; font-weight: 600; margin: 10px 0 20px 0; color: var(--text); opacity: 0;" id="badge-name-reveal">${badgeName}</h4>
+        </div>
+        <p class="badge-success-message" style="text-align: center; color: ${messageColor}; margin: 20px 0; font-size: 16px; opacity: 0;" id="badge-message-reveal">
           ${successMessage}
         </p>
       `;
+      
       // Mettre à jour la référence à selectedBadgeName après avoir modifié le HTML
       els.selectedBadgeName = card.querySelector('#selected-badge-name');
+      
+      // Animer la transformation du "?" vers l'emoji réel
+      setTimeout(() => {
+        if (els.selectedBadgeName) {
+          els.selectedBadgeName.textContent = realEmoji;
+          els.selectedBadgeName.style.color = 'inherit'; // Retirer la couleur grise
+          els.selectedBadgeName.classList.add('badge-emoji-revealed');
+          
+          // Afficher le nom et le message avec un léger délai
+          setTimeout(() => {
+            const nameEl = card.querySelector('#badge-name-reveal');
+            const messageEl = card.querySelector('#badge-message-reveal');
+            if (nameEl) {
+              nameEl.classList.add('badge-name-revealed');
+              nameEl.style.opacity = '1';
+            }
+            if (messageEl) {
+              messageEl.style.transition = 'opacity 0.5s ease-in';
+              messageEl.style.opacity = '1';
+            }
+            
+            // Rediriger vers le badge dans "Ma collection" après 2 secondes
+            setTimeout(() => {
+              scrollToBadgeInProfile(state.selectedBadgeFromWheel.id);
+            }, 2000);
+          }, 500);
+        }
+      }, 100);
+      
       // Réattacher le gestionnaire de fermeture (maintenant la fermeture est autorisée car une réponse a été donnée)
       attachBadgeQuestionCloseHandler();
     }
@@ -2591,7 +2558,6 @@ async function handleBadgeAnswerFromWheel(e) {
     // Mettre à jour la roue et les badges IMMÉDIATEMENT (avant le délai)
     renderWheelBadges();
     renderMyBadges();
-    renderBlockedBadges();
     
     // Masquer le conteneur après 3 secondes
     // L'utilisateur peut aussi cliquer ailleurs pour fermer (géré par attachBadgeQuestionCloseHandler)
@@ -2599,31 +2565,21 @@ async function handleBadgeAnswerFromWheel(e) {
       closeBadgeQuestion();
     }, 3000);
   } else {
-    // S'assurer que le badge est bien dans badgesFromWheel pour la section retenter
-    if (state.selectedBadgeFromWheel && !state.badgesFromWheel.has(state.selectedBadgeFromWheel.id)) {
-      state.badgesFromWheel.add(state.selectedBadgeFromWheel.id);
-      await saveBadgesFromWheel();
-    }
-    
     // S'assurer que le conteneur est visible
     if (els.badgeQuestionContainer) {
       els.badgeQuestionContainer.classList.remove('hidden');
     }
     
-    // Afficher uniquement l'emoji et un message d'erreur qui remplace le reste
+    // Afficher uniquement un message d'erreur (sans emoji)
     const card = els.badgeQuestionContainer?.querySelector('.card');
     if (card) {
-      // Récupérer l'emoji depuis le badge ou depuis l'élément existant
-      const emoji = els.selectedBadgeName?.textContent || getBadgeEmoji(state.selectedBadgeFromWheel);
-      
       // Récupérer le message personnalisé depuis la config du badge
       const config = parseConfig(state.selectedBadgeFromWheel.answer);
       const customMessage = config?.blockedMessage;
-      const errorMessage = customMessage || 'Ta réponse n\'a pas suffi pour débloquer ce badge. Tu peux rerépondre à ce badge juste en dessous.';
+      const errorMessage = customMessage || 'Ta réponse n\'a pas suffi pour débloquer ce badge. Le badge retourne dans la roue, tu peux réessayer !';
       
       card.innerHTML = `
-        <h3 id="selected-badge-name" style="text-align: center; font-size: 80px; line-height: 1; margin: 20px 0; padding: 0;">${emoji}</h3>
-        <p class="badge-error-message" style="text-align: center; color: var(--danger); margin: 20px 0; font-size: 16px;">
+        <p class="badge-error-message" style="text-align: center; color: white; margin: 20px 0; font-size: 18px; line-height: 1.5;">
           ${errorMessage}
         </p>
       `;
@@ -2633,330 +2589,11 @@ async function handleBadgeAnswerFromWheel(e) {
       attachBadgeQuestionCloseHandler();
     }
     
-    // Mettre à jour la roue et les badges IMMÉDIATEMENT
+    // Mettre à jour la roue IMMÉDIATEMENT (le badge retourne dans la roue)
     renderWheelBadges();
-    renderBlockedBadges();
   }
-  
-  // Réinitialiser le flag de retry
-  state.isRetryBadge = false;
-  state.retryBadgeId = null;
 }
 
-// Affiche les badges répondu mais non débloqués (bloqués) - uniquement ceux de la roue
-function renderBlockedBadges() {
-  if (!els.blockedBadgesList) return;
-  
-  // Filtrer les badges : répondu mais non débloqués ET provenant de la roue
-  const blockedBadges = state.badges.filter(badge => {
-    const unlocked = state.userBadges.has(badge.id);
-    const userAnswer = state.userBadgeAnswers.get(badge.id);
-    const hasAnswer = userAnswer !== undefined && userAnswer !== null;
-    const fromWheel = state.badgesFromWheel.has(badge.id);
-    // Afficher uniquement les badges qui ont une réponse, ne sont pas débloqués, et proviennent de la roue
-    return !isGhostBadge(badge) && !unlocked && hasAnswer && fromWheel;
-  });
-  
-  els.blockedBadgesList.innerHTML = '';
-  
-  // Toujours afficher la section (le titre reste visible)
-  els.blockedBadgesSection.style.display = 'block';
-  
-  if (blockedBadges.length === 0) {
-    // Afficher un message quand il n'y a pas de badges
-    els.blockedBadgesList.innerHTML = '<p class="muted">Aucun badge à retenter pour le moment.</p>';
-    return;
-  }
-  
-  blockedBadges.forEach(badge => {
-    const card = document.createElement('article');
-    card.className = 'card-badge clickable compact all-badge-card blocked blocked-badge-card';
-    card.dataset.badgeId = badge.id;
-    
-    const emoji = getBadgeEmoji(badge);
-    const title = stripEmojis(badge.name || '');
-    const userAnswer = state.userBadgeAnswers.get(badge.id);
-    
-    // Badge fermé par défaut - affiche l'emoji mais pas le nom
-    // Mais garder le vrai emoji et nom dans les attributs title et data-*
-    card.innerHTML = `
-      <div class="blocked-badge-header">
-      <div class="badge-compact">
-          <div class="badge-emoji" title="${emoji}" data-emoji="${emoji}">${emoji}</div>
-          <div class="badge-title" title="${emoji} ${title}" data-title="${title}" style="display: none;"></div>
-      </div>
-        <span class="tag blocked">Bloqué</span>
-      </div>
-      <div class="blocked-badge-details hidden">
-        <div class="blocked-badge-answer">
-          <p class="muted">Ta réponse précédente : ${formatUserAnswer(badge, userAnswer) || userAnswer}</p>
-        </div>
-        <button class="primary retry-badge-btn" data-badge-id="${badge.id}">
-          Retenter (1 jeton)
-        </button>
-        <div class="blocked-badge-question-container hidden"></div>
-      </div>
-    `;
-    
-    // Attacher l'événement au clic sur la carte pour ouvrir/fermer
-    card.addEventListener('click', (e) => {
-      // Ne pas ouvrir/fermer si on clique sur :
-      // - Le bouton retenter
-      // - Les boutons oui/non (bool-btn)
-      // - Les champs de formulaire (input, textarea, select)
-      // - Le conteneur de question
-      // - Les boutons de validation
-      if (e.target.closest('.retry-badge-btn') ||
-          e.target.closest('.bool-btn') ||
-          e.target.closest('input') ||
-          e.target.closest('textarea') ||
-          e.target.closest('select') ||
-          e.target.closest('.blocked-badge-question-container') ||
-          e.target.closest('button[type="submit"]') ||
-          e.target.closest('.badge-answer-form')) {
-        return;
-      }
-      
-      const details = card.querySelector('.blocked-badge-details');
-      const isHidden = details.classList.contains('hidden');
-      
-      // Fermer tous les autres badges
-      els.blockedBadgesList.querySelectorAll('.blocked-badge-card').forEach(otherCard => {
-        if (otherCard !== card) {
-          const otherDetails = otherCard.querySelector('.blocked-badge-details');
-          if (otherDetails) {
-            otherDetails.classList.add('hidden');
-            otherCard.classList.remove('expanded');
-          }
-        }
-      });
-      
-      // Ouvrir/fermer le badge cliqué
-      if (isHidden) {
-        details.classList.remove('hidden');
-        card.classList.add('expanded');
-        // S'assurer que le badge est visible quand il est ouvert
-        setTimeout(() => {
-          card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-        }, 100);
-      } else {
-        details.classList.add('hidden');
-        card.classList.remove('expanded');
-      }
-    });
-    
-    // Attacher l'événement au bouton retenter
-    const retryBtn = card.querySelector('.retry-badge-btn');
-    retryBtn.addEventListener('click', (e) => {
-      e.stopPropagation(); // Empêcher l'ouverture/fermeture de la carte
-      handleRetryBadge(badge);
-    });
-    
-    els.blockedBadgesList.appendChild(card);
-  });
-}
-
-// Gère le retry d'un badge bloqué
-async function handleRetryBadge(badge) {
-  if (state.isWheelSpinning) return;
-  
-  // Vérifier si l'utilisateur a des jetons
-  if ((state.tokens || 0) < 1) {
-    // Afficher une notification "Jetons insuffisants"
-    showInsufficientTokensNotification();
-    return;
-  }
-  
-  // Consommer un jeton
-  const newTokens = (state.tokens || 0) - 1;
-  const { error } = await supabase
-    .from('profiles')
-    .update({ tokens: newTokens })
-    .eq('id', state.user.id);
-  
-  if (error) {
-    console.error('Erreur lors de la consommation du jeton:', error);
-    return;
-  }
-  
-  state.tokens = newTokens;
-  state.profile.tokens = newTokens;
-  updateTokensDisplay();
-  
-  // Trouver la carte du badge dans la section retenter
-  const card = els.blockedBadgesList.querySelector(`[data-badge-id="${badge.id}"]`);
-  if (!card) return;
-  
-  // Ouvrir la carte si elle est fermée
-  const details = card.querySelector('.blocked-badge-details');
-  if (details && details.classList.contains('hidden')) {
-    details.classList.remove('hidden');
-    card.classList.add('expanded');
-  }
-  
-  // Afficher la question du badge directement dans la carte
-  showBadgeQuestionInCard(badge, card);
-  
-  // Marquer que c'est un retry pour ne pas consommer de jeton supplémentaire lors de la réponse
-  state.isRetryBadge = true;
-  state.retryBadgeId = badge.id;
-}
-
-// Affiche la question du badge directement dans la carte du badge bloqué
-function showBadgeQuestionInCard(badge, card) {
-  const questionContainer = card.querySelector('.blocked-badge-question-container');
-  if (!questionContainer) return;
-  
-  // Afficher le conteneur
-  questionContainer.classList.remove('hidden');
-  
-  // Cacher le bouton "Retenter" et la réponse précédente
-  const retryBtn = card.querySelector('.retry-badge-btn');
-  const answerDiv = card.querySelector('.blocked-badge-answer');
-  if (retryBtn) retryBtn.style.display = 'none';
-  if (answerDiv) answerDiv.style.display = 'none';
-  
-  // Afficher uniquement l'emoji, pas le nom
-  const emoji = getBadgeEmoji(badge);
-  const title = stripEmojis(badge.name || '');
-  
-  // Générer le formulaire selon le type de badge
-  const config = parseConfig(badge.answer);
-  let formContent = '';
-  
-  if (config?.type === 'boolean') {
-    // Badge Oui/Non
-    formContent = `
-      <div class="badge-question-text">
-        <p><strong>${emoji}</strong></p>
-        <p>${badge.question || ''}</p>
-      </div>
-      <form class="badge-answer-form" data-badge-id="${badge.id}">
-        <input type="hidden" name="answer" value="">
-        <div class="bool-buttons">
-          <button type="button" class="ghost bool-btn" data-bool="oui">Oui</button>
-          <button type="button" class="ghost bool-btn" data-bool="non">Non</button>
-        </div>
-        <button type="submit" class="primary">Valider</button>
-        <div class="message"></div>
-        </form>
-    `;
-  } else if (config?.type === 'singleSelect' && Array.isArray(config.options)) {
-    // Badge sélection unique
-    const optionsMarkup = config.options.map(opt => `
-      <option value="${opt.value}">${opt.label}</option>
-    `).join('');
-    formContent = `
-      <div class="badge-question-text">
-        <p><strong>${emoji}</strong></p>
-        <p>${badge.question || ''}</p>
-      </div>
-      <form class="badge-answer-form" data-badge-id="${badge.id}">
-        <select name="answer-single" class="select-multi">
-          <option value="">Choisis une option</option>
-          ${optionsMarkup}
-        </select>
-        <button type="submit" class="primary">Valider</button>
-        <div class="message"></div>
-      </form>
-    `;
-  } else if (config?.type === 'multiSelect' && Array.isArray(config.options)) {
-    // Badge multi-sélection
-    const optionsMarkup = config.options.map(opt => `
-      <option value="${opt.value}">${opt.label}</option>
-    `).join('');
-    const size = Math.min(Math.max(config.options.length, 4), 9);
-    formContent = `
-      <div class="badge-question-text">
-        <p><strong>${emoji}</strong></p>
-        <p>${badge.question || ''}</p>
-      </div>
-      <form class="badge-answer-form" data-badge-id="${badge.id}">
-        <select name="answer-select" class="select-multi" multiple size="${size}">
-          ${optionsMarkup}
-        </select>
-        <small class="muted">Tu peux sélectionner plusieurs options.</small>
-        <button type="submit" class="primary">Valider</button>
-        <div class="message"></div>
-      </form>
-    `;
-  } else if (config?.type === 'range') {
-    // Badge numérique - utiliser une zone de saisie de nombres
-    formContent = `
-      <div class="badge-question-text">
-        <p><strong>${emoji}</strong></p>
-        <p>${badge.question || ''}</p>
-      </div>
-      <form class="badge-answer-form" data-badge-id="${badge.id}">
-        <input type="number" name="answer" min="0" step="${config.step || 1}" placeholder="Entre un nombre" class="number-input">
-        <button type="submit" class="primary">Valider</button>
-        <div class="message"></div>
-      </form>
-    `;
-  } else {
-    // Badge texte (par défaut)
-    formContent = `
-      <div class="badge-question-text">
-        <p><strong>${emoji}</strong></p>
-        <p>${badge.question || ''}</p>
-      </div>
-      <form class="badge-answer-form" data-badge-id="${badge.id}">
-        <textarea name="answer" rows="3" placeholder="Écris ta réponse ici..."></textarea>
-        <button type="submit" class="primary">Valider</button>
-        <div class="message"></div>
-      </form>
-    `;
-  }
-  
-  questionContainer.innerHTML = formContent;
-  
-  // Attacher les événements pour les boutons booléens
-  const boolButtons = questionContainer.querySelectorAll('.bool-btn');
-  boolButtons.forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation(); // Empêcher la propagation pour éviter la fermeture de la carte
-      // Retirer la classe active de tous les boutons
-      boolButtons.forEach(b => b.classList.remove('active'));
-      // Ajouter la classe active au bouton cliqué
-      btn.classList.add('active');
-      // Mettre à jour la valeur du champ caché
-      const form = questionContainer.querySelector('.badge-answer-form');
-      const hiddenInput = form.querySelector('input[type="hidden"]');
-      if (hiddenInput) {
-        hiddenInput.value = btn.dataset.bool === 'oui' ? 'true' : 'false';
-      }
-    });
-  });
-  
-  // Attacher l'événement de soumission du formulaire
-  const form = questionContainer.querySelector('.badge-answer-form');
-  if (form) {
-    form.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      e.stopPropagation(); // Empêcher la propagation pour éviter la fermeture de la carte
-      const messageDiv = form.querySelector('.message');
-      // Créer un objet event factice pour handleBadgeAnswer
-      const fakeEvent = { target: form, preventDefault: () => {} };
-      await handleBadgeAnswer(fakeEvent, badge, null, messageDiv, card);
-    });
-    
-    // Empêcher la propagation des clics sur les champs de formulaire
-    const formInputs = form.querySelectorAll('input, textarea, select');
-    formInputs.forEach(input => {
-      input.addEventListener('click', (e) => {
-        e.stopPropagation();
-      });
-      input.addEventListener('focus', (e) => {
-        e.stopPropagation();
-      });
-    });
-  }
-  
-  // Faire défiler la carte en vue
-  setTimeout(() => {
-    card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-  }, 100);
-}
 
 // Gère la modification de réponse d'un badge (depuis le Joker Bonus)
 function handleModifyBadgeAnswer(badge) {
@@ -3219,7 +2856,7 @@ function renderMyBadges() {
   }
 }
 
-  // Filtrer les badges : afficher tous les badges débloqués ET tous les badges qui ont été répondu
+  // Filtrer les badges : afficher uniquement les badges débloqués et rebloqués (pas les bloqués jamais débloqués)
   const visibleBadges = allBadges.filter(badge => {
     const unlocked = state.userBadges.has(badge.id);
     const userAnswer = state.userBadgeAnswers.get(badge.id);
@@ -3227,8 +2864,8 @@ function renderMyBadges() {
     const wasEverUnlocked = state.wasEverUnlocked.has(badge.id);
     const isBlocked = !unlocked && hasAnswer;
     const isReblocked = isBlocked && wasEverUnlocked;
-    // Afficher si débloqué OU si une réponse a été donnée (même si bloqué)
-    return unlocked || hasAnswer;
+    // Afficher uniquement si débloqué OU rebloqué (pas les bloqués jamais débloqués)
+    return unlocked || isReblocked;
   });
 
   if (!visibleBadges.length) {
@@ -3622,8 +3259,6 @@ async function handleBadgeAnswer(event, badge, providedAnswer = null, feedbackEl
     // ÉTAT 2 : Badge bloqué (répondu mais non débloqué)
     // On enregistre aussi l'échec avec niveau 0 (badge bloqué)
     const level0 = 'niv 0'; // Niveau 0 = badge bloqué = 0 point
-    const isFromWheel = state.badgesFromWheel.has(badge.id);
-    const isRetry = state.isRetryBadge && state.retryBadgeId === badge.id;
     
     if (localMode) {
       const rows = loadLocalUserBadgeRows();
@@ -3647,53 +3282,19 @@ async function handleBadgeAnswer(event, badge, providedAnswer = null, feedbackEl
     state.userBadgeAnswers.set(badge.id, rawAnswer);
     state.attemptedBadges.add(badge.id);
     
-    // Gestion de badgesFromWheel :
-    // - Si c'est un retry et que le badge échoue, le retirer de badgesFromWheel (retour dans la roue)
-    // - Si c'est une première réponse depuis la roue et que ça échoue, garder dans badgesFromWheel (section retenter)
-    // IMPORTANT : Ce bloc est dans "ÉTAT 2 : Badge bloqué", donc result.ok est false
-    // La notification ne doit être affichée QUE si le badge est vraiment bloqué (échec)
-    if (isRetry) {
-      // Vérifier une dernière fois que le badge n'est PAS débloqué avant d'afficher la notification
-      // (sécurité supplémentaire pour éviter d'afficher la notification si le badge est débloqué)
-      if (!result.ok) {
-        // Retirer de badgesFromWheel pour qu'il retourne dans la roue
-        state.badgesFromWheel.delete(badge.id);
-        
-        // Afficher le message de retour dans la roue
-        if (feedback) {
-          feedback.textContent = 'Badge non débloqué, retourné dans la roue.';
-          feedback.classList.add('error');
-        }
-        
-        // Afficher une notification globale pour informer que le badge est retourné dans la roue
-        // UNIQUEMENT si le badge est vraiment bloqué (échec)
-        showBadgeReturnedToWheelNotification();
-      }
-      
-      // Si on est dans une carte et que le badge est vraiment bloqué, la supprimer immédiatement
-      if (cardElement && !result.ok) {
-        // Ajouter une animation de disparition avant de supprimer
-        cardElement.style.transition = 'opacity 0.3s ease-out, transform 0.3s ease-out';
-        cardElement.style.opacity = '0';
-        cardElement.style.transform = 'scale(0.95)';
-        setTimeout(() => {
-          cardElement.remove();
-        }, 300);
-      }
-      
-      // Mettre à jour la roue et les badges bloqués IMMÉDIATEMENT (avant la sauvegarde pour un feedback instantané)
-      // UNIQUEMENT si le badge est vraiment bloqué
-      if (!result.ok) {
-        renderWheelBadges();
-        renderBlockedBadges();
-        
-        // Sauvegarder dans la base de données après la mise à jour visuelle
-        await saveBadgesFromWheel();
-      }
-    } else if (isFromWheel) {
-      // Première réponse depuis la roue qui échoue : garder dans badgesFromWheel pour la section retenter
-      // Sauvegarder dans la base de données pour s'assurer qu'il est bien stocké
-      await saveBadgesFromWheel();
+    // Le badge retourne automatiquement dans la roue (il n'est plus débloqué)
+    // Mettre à jour la roue immédiatement pour que le badge soit disponible
+    renderWheelBadges();
+    
+    // Si on est dans une carte (section "Badges non-débloqués"), la supprimer immédiatement
+    if (cardElement) {
+      // Ajouter une animation de disparition avant de supprimer
+      cardElement.style.transition = 'opacity 0.3s ease-out, transform 0.3s ease-out';
+      cardElement.style.opacity = '0';
+      cardElement.style.transform = 'scale(0.95)';
+      setTimeout(() => {
+        cardElement.remove();
+      }, 300);
     }
     
     // Stocker l'ID du badge qui a échoué pour afficher le message dans renderAllBadges()
@@ -3744,13 +3345,6 @@ async function handleBadgeAnswer(event, badge, providedAnswer = null, feedbackEl
   state.userBadgeAnswers.set(badge.id, rawAnswer);
   state.attemptedBadges.add(badge.id);
   
-  // Si le badge provient de la roue et est débloqué, le retirer de badgesFromWheel
-  if (state.badgesFromWheel.has(badge.id)) {
-    state.badgesFromWheel.delete(badge.id);
-    // Sauvegarder dans la base de données
-    await saveBadgesFromWheel();
-  }
-  
   // Si on est dans une carte (section "Badges non-débloqués"), masquer le formulaire et mettre à jour l'affichage
   if (cardElement) {
     const questionContainer = cardElement.querySelector('.blocked-badge-question-container');
@@ -3775,11 +3369,10 @@ async function handleBadgeAnswer(event, badge, providedAnswer = null, feedbackEl
       cardElement.remove();
     }, 300);
     
-    // Mettre à jour la roue et les badges bloqués IMMÉDIATEMENT
+    // Mettre à jour la roue IMMÉDIATEMENT
     // Le badge ne devrait pas apparaître dans la roue car il est débloqué (filtré par renderWheelBadges)
     // Le state.userBadges a été mis à jour AVANT, donc le filtre fonctionnera correctement
     renderWheelBadges();
-    renderBlockedBadges();
     
     // Basculer vers l'onglet "Mon profil" et scroller vers le badge débloqué IMMÉDIATEMENT
     // Ne pas attendre, car le badge est débloqué et ne doit PAS aller dans la roue
@@ -4023,7 +3616,7 @@ function evaluateBadgeAnswer(badge, rawAnswer, selectedOptions = []) {
         const hasKey = Object.prototype.hasOwnProperty.call(config.optionSkills, key);
         if (!hasKey) continue;
         const lbl = (config.optionSkills[key] ?? '').toString().trim();
-        // "bloquer" = le badge n'est pas débloqué, va dans "badges à retenter"
+        // "bloquer" = le badge n'est pas débloqué, retourne dans la roue
         if (lbl.toLowerCase() === 'bloquer') {
           return { ok: false, message: 'Ce choix ne permet pas de débloquer ce badge.' };
         }
@@ -4127,7 +3720,7 @@ function evaluateBadgeAnswer(badge, rawAnswer, selectedOptions = []) {
       const key = String(value);
       const hasKey = Object.prototype.hasOwnProperty.call(config.optionSkills, key);
       if (hasKey) {
-        // "bloquer" = le badge n'est pas débloqué, va dans "badges à retenter"
+        // "bloquer" = le badge n'est pas débloqué, retourne dans la roue
         if (skillLabel.toLowerCase() === 'bloquer') {
         return { ok: false, message: 'Ce choix ne permet pas de débloquer ce badge.' };
       }
@@ -4619,8 +4212,19 @@ function renderCommunityProfileBadges(unlockedBadges, isPrivate = false) {
     });
   }
   
-  // Filtrer les badges fantômes
-  const visibleBadges = state.badges.slice();
+  // Filtrer les badges : afficher uniquement les badges débloqués et rebloqués (pas les bloqués jamais débloqués)
+  const allBadges = state.badges.slice();
+  const visibleBadges = allBadges.filter(badge => {
+    const unlocked = communityUserBadges.has(badge.id);
+    const userAnswer = communityUserBadgeAnswers.get(badge.id);
+    const hasAnswer = userAnswer !== undefined && userAnswer !== null;
+    const wasEverUnlocked = communityWasEverUnlocked.has(badge.id);
+    const isBlocked = !unlocked && hasAnswer;
+    const isReblocked = isBlocked && wasEverUnlocked;
+    // Afficher uniquement si débloqué OU rebloqué (pas les bloqués jamais débloqués)
+    return unlocked || isReblocked;
+  });
+  
   if (!visibleBadges.length) {
     els.communityProfileBadgesList.innerHTML = '<p class="muted">Aucun badge pour le moment.</p>';
     return;
@@ -4642,9 +4246,12 @@ function renderCommunityProfileBadges(unlockedBadges, isPrivate = false) {
   const sortById = (a, b) => String(a.id).localeCompare(String(b.id), 'fr', { numeric: true, sensitivity: 'base' });
 
   themes.forEach((t) => {
+    const themeBadges = groups.get(t) || [];
+    if (themeBadges.length === 0) return;
+    
     const title = document.createElement('div');
     title.className = 'section-subtitle theme-title';
-    const hasAnyUnlockedInTheme = (groups.get(t) || []).some(b => communityUserBadges.has(b.id));
+    const hasAnyUnlockedInTheme = themeBadges.some(b => communityUserBadges.has(b.id));
     if (!hasAnyUnlockedInTheme) {
       title.classList.add('theme-locked');
       title.textContent = '?????';
@@ -4654,7 +4261,7 @@ function renderCommunityProfileBadges(unlockedBadges, isPrivate = false) {
     }
     els.communityProfileBadgesList.appendChild(title);
 
-    groups.get(t).sort(sortById).forEach(badge => {
+    themeBadges.sort(sortById).forEach(badge => {
       const unlocked = communityUserBadges.has(badge.id);
       const levelLabel = communityUserBadgeLevels.get(badge.id);
         const config = parseConfig(badge.answer);
@@ -4663,7 +4270,6 @@ function renderCommunityProfileBadges(unlockedBadges, isPrivate = false) {
       const wasEverUnlocked = communityWasEverUnlocked.has(badge.id);
       const isBlocked = !unlocked && hasAnswer;
       const isReblocked = isBlocked && wasEverUnlocked;
-      const isBlockedNeverUnlocked = isBlocked && !wasEverUnlocked;
 
       const card = document.createElement('article');
       card.className = `card-badge clickable compact all-badge-card my-catalog-card${unlocked ? '' : ' locked'}${isBlocked ? ' blocked' : ''}${isReblocked ? ' reblocked' : ''}`;

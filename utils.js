@@ -45,7 +45,7 @@ export async function safeSupabaseSelect(supabase, table, columns, fallbackColum
     // Liste des colonnes optionnelles communes
     const optionalColumns = ['emoji', 'is_private', 'tokens', 'last_token_date', 'connection_days', 
                              'week_start_date', 'week_bonus_available', 'week_bonus_claimed', 
-                             'claimed_daily_tokens', 'badges_from_wheel', 'description'];
+                             'claimed_daily_tokens', 'description'];
     
     const hasOptionalColumn = optionalColumns.some(col => errorMsg.includes(col));
     
