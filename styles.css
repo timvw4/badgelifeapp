@@ -2431,25 +2431,90 @@ button {
   .calendar-drawer {
     width: 100vw;
     max-width: 100vw;
+    border-left: none;
+  }
+
+  .calendar-drawer-header {
+    padding: 16px 20px;
+    position: sticky;
+    top: 0;
+    background: rgba(17, 24, 39, 0.98);
+    backdrop-filter: blur(10px);
+    z-index: 10;
+  }
+
+  .calendar-drawer-header h2 {
+    font-size: 18px;
+  }
+
+  .calendar-content {
+    padding: 16px;
+    gap: 20px;
+  }
+
+  .calendar-week {
+    gap: 6px;
   }
 
   .calendar-day {
-    min-height: 70px;
-    padding: 10px 6px;
+    padding: 10px 4px;
     aspect-ratio: 1;
     min-height: 0;
+    border-radius: 10px;
+    gap: 4px;
+    justify-content: center;
   }
 
   .calendar-day-name {
-    font-size: 10px;
+    font-size: 9px;
+    letter-spacing: 0.5px;
   }
 
   .calendar-day-date {
-    font-size: 12px;
+    font-size: 16px;
+    font-weight: 700;
   }
 
   .calendar-day-icon {
-    font-size: 18px;
+    font-size: 16px;
+    margin-top: 2px;
+  }
+
+  .calendar-day-tokens {
+    font-size: 10px;
+    margin-top: 2px;
+    line-height: 1.2;
+  }
+
+  .calendar-info {
+    padding: 12px;
+    border-radius: 10px;
+  }
+
+  .calendar-tooltip {
+    font-size: 13px;
+    line-height: 1.4;
+  }
+
+  /* Améliorer le feedback tactile sur mobile */
+  .calendar-day.available:active,
+  .calendar-day.bonus-available:active {
+    transform: scale(0.95);
+    transition: transform 0.1s ease;
+  }
+
+  /* Améliorer la visibilité du jour actuel sur mobile */
+  .calendar-day.today {
+    border-width: 2.5px;
+    box-shadow: 0 0 0 2px rgba(6, 182, 212, 0.2);
+  }
+
+  .calendar-day.today.available {
+    box-shadow: 0 0 0 2px rgba(6, 182, 212, 0.3);
+  }
+
+  .calendar-day.today.bonus-available {
+    box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.3);
   }
 }
 
@@ -3289,25 +3354,5 @@ button {
 }
 
 /* Empêcher l'orientation horizontale sur mobile */
-@media screen and (max-width: 768px) {
-  @media (orientation: landscape) {
-    body::before {
-      content: 'Veuillez tourner votre appareil en mode portrait';
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background: rgba(17, 24, 39, 0.98);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      z-index: 10000;
-      color: var(--text);
-      font-size: 18px;
-      font-weight: 600;
-      text-align: center;
-      padding: 20px;
-    }
-  }
-}
+/* Le verrouillage est géré par JavaScript (lockOrientation) */
+/* Pas de message qui bloque l'interface - l'API Screen Orientation verrouille directement */

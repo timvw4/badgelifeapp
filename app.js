@@ -5640,22 +5640,20 @@ function closeCalendarDrawer() {
 }
 
 // Verrouiller l'orientation en mode portrait sur mobile
+// Cette fonction tente de verrouiller l'orientation en mode portrait
+// Si l'API n'est pas disponible, l'orientation reste libre (pas de message bloquant)
 function lockOrientation() {
   // Utiliser l'API Screen Orientation si disponible
   if (screen.orientation && screen.orientation.lock) {
     screen.orientation.lock('portrait').catch(() => {
       // L'API peut échouer si elle n'est pas supportée ou si l'utilisateur l'a désactivée
-      console.log('Lock orientation non disponible');
+      // Pas de message d'erreur - on laisse l'utilisateur utiliser l'app normalement
+      console.log('Lock orientation non disponible - l\'app fonctionne quand même');
     });
   }
   
-  // Écouter les changements d'orientation et afficher un message si nécessaire
-  window.addEventListener('orientationchange', () => {
-    if (window.orientation === 90 || window.orientation === -90) {
-      // Mode paysage détecté
-      console.log('Mode paysage détecté - veuillez tourner en mode portrait');
-    }
-  });
+  // Note : On ne met plus d'écouteur orientationchange car on ne veut pas de message
+  // L'API Screen Orientation verrouille directement l'orientation si elle est supportée
 }
 
 // Configuration du pull-to-refresh pour mobile
