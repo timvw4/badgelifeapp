@@ -974,6 +974,15 @@ async function fetchProfile() {
       state.profile = { ...insertData, is_private: false, tokens: 3, last_token_date: null, connection_days: [], claimed_daily_tokens: [], week_start_date: currentWeekStartStr, week_bonus_available: false, week_bonus_claimed: false };
     }
   } else {
+    // DEBUG : Afficher les données brutes reçues de Supabase
+    console.log('=== fetchProfile - Données brutes de Supabase ===');
+    console.log('data.claimed_daily_tokens:', data.claimed_daily_tokens);
+    console.log('data.connection_days:', data.connection_days);
+    console.log('data.week_start_date:', data.week_start_date);
+    console.log('Type de claimed_daily_tokens:', typeof data.claimed_daily_tokens);
+    console.log('Est un tableau?', Array.isArray(data.claimed_daily_tokens));
+    console.log('================================================');
+    
     state.profile = { 
       ...data, 
       is_private: data.is_private ?? false,
@@ -985,6 +994,12 @@ async function fetchProfile() {
       week_bonus_available: data.week_bonus_available ?? false,
       week_bonus_claimed: data.week_bonus_claimed ?? false
     };
+    
+    // DEBUG : Afficher ce qui est stocké dans state.profile
+    console.log('=== fetchProfile - Données stockées dans state.profile ===');
+    console.log('state.profile.claimed_daily_tokens:', state.profile.claimed_daily_tokens);
+    console.log('state.profile.connection_days:', state.profile.connection_days);
+    console.log('==========================================================');
   }
   state.tokens = state.profile.tokens || 0;
   
@@ -4649,41 +4664,115 @@ async function resetWeekData(currentWeekStartStr) {
 
 // Charge les jours de connexion depuis le profil
 async function loadConnectionDays() {
-  if (!state.profile) return;
+  if (!state.profile) {
+    console.warn('loadConnectionDays: state.profile n\'est pas défini');
+    return;
+  }
   
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const currentWeekStart = getWeekStartDate(today);
   const currentWeekStartStr = currentWeekStart.toISOString().split('T')[0];
   
+  // DEBUG : Vérifier les données AVANT le traitement
+  console.log('=== loadConnectionDays - AVANT traitement ===');
+  console.log('state.profile.week_start_date:', state.profile.week_start_date);
+  console.log('state.profile.connection_days:', state.profile.connection_days);
+  console.log('state.profile.claimed_daily_tokens:', state.profile.claimed_daily_tokens);
+  console.log('currentWeekStartStr:', currentWeekStartStr);
+  
   // Si on a une semaine enregistrée et que c'est une nouvelle semaine, réinitialiser
   if (state.profile.week_start_date) {
     const savedWeekStart = new Date(state.profile.week_start_date + 'T00:00:00');
     const savedWeekStartStr = savedWeekStart.toISOString().split('T')[0];
     
+    console.log('savedWeekStartStr:', savedWeekStartStr);
+    console.log('currentWeekStartStr:', currentWeekStartStr);
+    console.log('Nouvelle semaine?', savedWeekStartStr !== currentWeekStartStr);
+    
     if (savedWeekStartStr !== currentWeekStartStr) {
       // Nouvelle semaine : réinitialiser les jours de connexion ET les jetons récupérés
-      await resetWeekData(currentWeekStartStr);
+      console.log('⚠️ NOUVELLE SEMAINE DÉTECTÉE - Réinitialisation');
+      // IMPORTANT : Ne PAS appeler resetWeekData() ici car il efface les données dans Supabase
+      // Au lieu de cela, réinitialiser seulement localement et mettre à jour week_start_date
+      // NE PAS écraser state.profile.claimed_daily_tokens car il contient les données de Supabase
+      // qui seront filtrées plus tard pour ne garder que celles de la semaine actuelle
+      state.connectionDays = [];
+      state.claimedDailyTokens = []; // Vide localement, sera rempli par le filtrage plus bas
+      state.weekBonusClaimed = false;
+      state.weekStartDate = currentWeekStartStr;
+      
+      // Mettre à jour le profil local (mais NE PAS écraser claimed_daily_tokens)
+      if (state.profile) {
+        state.profile.connection_days = []; // Réinitialiser localement seulement
+        // NE PAS écraser state.profile.claimed_daily_tokens ici !
+        // Il contient les données de Supabase qui seront filtrées plus bas
+        state.profile.week_bonus_claimed = false;
+        state.profile.week_start_date = currentWeekStartStr;
+        state.profile.week_bonus_available = false;
+      }
+      
+      // Sauvegarder dans Supabase SEULEMENT la nouvelle semaine, sans effacer les anciennes données
+      // (les anciennes données seront automatiquement filtrées par loadConnectionDays)
+      try {
+        await supabase
+          .from('profiles')
+          .update({ 
+            week_start_date: currentWeekStartStr,
+            week_bonus_available: false,
+            week_bonus_claimed: false
+            // NE PAS mettre à jour connection_days et claimed_daily_tokens ici
+            // car ils seront mis à jour par checkAndUpdateConnectionDay() et claimDailyTokens()
+          })
+          .eq('id', state.user.id);
+      } catch (error) {
+        console.error('Erreur lors de la mise à jour de la semaine:', error);
+      }
     } else {
       // Même semaine : charger les jours existants
+      console.log('✅ MÊME SEMAINE - Chargement des données existantes');
       state.connectionDays = Array.isArray(state.profile.connection_days) 
         ? state.profile.connection_days 
         : [];
       state.weekStartDate = state.profile.week_start_date || currentWeekStartStr;
+      console.log('connectionDays chargés:', state.connectionDays);
     }
   } else {
     // Pas de semaine enregistrée : initialiser
-    await resetWeekData(currentWeekStartStr);
+    console.log('⚠️ PAS DE SEMAINE ENREGISTRÉE - Initialisation');
+    try {
+      await resetWeekData(currentWeekStartStr);
+    } catch (error) {
+      console.error('Erreur lors de l\'initialisation de la semaine:', error);
+      // En cas d'erreur, initialiser localement seulement
+      state.connectionDays = [];
+      state.claimedDailyTokens = [];
+      state.weekBonusClaimed = false;
+    }
     // S'assurer que state.weekStartDate est défini après resetWeekData()
     state.weekStartDate = currentWeekStartStr;
   }
+  
+  console.log('=== APRÈS traitement semaine ===');
+  console.log('state.connectionDays:', state.connectionDays);
+  console.log('state.weekStartDate:', state.weekStartDate);
+  console.log('==================================');
   
   // S'assurer que state.weekStartDate est toujours défini
   if (!state.weekStartDate) {
     state.weekStartDate = currentWeekStartStr;
   }
   
-  // Charger les jetons récupérés depuis le profil
+  // Charger les jetons réclamés depuis le profil
+  // IMPORTANT : Toujours charger depuis state.profile.claimed_daily_tokens qui vient de Supabase
+  // Ne pas utiliser state.claimedDailyTokens qui pourrait être vide après resetWeekData()
+  
+  // DEBUG : Vérifier ce qui est dans state.profile AVANT le traitement
+  console.log('=== loadConnectionDays - Chargement claimed_daily_tokens ===');
+  console.log('state.profile.claimed_daily_tokens (brut depuis Supabase):', state.profile.claimed_daily_tokens);
+  console.log('state.profile.connection_days (brut depuis Supabase):', state.profile.connection_days);
+  console.log('currentWeekStartStr:', currentWeekStartStr);
+  
   if (!state.profile.claimed_daily_tokens) {
     state.profile.claimed_daily_tokens = [];
   }
@@ -4694,17 +4783,65 @@ async function loadConnectionDays() {
     ? state.profile.claimed_daily_tokens
     : [];
   
+  console.log('allClaimedTokens (après extraction):', allClaimedTokens);
+  
   // Filtrer pour ne garder que les dates de la semaine actuelle (utilise la fonction utilitaire)
   state.claimedDailyTokens = filterDatesByCurrentWeek(allClaimedTokens, currentWeekStartStr);
+  
+  console.log('state.claimedDailyTokens (après filtrage):', state.claimedDailyTokens);
+  console.log('============================================================');
+  
+  // IMPORTANT : Si on vient de détecter une nouvelle semaine, state.claimedDailyTokens pourrait être vide
+  // mais state.profile.claimed_daily_tokens contient encore les données de Supabase
+  // On doit donc s'assurer que state.claimedDailyTokens utilise les données filtrées du profil
+  if (state.claimedDailyTokens.length === 0 && allClaimedTokens.length > 0) {
+    // Les données existent dans Supabase mais ne sont pas de la semaine actuelle (normal)
+    console.log('Les données de Supabase sont d\'une autre semaine, c\'est normal');
+  }
+  
+  // DEBUG : Afficher les données chargées avec plus de détails
+  console.log('=== loadConnectionDays - Données chargées ===');
+  console.log('connectionDays:', state.connectionDays);
+  console.log('claimedDailyTokens:', state.claimedDailyTokens);
+  console.log('profile.claimed_daily_tokens:', state.profile.claimed_daily_tokens);
+  console.log('weekStartDate:', state.weekStartDate);
+  console.log('currentWeekStartStr:', currentWeekStartStr);
+  console.log('allClaimedTokens (avant filtrage):', allClaimedTokens);
+  console.log('claimedDailyTokens.length:', state.claimedDailyTokens.length);
+  console.log('allClaimedTokens.length:', allClaimedTokens.length);
+  console.log('===========================================');
   
   // Si les dates filtrées sont différentes de celles du profil, mettre à jour le profil
   if (state.claimedDailyTokens.length !== allClaimedTokens.length) {
     state.profile.claimed_daily_tokens = state.claimedDailyTokens;
     // Sauvegarder dans Supabase pour nettoyer les anciennes dates
-    await supabase
-      .from('profiles')
-      .update({ claimed_daily_tokens: state.claimedDailyTokens })
-      .eq('id', state.user.id);
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ claimed_daily_tokens: state.claimedDailyTokens })
+        .eq('id', state.user.id);
+      if (error) {
+        console.error('Erreur lors de la sauvegarde des claimed_daily_tokens:', error);
+        // En cas d'erreur, sauvegarder dans localStorage comme backup
+        if (state.user) {
+          try {
+            localStorage.setItem(`claimed_tokens_${state.user.id}`, JSON.stringify(state.claimedDailyTokens));
+          } catch (e) {
+            console.warn('Impossible de sauvegarder dans localStorage:', e);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Erreur lors de la sauvegarde des claimed_daily_tokens:', error);
+      // En cas d'erreur, sauvegarder dans localStorage comme backup
+      if (state.user) {
+        try {
+          localStorage.setItem(`claimed_tokens_${state.user.id}`, JSON.stringify(state.claimedDailyTokens));
+        } catch (e) {
+          console.warn('Impossible de sauvegarder dans localStorage:', e);
+        }
+      }
+    }
   }
   
   // IMPORTANT : Ne charger depuis localStorage QUE si les données ne sont pas dans Supabase
@@ -4854,6 +4991,13 @@ function renderCalendar() {
   const todayStr = today.toISOString().split('T')[0];
   const currentWeekStart = getWeekStartDate(today);
   const currentWeekStartStr = currentWeekStart.toISOString().split('T')[0];
+  
+  // DEBUG : Afficher les données utilisées pour le rendu
+  console.log('=== renderCalendar - Données utilisées ===');
+  console.log('state.claimedDailyTokens:', state.claimedDailyTokens);
+  console.log('state.profile.claimed_daily_tokens:', state.profile?.claimed_daily_tokens);
+  console.log('currentWeekStartStr:', currentWeekStartStr);
+  console.log('==========================================');
   
   // Rendu du calendrier
   
@@ -5140,13 +5284,21 @@ async function claimDailyTokens(dayStr) {
     
   
     // Mettre à jour dans Supabase
-    const { error: updateError } = await supabase
+    console.log('=== claimDailyTokens - Sauvegarde dans Supabase ===');
+    console.log('updatedClaimed:', updatedClaimed);
+    console.log('newTokens:', newTokens);
+    
+    const { error: updateError, data: updateData } = await supabase
       .from('profiles')
       .update({ 
         tokens: newTokens,
         claimed_daily_tokens: updatedClaimed
       })
-      .eq('id', state.user.id);
+      .eq('id', state.user.id)
+      .select('claimed_daily_tokens');
+    
+    console.log('Résultat de la sauvegarde:', { error: updateError, data: updateData });
+    console.log('===================================================');
     
     if (updateError) {
       console.error('Erreur lors de la réclamation des jetons journaliers:', updateError);
