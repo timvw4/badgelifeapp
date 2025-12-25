@@ -59,8 +59,10 @@
         </div>
       </div>
       <div class="app-logo-container">
-        <img src="./icons/logobadgelifeB.png" alt="BadgeLife" class="app-logo-main">
-        <img src="./icons/tavieenbadge.png" alt="Ta vie en badges" class="app-tagline-image">
+        <div class="app-logo-wrapper">
+          <img src="./icons/logobadgelifeB.png" alt="BadgeLife" class="app-logo-main">
+          <img src="./icons/tavieenbadge.png" alt="Ta vie en badges" class="app-tagline-image">
+        </div>
         <div class="app-header-actions">
           <div class="settings-wrapper">
             <div class="settings-buttons-row">
@@ -147,7 +149,7 @@
       <section id="all-badges" class="tab-content hidden">
         <div class="section-header-with-actions">
           <div>
-            <h2 class="section-title">La roue aux questions.</h2>
+            <h2 class="section-title">Badges à gagner</h2>
             <p class="muted section-description" style="margin-bottom: 40px;">Ici tu peux débloquer des badges pour remplir ta collection et augmenter tes skills !</p>
           </div>
           <!-- Compteur de jetons en haut à droite -->
@@ -167,11 +169,11 @@
             <div id="wheel-container" class="wheel-container">
                 <!-- Titre de la roue -->
                 <h3 class="wheel-title-text" style="text-align: center; color: white; margin: 0 0 4px 0; font-size: 20px; font-weight: 700; width: 100%;">
-                  Roue aux questions
+                  Questions aléatoire
                 </h3>
                 <!-- Texte d'information au-dessus de la roue -->
                 <p class="wheel-info-text" style="text-align: center; color: white; margin: 0 0 12px 0; font-size: 14px; line-height: 1.5; width: 100%;">
-                  Répond à une question aléatoire et tente de débloquer un badge. Attention, certains badges te feront perdre des skills.
+                  Répond à une question d'un thème aléatoire et tente de débloquer un badge. Attention, certains badges te feront perdre des skills.
                 </p>
             <div id="wheel" class="wheel">
               <div id="wheel-items" class="wheel-items"></div>
@@ -198,6 +200,13 @@
               </div>
             </div>
           </div>
+          </div>
+          
+          <!-- Section Améliore tes badges -->
+          <div class="improve-badges-section">
+            <h3>Améliore tes badges</h3>
+            <p class="muted section-description">Tu peux améliorer une réponse d'un badge que tu as déjà débloqué pour obtenir un meilleur niveau.</p>
+            <button id="improve-badge-btn" class="primary">Améliore un badge (5 jetons)</button>
           </div>
         </div>
 
@@ -290,17 +299,21 @@
       <!-- Barre de navigation en bas (app mobile) -->
       <nav id="bottom-nav" class="bottom-nav">
         <button class="bottom-nav-item active" data-tab="my-badges" aria-label="Mon profil">
-          <span class="bottom-nav-icon">👤</span>
+          <span class="bottom-nav-icon">
+            <img src="./icons/profile.png" alt="Profil" width="24" height="24">
+          </span>
           <span class="bottom-nav-label">Mon profil</span>
         </button>
-        <button class="bottom-nav-item bottom-nav-center" data-tab="all-badges" aria-label="Roue des badges">
-          <div class="bottom-nav-wheel">
-            <img src="./icons/wheel.png" alt="Roue" class="wheel-logo">
-            <span id="wheel-badge" class="wheel-badge hidden">0</span>
-          </div>
+        <button class="bottom-nav-item" data-tab="all-badges" aria-label="Roue des badges">
+          <span class="bottom-nav-icon">
+            <img src="./icons/badge.png" alt="Badge" width="24" height="24">
+          </span>
+          <span class="bottom-nav-label">A débloquer</span>
         </button>
         <button class="bottom-nav-item" data-tab="community" aria-label="Communauté">
-          <span class="bottom-nav-icon">👥</span>
+          <span class="bottom-nav-icon">
+            <img src="./icons/community.png" alt="Communauté" width="24" height="24">
+          </span>
           <span class="bottom-nav-label">Communauté</span>
         </button>
       </nav>

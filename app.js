@@ -32,6 +32,7 @@ const state = {
   failedBadgeId: null, // ID du badge qui vient d'échouer (pour afficher le message)
   tokens: 0, // Nombre de jetons de l'utilisateur
   selectedBadgeFromWheel: null, // Badge sélectionné par la roue
+  selectedThemeFromWheel: null, // Thème sélectionné par la roue
   isWheelSpinning: false, // État de la roue (en train de tourner ou non)
   connectionDays: [], // Array des dates de connexion de la semaine
   weekStartDate: null, // Date du lundi de la semaine en cours
@@ -39,10 +40,12 @@ const state = {
   claimedDailyTokens: [], // Array des dates où les jetons journaliers ont été récupérés
   weekBonusClaimed: false, // Si le bonus hebdomadaire a été récupéré cette semaine
   badgeQuestionAnswered: false, // Flag pour indiquer si une réponse a été donnée au badge de la roue
-  wheelBadgeIds: null, // Signature des badges dans la roue (pour éviter de remélanger inutilement)
+  wheelBadgeIds: null, // Signature des badges dans la roue (pour éviter de remélanger inutilement) - DEPRECATED, utiliser wheelThemeIds
+  wheelThemeIds: null, // Signature des thèmes dans la roue (pour éviter de remélanger inutilement)
   wheelOrder: [], // Ordre des éléments dans la roue
   isClaimingTokens: false, // Verrou pour empêcher les appels multiples simultanés à claimDailyTokens
   claimingDay: null, // Jour en cours de réclamation (pour éviter les doubles clics)
+  modifyBadgeCost: null, // Coût en jetons de la modification en cours (2 pour joker, 5 pour section amélioration)
 };
 
 const els = {};
@@ -68,6 +71,33 @@ const THEME_ORDER = [
   'Autres',
   'Badges cachés',
 ];
+
+// Fonction utilitaire pour obtenir les thèmes ayant au moins un badge non débloqué
+function getAvailableThemes() {
+  const themeName = (b) => (b.theme && String(b.theme).trim()) ? String(b.theme).trim() : 'Autres';
+  
+  // Grouper les badges par thème
+  const themeGroups = new Map();
+  state.badges.forEach(badge => {
+    // Exclure les badges fantômes et débloqués
+    if (isGhostBadge(badge) || state.userBadges.has(badge.id)) {
+      return;
+    }
+    
+    const theme = themeName(badge);
+    if (!themeGroups.has(theme)) {
+      themeGroups.set(theme, []);
+    }
+    themeGroups.get(theme).push(badge);
+  });
+  
+  // Retourner uniquement les thèmes qui ont au moins un badge non débloqué
+  const availableThemes = Array.from(themeGroups.keys())
+    .filter(theme => themeGroups.get(theme).length > 0)
+    .sort(compareThemesFixed);
+  
+  return availableThemes;
+}
 
 function compareThemesFixed(a, b) {
   // "Badges cachés" toujours en bas
@@ -128,6 +158,11 @@ document.addEventListener('DOMContentLoaded', () => {
   attachCalendarListeners();
   setupPullToRefresh();
   lockOrientation();
+  
+  // Attacher l'événement au bouton "Améliore un badge"
+  if (els.improveBadgeBtn) {
+    els.improveBadgeBtn.addEventListener('click', handleImproveBadgeFromWheel);
+  }
   bootstrapSession();
 });
 
@@ -216,6 +251,7 @@ function cacheElements() {
   els.modifyBadgeOverlay = document.getElementById('modify-badge-overlay');
   els.tokensTooltip = document.getElementById('tokens-tooltip');
   els.spinButtonTooltip = document.getElementById('spin-button-tooltip');
+  els.improveBadgeBtn = document.getElementById('improve-badge-btn');
   // Éléments du calendrier
   els.calendarBtn = document.getElementById('calendar-btn');
   els.calendarBadge = document.getElementById('calendar-badge');
@@ -1751,21 +1787,10 @@ function renderWheelBadges() {
     }
   }
   
-  // Filtrer les badges pour la roue :
-  // - Non fantômes
-  // - Non débloqués
-  // Tous les badges non débloqués peuvent être dans la roue, même s'ils ont déjà une réponse
-  const availableBadges = state.badges.filter(badge => {
-    const unlocked = state.userBadges.has(badge.id);
-    
-    // Exclure les badges fantômes et débloqués
-    if (isGhostBadge(badge) || unlocked) return false;
-    
-    // Inclure tous les badges non débloqués (avec ou sans réponse)
-    return true;
-  });
+  // Obtenir les thèmes disponibles (ayant au moins un badge non débloqué)
+  const availableThemes = getAvailableThemes();
   
-  if (availableBadges.length === 0) {
+  if (availableThemes.length === 0) {
     // Cacher la roue et afficher un message, mais garder la structure pour pouvoir la recréer facilement
     const wheelEl = els.wheelContainer.querySelector('#wheel');
     const indicatorEl = els.wheelContainer.querySelector('#wheel-indicator');
@@ -1784,7 +1809,7 @@ function renderWheelBadges() {
       els.wheelContainer.appendChild(messageEl);
     }
     
-    state.wheelBadgeIds = null; // Réinitialiser l'ordre
+    state.wheelThemeIds = null; // Réinitialiser l'ordre
     return;
   }
   
@@ -1800,32 +1825,32 @@ function renderWheelBadges() {
   if (indicatorEl) indicatorEl.style.display = '';
   if (spinWrapper) spinWrapper.style.display = '';
   
-  // Créer un tableau avec les badges + joker
+  // Créer un tableau avec les thèmes + joker
   const JOKER_EMOJI = '🃏';
   const JOKER_ID = 'joker';
   
-  // Créer le tableau des éléments de la roue (badges + 1 joker)
+  // Créer le tableau des éléments de la roue (thèmes + 1 joker)
   const wheelElements = [];
-  availableBadges.forEach(badge => {
-    // Remplacer l'emoji du badge par "?" (gris) dans la roue
-    wheelElements.push({ type: 'badge', badge, emoji: '?', id: badge.id });
+  availableThemes.forEach(theme => {
+    // Afficher le nom complet du thème (le CSS gérera le troncage avec ellipsis)
+    wheelElements.push({ type: 'theme', theme, emoji: theme, id: `theme-${theme}` });
   });
   // Ajouter un seul joker pour l'affichage (garde son emoji 🃏)
   wheelElements.push({ type: 'joker', emoji: JOKER_EMOJI, id: JOKER_ID });
   
-  // Vérifier si les badges ont changé (pour savoir si on doit remélanger)
-  const currentBadgeIds = availableBadges.map(b => b.id).sort().join(',');
-  const needsReshuffle = !state.wheelBadgeIds || state.wheelBadgeIds !== currentBadgeIds;
+  // Vérifier si les thèmes ont changé (pour savoir si on doit remélanger)
+  const currentThemeIds = availableThemes.sort().join(',');
+  const needsReshuffle = !state.wheelThemeIds || state.wheelThemeIds !== currentThemeIds;
   
   let shuffledElements;
   if (needsReshuffle) {
-    // Les badges ont changé, on remélange
+    // Les thèmes ont changé, on remélange
     shuffledElements = wheelElements.sort(() => Math.random() - 0.5);
     // Stocker l'ordre pour éviter de remélanger inutilement
-    state.wheelBadgeIds = currentBadgeIds;
+    state.wheelThemeIds = currentThemeIds;
     state.wheelOrder = shuffledElements.map(e => e.id);
   } else {
-    // Même badges, on garde le même ordre
+    // Même thèmes, on garde le même ordre
     const orderMap = new Map(state.wheelOrder.map((id, index) => [id, index]));
     shuffledElements = wheelElements.sort((a, b) => {
       const aIndex = orderMap.get(a.id) ?? 999;
@@ -1847,12 +1872,13 @@ function renderWheelBadges() {
       item.className = 'wheel-item';
       if (element.type === 'joker') {
         item.classList.add('wheel-item-joker');
-      } else {
-        // Ajouter une classe pour les badges (pour le style gris du "?")
-        item.classList.add('wheel-item-badge');
+      } else if (element.type === 'theme') {
+        // Ajouter une classe pour les thèmes
+        item.classList.add('wheel-item-theme');
       }
-      item.dataset.badgeId = element.id;
+      item.dataset.themeId = element.type === 'theme' ? element.theme : undefined;
       item.dataset.type = element.type;
+      item.dataset.id = element.id;
       item.textContent = element.emoji;
       els.wheelItems.appendChild(item);
     });
@@ -1888,21 +1914,10 @@ async function handleSpinWheel() {
     return;
   }
   
-  // Filtrer les badges disponibles pour la roue :
-  // - Non fantômes
-  // - Non débloqués
-  // Tous les badges non débloqués peuvent être dans la roue, même s'ils ont déjà une réponse
-  const availableBadges = state.badges.filter(badge => {
-    const unlocked = state.userBadges.has(badge.id);
-    
-    // Exclure les badges fantômes et débloqués
-    if (isGhostBadge(badge) || unlocked) return false;
-    
-    // Inclure tous les badges non débloqués (avec ou sans réponse)
-    return true;
-  });
+  // Obtenir les thèmes disponibles pour la roue
+  const availableThemes = getAvailableThemes();
   
-  if (availableBadges.length === 0) {
+  if (availableThemes.length === 0) {
     alert('Tous les badges sont débloqués ! 🎉');
     return;
   }
@@ -1952,21 +1967,21 @@ async function handleSpinWheel() {
     // Joker sélectionné
     selectedElement = { type: 'joker', id: JOKER_ID };
   } else {
-    // Sélectionner un badge aléatoirement parmi les badges disponibles
-    const randomBadgeIndex = Math.floor(Math.random() * availableBadges.length);
-    const badge = availableBadges[randomBadgeIndex];
-    selectedElement = { type: 'badge', badge, id: badge.id };
+    // Sélectionner un thème aléatoirement parmi les thèmes disponibles
+    const randomThemeIndex = Math.floor(Math.random() * availableThemes.length);
+    const theme = availableThemes[randomThemeIndex];
+    selectedElement = { type: 'theme', theme, id: `theme-${theme}` };
   }
   
   // Stocker le type de sélection
-  state.selectedBadgeFromWheel = isJoker ? null : selectedElement.badge;
+  state.selectedThemeFromWheel = isJoker ? null : selectedElement.theme;
   state.selectedIsJoker = isJoker;
   
   // Animation de la roue
   const wheelItems = els.wheelItems.querySelectorAll('.wheel-item');
   const itemHeight = 60;
   const jokerCountForDisplay = 1; // Un seul joker affiché dans la roue
-  const totalElementsPerSet = availableBadges.length + jokerCountForDisplay;
+  const totalElementsPerSet = availableThemes.length + jokerCountForDisplay;
   const singleSetHeight = totalElementsPerSet * itemHeight;
   
   // Trouver le premier élément correspondant dans la première moitié de la roue
@@ -1976,7 +1991,7 @@ async function handleSpinWheel() {
     if (isJoker && wheelItems[i].dataset.type === 'joker') {
       targetIndex = i;
       break;
-    } else if (!isJoker && wheelItems[i].dataset.badgeId === selectedElement.id) {
+    } else if (!isJoker && wheelItems[i].dataset.id === selectedElement.id) {
       targetIndex = i;
       break;
     }
@@ -1988,7 +2003,7 @@ async function handleSpinWheel() {
       if (isJoker && wheelItems[i].dataset.type === 'joker') {
         targetIndex = i;
         break;
-      } else if (!isJoker && wheelItems[i].dataset.badgeId === selectedElement.id) {
+      } else if (!isJoker && wheelItems[i].dataset.id === selectedElement.id) {
         targetIndex = i;
         break;
       }
@@ -2032,12 +2047,227 @@ async function handleSpinWheel() {
         handleJokerBonusTokens();
       }
     } else {
-      // Badge normal
-      // Mettre à jour la roue immédiatement pour refléter que ce badge n'est plus disponible
-      renderWheelBadges();
-      showBadgeQuestion(selectedElement.badge);
+      // Thème sélectionné
+      handleThemeSelected(selectedElement.theme);
     }
   }, 3000);
+}
+
+// Gère la sélection d'un thème depuis la roue
+function handleThemeSelected(themeName) {
+  if (!els.badgeQuestionContainer) return;
+  
+  const themeNameFunc = (b) => (b.theme && String(b.theme).trim()) ? String(b.theme).trim() : 'Autres';
+  
+  // Filtrer les badges du thème qui ne sont pas débloqués et ne sont pas fantômes
+  const themeBadges = state.badges.filter(badge => {
+    const unlocked = state.userBadges.has(badge.id);
+    const badgeTheme = themeNameFunc(badge);
+    
+    // Exclure les badges fantômes, débloqués et ceux qui ne sont pas du bon thème
+    if (isGhostBadge(badge) || unlocked || badgeTheme !== themeName) {
+      return false;
+    }
+    
+    return true;
+  });
+  
+  if (themeBadges.length === 0) {
+    // Ne devrait pas arriver normalement, mais gérer le cas
+    alert('Aucun badge disponible dans ce thème.');
+    renderWheelBadges(); // Mettre à jour la roue
+    return;
+  }
+  
+  // Choisir un badge aléatoirement parmi les badges disponibles
+  const randomIndex = Math.floor(Math.random() * themeBadges.length);
+  const selectedBadge = themeBadges[randomIndex];
+  
+  // Stocker le badge sélectionné
+  state.selectedBadgeFromWheel = selectedBadge;
+  
+  // Afficher le modal avec le nom du thème en titre
+  const card = els.badgeQuestionContainer.querySelector('.card');
+  if (!card) return;
+  
+  // Réinitialiser le flag de réponse
+  state.badgeQuestionAnswered = false;
+  
+  // Recréer la structure HTML complète de la carte
+  card.innerHTML = `
+    <h3 id="selected-theme-name" style="text-align: center; font-size: 24px; font-weight: 700; margin-bottom: 10px;">${themeName}</h3>
+    <h3 id="selected-badge-name" style="text-align: center; font-size: 60px; margin: 10px 0; color: #9ca3af;">?</h3>
+    <p id="selected-badge-question" class="badge-question-text" style="text-align: center; margin: 15px 0;"></p>
+    <form id="badge-answer-form" class="auth-form">
+      <label for="badge-answer-input">Ta réponse</label>
+      <textarea id="badge-answer-input" rows="3" placeholder="Écris ta réponse ici..."></textarea>
+      <button type="submit" class="primary">Valider</button>
+    </form>
+    <p id="badge-answer-message" class="message"></p>
+  `;
+  
+  // Réinitialiser les références aux éléments
+  els.selectedBadgeName = document.getElementById('selected-badge-name');
+  els.selectedBadgeQuestion = document.getElementById('selected-badge-question');
+  els.badgeAnswerForm = document.getElementById('badge-answer-form');
+  els.badgeAnswerInput = document.getElementById('badge-answer-input');
+  els.badgeAnswerMessage = document.getElementById('badge-answer-message');
+  
+  if (!els.selectedBadgeName || !els.selectedBadgeQuestion) return;
+  
+  // Afficher "?" au lieu de l'emoji dans le formulaire
+  // Mais garder le vrai emoji et nom dans les attributs title et data-*
+  const emoji = getBadgeEmoji(selectedBadge);
+  const title = stripEmojis(selectedBadge.name || '');
+  els.selectedBadgeName.textContent = '?';
+  els.selectedBadgeName.setAttribute('title', `${emoji} ${title}`);
+  els.selectedBadgeName.setAttribute('data-emoji', emoji);
+  els.selectedBadgeName.setAttribute('data-title', title);
+  // Ajouter un style pour rendre le "?" gris
+  els.selectedBadgeName.style.color = '#9ca3af';
+  els.selectedBadgeQuestion.textContent = selectedBadge.question || '';
+  els.badgeAnswerMessage.textContent = '';
+  els.badgeAnswerMessage.className = 'message';
+  
+  // Générer le formulaire selon le type de badge
+  const config = parseConfig(selectedBadge.answer);
+  let formContent = '';
+  
+  if (config?.type === 'boolean') {
+    // Badge Oui/Non
+    formContent = `
+      <input type="hidden" name="answer" value="">
+      <div class="bool-buttons">
+        <button type="button" class="ghost bool-btn" data-bool="oui">Oui</button>
+        <button type="button" class="ghost bool-btn" data-bool="non">Non</button>
+      </div>
+    `;
+  } else if (config?.type === 'singleSelect' && Array.isArray(config.options)) {
+    // Badge sélection unique
+    const optionsMarkup = config.options.map(opt => `
+      <option value="${opt.value}">${opt.label}</option>
+    `).join('');
+    formContent = `
+      <select name="answer-single" class="select-multi">
+        <option value="">Choisis une option</option>
+        ${optionsMarkup}
+      </select>
+    `;
+  } else if (config?.type === 'multiSelect' && Array.isArray(config.options)) {
+    // Badge multi-sélection
+    const optionsMarkup = config.options.map(opt => `
+      <option value="${opt.value}">${opt.label}</option>
+    `).join('');
+    const size = Math.min(Math.max(config.options.length, 4), 9); // entre 4 et 9 lignes
+    formContent = `
+      <select name="answer-select" class="select-multi" multiple size="${size}">
+        ${optionsMarkup}
+      </select>
+      <small class="muted">Tu peux sélectionner plusieurs options.</small>
+    `;
+  } else if (config?.type === 'range') {
+    // Badge numérique - utiliser une zone de saisie de nombres
+    formContent = `
+      <input type="number" id="badge-answer-input" name="answer" min="0" step="${config.step || 1}" placeholder="Entre un nombre" class="number-input">
+    `;
+  } else {
+    // Badge texte (par défaut)
+    formContent = `
+      <textarea id="badge-answer-input" name="answer" rows="3" placeholder="Écris ta réponse ici..."></textarea>
+    `;
+  }
+  
+  // Mettre à jour le formulaire
+  els.badgeAnswerForm.innerHTML = `
+    <label for="badge-answer-input">Ta réponse</label>
+    ${formContent}
+    <button type="submit" class="primary">Valider</button>
+  `;
+  
+  // Réattacher l'événement submit du formulaire (nécessaire car innerHTML recrée les éléments)
+  if (els.badgeAnswerForm) {
+    // Supprimer l'ancien listener s'il existe
+    if (els.badgeAnswerForm._submitHandler) {
+      els.badgeAnswerForm.removeEventListener('submit', els.badgeAnswerForm._submitHandler);
+    }
+    // Créer et attacher le nouveau listener
+    els.badgeAnswerForm._submitHandler = handleBadgeAnswerFromWheel;
+    els.badgeAnswerForm.addEventListener('submit', els.badgeAnswerForm._submitHandler);
+  }
+  
+  // Réattacher les événements pour les boutons boolean
+  if (config?.type === 'boolean') {
+    const hiddenInput = els.badgeAnswerForm.querySelector('input[name="answer"]');
+    const boolBtns = els.badgeAnswerForm.querySelectorAll('.bool-btn');
+    boolBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        if (hiddenInput) hiddenInput.value = btn.getAttribute('data-bool') || '';
+        // Ne pas auto-submettre, laisser l'utilisateur cliquer sur "Valider"
+        // Mettre en évidence le bouton sélectionné visuellement
+        boolBtns.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+      });
+    });
+  }
+  
+  // Afficher le conteneur
+  els.badgeQuestionContainer.classList.remove('hidden');
+  
+  // Attacher le gestionnaire de clic pour fermer la carte en cliquant en dehors
+  attachBadgeQuestionCloseHandler();
+}
+
+// Gère l'amélioration de badge depuis la section "Améliore tes badges" (coûte 5 jetons)
+async function handleImproveBadgeFromWheel() {
+  // Vérifier si l'utilisateur a assez de jetons
+  if ((state.tokens || 0) < 5) {
+    alert('Tu n\'as pas assez de jetons (5 requis).');
+    return;
+  }
+  
+  // Consommer 5 jetons
+  const newTokens = (state.tokens || 0) - 5;
+  state.tokens = newTokens;
+  if (state.profile) {
+    state.profile.tokens = newTokens;
+  }
+  
+  const { error } = await supabase
+    .from('profiles')
+    .update({ tokens: newTokens })
+    .eq('id', state.user.id);
+  
+  if (error) {
+    console.error('Erreur lors de la consommation des jetons:', error);
+    state.tokens = (state.tokens || 0) + 5;
+    if (state.profile) {
+      state.profile.tokens = state.tokens;
+    }
+    alert('Erreur lors de la mise à jour des jetons. Veuillez réessayer.');
+    return;
+  }
+  
+  updateTokensDisplay();
+  
+  // Stocker le coût de la modification (5 jetons pour section amélioration)
+  state.modifyBadgeCost = 5;
+  
+  // Activer le mode modification
+  state.isModifyingBadge = true;
+  
+  // Basculer vers l'onglet "Mes badges"
+  showTab('my-badges');
+  
+  // Scroll automatique vers le haut de la section "Ma collection"
+  setTimeout(() => {
+    const myBadgesSection = document.getElementById('my-badges');
+    if (myBadgesSection) {
+      myBadgesSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, 100);
+  
+  // Afficher un message d'instruction
+  renderMyBadges();
 }
 
 // Gère le Joker Malus : l'utilisateur perd un badge débloqué aléatoirement
@@ -2229,6 +2459,9 @@ function handleJokerBonus() {
       .eq('id', state.user.id);
     
     updateTokensDisplay();
+    
+    // Stocker le coût de la modification (2 jetons pour joker)
+    state.modifyBadgeCost = 2;
     
     // Activer le mode modification
     state.isModifyingBadge = true;
@@ -2600,6 +2833,26 @@ async function handleBadgeAnswerFromWheel(e) {
       attachBadgeQuestionCloseHandler();
     }
     
+    // Vérifier si tous les badges du thème sont maintenant débloqués
+    const themeNameFunc = (b) => (b.theme && String(b.theme).trim()) ? String(b.theme).trim() : 'Autres';
+    const badgeTheme = themeNameFunc(state.selectedBadgeFromWheel);
+    
+    // Filtrer les badges du thème qui ne sont pas débloqués et ne sont pas fantômes
+    const themeBadges = state.badges.filter(badge => {
+      const unlocked = state.userBadges.has(badge.id);
+      const badgeThemeName = themeNameFunc(badge);
+      
+      // Exclure les badges fantômes, débloqués et ceux qui ne sont pas du bon thème
+      if (isGhostBadge(badge) || unlocked || badgeThemeName !== badgeTheme) {
+        return false;
+      }
+      
+      return true;
+    });
+    
+    // Si tous les badges du thème sont débloqués, retirer le thème de la roue
+    const allThemeBadgesUnlocked = themeBadges.length === 0;
+    
     // Mettre à jour la roue et les badges IMMÉDIATEMENT (avant le délai)
     renderWheelBadges();
     renderMyBadges();
@@ -2639,14 +2892,15 @@ async function handleBadgeAnswerFromWheel(e) {
 
 // Gère la modification de réponse d'un badge (depuis le Joker Bonus)
 function handleModifyBadgeAnswer(badge) {
-  // Désactiver le mode modification
-  state.isModifyingBadge = false;
+  // NE PAS désactiver le mode modification ici
+  // Le mode doit rester actif jusqu'à ce que l'utilisateur soumette réellement le formulaire
+  // ou annule avec remboursement
   
-  // Supprimer le bandeau d'instruction
-  const banner = document.getElementById('modify-badge-banner');
-  if (banner) {
-    banner.remove();
-  }
+  // Ne pas supprimer le bandeau d'instruction - il doit rester visible
+  // const banner = document.getElementById('modify-badge-banner');
+  // if (banner) {
+  //   banner.remove();
+  // }
   
   // Sauvegarder l'ancien état du badge pour pouvoir le restaurer
   const oldLevel = state.userBadgeLevels.get(badge.id);
@@ -2743,15 +2997,16 @@ function handleModifyBadgeAnswer(badge) {
   // Attacher le gestionnaire de fermeture
   const closeBtn = modal.querySelector('#modify-badge-close');
   if (closeBtn) {
-    closeBtn.addEventListener('click', () => {
-      closeModifyBadgeOverlay();
+    closeBtn.addEventListener('click', async () => {
+      await closeModifyBadgeOverlay();
     });
   }
   
-  // Attacher le gestionnaire de clic sur l'overlay (fermer si réponse donnée)
-  const overlayClickHandler = (e) => {
-    if (e.target === els.modifyBadgeOverlay && state.badgeQuestionAnswered) {
-      closeModifyBadgeOverlay();
+  // Attacher le gestionnaire de clic sur l'overlay (fermer à tout moment)
+  const overlayClickHandler = async (e) => {
+    if (e.target === els.modifyBadgeOverlay) {
+      // Permettre la fermeture à tout moment (le remboursement sera géré dans closeModifyBadgeOverlay)
+      await closeModifyBadgeOverlay();
       els.modifyBadgeOverlay.removeEventListener('click', overlayClickHandler);
     }
   };
@@ -2791,6 +3046,12 @@ function handleModifyBadgeAnswer(badge) {
       return;
     }
     
+    // Vérifier si c'est une réponse "non" pour les badges boolean (AVANT l'évaluation)
+    // Si c'est "non", ne pas sauvegarder même si c'est correct
+    const falseLabels = config?.falseLabels ?? ['non', 'no', 'n'];
+    const isBooleanNo = config?.type === 'boolean' && 
+                        falseLabels.map(l => l.toLowerCase().trim()).includes(newAnswer.toLowerCase().trim());
+    
     // Évaluer la nouvelle réponse
     const selectedOptions = config?.type === 'multiSelect' ? newAnswer.split(', ') : [];
     const result = evaluateBadgeAnswer(badge, newAnswer, selectedOptions);
@@ -2799,12 +3060,34 @@ function handleModifyBadgeAnswer(badge) {
       // Nouvelle réponse correcte
       const newLevel = result.level || null;
       
-      // Comparer les niveaux pour voir si c'est une amélioration
+      // Comparer les niveaux pour voir si c'est une amélioration, même niveau, ou baisse
       const levelOrder = ['Skill 1', 'Skill 2', 'Skill 3', 'Skill max', 'Expert'];
       const oldLevelIndex = oldLevel ? levelOrder.indexOf(oldLevel) : -1;
       const newLevelIndex = newLevel ? levelOrder.indexOf(newLevel) : -1;
       
-      if (newLevelIndex > oldLevelIndex || !oldLevel) {
+      // Si réponse "non" ou niveau baissé : ne pas sauvegarder
+      if (isBooleanNo || (oldLevel && newLevelIndex < oldLevelIndex)) {
+        messageEl.textContent = 'Ton badge garde son niveau.';
+        messageEl.classList.remove('error');
+        messageEl.classList.remove('success');
+        
+        // Désactiver le mode modification (enlever la possibilité d'améliorer un autre badge)
+        state.isModifyingBadge = false;
+        state.modifyBadgeCost = null;
+        
+        // Supprimer le bandeau d'instruction
+        const banner = document.getElementById('modify-badge-banner');
+        if (banner) {
+          banner.remove();
+        }
+        
+        // Fermer l'overlay après un délai
+        state.badgeQuestionAnswered = true;
+        setTimeout(() => {
+          closeModifyBadgeOverlay();
+          renderMyBadges();
+        }, 2500);
+      } else if (newLevelIndex > oldLevelIndex || !oldLevel) {
         // Amélioration ! Mettre à jour
         const { error } = await supabase.from('user_badges').upsert({
           user_id: state.user.id,
@@ -2816,35 +3099,161 @@ function handleModifyBadgeAnswer(badge) {
         });
         
         if (!error) {
+          // Mettre à jour l'état local avec la nouvelle réponse et le nouveau niveau
           state.userBadgeLevels.set(badge.id, newLevel);
           state.userBadgeAnswers.set(badge.id, newAnswer);
-          messageEl.textContent = `🎉 Niveau amélioré : ${newLevel || 'Débloqué'} !`;
+          
+          // Message avec le format exact du niveau
+          const levelDisplay = newLevel || 'Débloqué';
+          messageEl.textContent = `Tu as amélioré ce badge au niv ${levelDisplay}.`;
           messageEl.classList.remove('error');
           messageEl.classList.add('success');
+          
+          // Désactiver le mode modification après une modification réussie
+          state.isModifyingBadge = false;
+          state.modifyBadgeCost = null;
+          
+          // Supprimer le bandeau d'instruction
+          const banner = document.getElementById('modify-badge-banner');
+          if (banner) {
+            banner.remove();
+          }
+          
+          // Mettre à jour l'affichage du profil pour montrer la nouvelle réponse
+          state.badgeQuestionAnswered = true;
+          setTimeout(() => {
+            closeModifyBadgeOverlay();
+            renderMyBadges();
+          }, 2500);
         }
-      } else {
-        // Pas d'amélioration, garder l'ancien niveau
-        messageEl.textContent = `Ta réponse est correcte mais n'améliore pas ton niveau actuel (${oldLevel}).`;
-        messageEl.classList.remove('error');
+      } else if (newLevelIndex === oldLevelIndex) {
+        // Même niveau : remplacer la réponse
+        const { error } = await supabase.from('user_badges').upsert({
+          user_id: state.user.id,
+          badge_id: badge.id,
+          success: true,
+          level: newLevel,
+          user_answer: newAnswer,
+          was_ever_unlocked: true
+        });
+        
+        if (!error) {
+          // Mettre à jour l'état local avec la nouvelle réponse (même niveau)
+          state.userBadgeLevels.set(badge.id, newLevel);
+          state.userBadgeAnswers.set(badge.id, newAnswer);
+          
+          // Message indiquant que la réponse a été remplacée
+          messageEl.textContent = 'Réponse remplacée. Ton badge garde son niveau';
+          messageEl.classList.remove('error');
+          messageEl.classList.add('success');
+          
+          // Désactiver le mode modification après le remplacement
+          state.isModifyingBadge = false;
+          state.modifyBadgeCost = null;
+          
+          // Supprimer le bandeau d'instruction
+          const banner = document.getElementById('modify-badge-banner');
+          if (banner) {
+            banner.remove();
+          }
+          
+          // Mettre à jour l'affichage du profil pour montrer la nouvelle réponse
+          state.badgeQuestionAnswered = true;
+          setTimeout(() => {
+            closeModifyBadgeOverlay();
+            renderMyBadges();
+          }, 2500);
+        }
       }
     } else {
-      // Réponse incorrecte - garder l'ancien état
-      messageEl.textContent = `Réponse incorrecte. Ton badge reste à ${oldLevel || 'débloqué'}.`;
-      messageEl.classList.add('error');
+      // Réponse incorrecte - supprimer le badge de la collection
+      // Préserver was_ever_unlocked si le badge a déjà été débloqué avant
+      const wasEverUnlocked = state.wasEverUnlocked.has(badge.id);
+      
+      // Mettre à jour Supabase : marquer le badge comme bloqué (success: false)
+      const { error } = await supabase.from('user_badges').upsert({
+        user_id: state.user.id,
+        badge_id: badge.id,
+        success: false,
+        level: null,
+        user_answer: null,
+        was_ever_unlocked: wasEverUnlocked
+      });
+      
+      if (!error) {
+        // Supprimer le badge de la collection
+        state.userBadges.delete(badge.id);
+        state.userBadgeLevels.delete(badge.id);
+        state.userBadgeAnswers.delete(badge.id);
+        state.attemptedBadges.add(badge.id);
+        
+        messageEl.textContent = 'Réponse incorrecte. Le badge est retiré de ta collection et peut être redébloqué dans la roue.';
+        messageEl.classList.add('error');
+        
+        // Désactiver le mode modification
+        state.isModifyingBadge = false;
+        state.modifyBadgeCost = null;
+        
+        // Supprimer le bandeau d'instruction
+        const banner = document.getElementById('modify-badge-banner');
+        if (banner) {
+          banner.remove();
+        }
+        
+        // Mettre à jour la roue pour que le badge soit disponible
+        renderWheelBadges();
+        
+        // Mettre à jour l'affichage de la collection pour retirer le badge
+        state.badgeQuestionAnswered = true;
+        setTimeout(() => {
+          closeModifyBadgeOverlay();
+          renderMyBadges();
+        }, 2500);
+      } else {
+        messageEl.textContent = 'Erreur lors de la mise à jour. Veuillez réessayer.';
+        messageEl.classList.add('error');
+      }
     }
-    
-    state.badgeQuestionAnswered = true;
-    
-    // Re-rendre les badges après un délai
-    setTimeout(() => {
-      closeModifyBadgeOverlay();
-      renderMyBadges();
-    }, 2500);
   });
 }
 
+// Rembourse les jetons dépensés pour la modification de badge
+async function refundModifyBadgeTokens() {
+  if (!state.modifyBadgeCost || state.modifyBadgeCost <= 0) {
+    return; // Pas de coût à rembourser
+  }
+  
+  const refundAmount = state.modifyBadgeCost;
+  
+  // Ajouter les jetons remboursés
+  const newTokens = (state.tokens || 0) + refundAmount;
+  state.tokens = newTokens;
+  if (state.profile) {
+    state.profile.tokens = newTokens;
+  }
+  
+  // Mettre à jour dans Supabase
+  const { error } = await supabase
+    .from('profiles')
+    .update({ tokens: newTokens })
+    .eq('id', state.user.id);
+  
+  if (error) {
+    console.error('Erreur lors du remboursement des jetons:', error);
+    // Annuler le remboursement local en cas d'erreur
+    state.tokens = (state.tokens || 0) - refundAmount;
+    if (state.profile) {
+      state.profile.tokens = state.tokens;
+    }
+  } else {
+    // Réinitialiser le coût
+    state.modifyBadgeCost = null;
+    updateTokensDisplay();
+  }
+}
+
 // Ferme l'overlay de modification de badge
-function closeModifyBadgeOverlay() {
+async function closeModifyBadgeOverlay() {
   if (els.modifyBadgeOverlay) {
     els.modifyBadgeOverlay.classList.add('hidden');
     const modal = els.modifyBadgeOverlay.querySelector('.modify-badge-modal .card');
@@ -2852,12 +3261,17 @@ function closeModifyBadgeOverlay() {
       modal.innerHTML = '';
     }
   }
+  
+  // Si le mode modification est toujours actif et qu'aucune modification n'a été effectuée, rembourser
+  if (state.isModifyingBadge && !state.badgeQuestionAnswered && state.modifyBadgeCost) {
+    await refundModifyBadgeTokens();
+  }
+  
   state.badgeQuestionAnswered = false;
 }
 
 function renderMyBadges() {
-  // On affiche uniquement les badges qui ont été répondu (débloqués, bloqués, ou rebloqués)
-  // Les badges jamais répondu ne sont pas affichés
+  // On affiche uniquement les badges débloqués
   if (!els.myBadgesList) {
     console.error('❌ els.myBadgesList n\'existe pas !');
     return;
@@ -2879,12 +3293,14 @@ function renderMyBadges() {
       banner.id = 'modify-badge-banner';
       banner.className = 'modify-badge-banner';
       banner.innerHTML = `
-        <p>🃏 Clique sur un badge pour modifier ta réponse</p>
+        <p>Clique sur un badge pour modifier ta réponse</p>
         <button id="cancel-modify-badge" class="ghost">Annuler</button>
       `;
       els.myBadgesList.parentElement.insertBefore(banner, els.myBadgesList);
       
-      banner.querySelector('#cancel-modify-badge').addEventListener('click', () => {
+      banner.querySelector('#cancel-modify-badge').addEventListener('click', async () => {
+        // Rembourser les jetons avant de désactiver le mode
+        await refundModifyBadgeTokens();
         state.isModifyingBadge = false;
         banner.remove();
         renderMyBadges();
@@ -2898,16 +3314,11 @@ function renderMyBadges() {
   }
 }
 
-  // Filtrer les badges : afficher uniquement les badges débloqués et rebloqués (pas les bloqués jamais débloqués)
+  // Filtrer les badges : afficher uniquement les badges débloqués
   const visibleBadges = allBadges.filter(badge => {
     const unlocked = state.userBadges.has(badge.id);
-    const userAnswer = state.userBadgeAnswers.get(badge.id);
-    const hasAnswer = userAnswer !== undefined && userAnswer !== null;
-    const wasEverUnlocked = state.wasEverUnlocked.has(badge.id);
-    const isBlocked = !unlocked && hasAnswer;
-    const isReblocked = isBlocked && wasEverUnlocked;
-    // Afficher uniquement si débloqué OU rebloqué (pas les bloqués jamais débloqués)
-    return unlocked || isReblocked;
+    // Afficher uniquement si débloqué
+    return unlocked;
   });
 
   if (!visibleBadges.length) {
@@ -2938,79 +3349,39 @@ function renderMyBadges() {
 
     const title = document.createElement('div');
     title.className = 'section-subtitle theme-title';
-    // Si aucun badge de ce thème n'est débloqué, on floute le titre du thème
-    const hasAnyUnlockedInTheme = themeBadges.some(b => state.userBadges.has(b.id));
-    if (!hasAnyUnlockedInTheme) {
-      // Mode Pokédex : thème caché tant qu'aucun badge du thème n'est débloqué
-      title.classList.add('theme-locked');
-      title.textContent = '?????';
-      title.dataset.theme = t;
-    } else {
-      title.textContent = t;
-    }
+    title.textContent = t;
     els.myBadgesList.appendChild(title);
 
     themeBadges.sort(sortById).forEach(badge => {
       const unlocked = state.userBadges.has(badge.id);
+      // Ne traiter que les badges débloqués
+      if (!unlocked) return;
+      
       const levelLabel = state.userBadgeLevels.get(badge.id);
       const config = parseConfig(badge.answer);
       const isGhost = isGhostBadge(badge);
       const userAnswer = state.userBadgeAnswers.get(badge.id);
-      const hasAnswer = userAnswer !== undefined && userAnswer !== null;
-      const wasEverUnlocked = state.wasEverUnlocked.has(badge.id);
-      const isBlocked = !unlocked && hasAnswer;
-      // Distinguer deux états de badges bloqués :
-      // - "bloqué" : répondu mais jamais débloqué (affiche ????)
-      // - "rebloqué" : débloqué puis rebloqué (affiche le badge en flou et grisé)
-      const isReblocked = isBlocked && wasEverUnlocked;
-      const isBlockedNeverUnlocked = isBlocked && !wasEverUnlocked;
 
       const card = document.createElement('article');
-      card.className = `card-badge clickable compact all-badge-card my-catalog-card${unlocked ? '' : ' locked'}${isBlocked ? ' blocked' : ''}${isReblocked ? ' reblocked' : ''}`;
+      card.className = 'card-badge clickable compact all-badge-card my-catalog-card';
       card.dataset.badgeId = badge.id; // Ajouter un identifiant pour pouvoir scroller vers le badge
 
-      // Afficher les badges selon leur état :
-      // - débloqués : normalement
-      // - rebloqués : emoji/nom en flou et grisé
-      // - bloqués (jamais débloqués) : ?????
-      // - jamais répondu : ❓ et ?????
-      const safeEmoji = unlocked || isReblocked ? getBadgeEmoji(badge) : '❓';
-      const safeTitle = unlocked || isReblocked ? stripEmojis(badge.name || '') : '?????';
+      // Afficher les badges débloqués normalement
+      const safeEmoji = getBadgeEmoji(badge);
+      const safeTitle = stripEmojis(badge.name || '');
 
-      // Déterminer le label selon l'état du badge :
-      // 1. Débloqué : afficher le niveau
-      // 2. Rebloqué : afficher "Rebloqué"
-      // 3. Bloqué : afficher "Bloqué"
-      // 4. À débloquer : afficher "À débloquer"
-      let statusLabel;
-      let statusClass;
-      
-      if (unlocked) {
-        // État : Débloqué
-        statusLabel = formatLevelTag(unlocked, levelLabel, config);
-        statusClass = isMysteryLevel(levelLabel) ? 'mystery' : 'success';
-      } else if (isReblocked) {
-        // État : Rebloqué
-        statusLabel = 'Rebloqué';
-        statusClass = 'reblocked';
-      } else if (isBlocked) {
-        // État : Bloqué
-        statusLabel = 'Bloqué';
-        statusClass = 'blocked';
-      } else {
-        // État : À débloquer
-        statusLabel = 'À débloquer';
-        statusClass = 'locked';
-      }
-      const isExpert = unlocked && isMysteryLevel(levelLabel);
+      // Déterminer le label : afficher le niveau
+      const statusLabel = formatLevelTag(unlocked, levelLabel, config);
+      const statusClass = isMysteryLevel(levelLabel) ? 'mystery' : 'success';
+      const isExpert = isMysteryLevel(levelLabel);
       
       if (isExpert) {
         card.classList.add('expert-badge');
       }
 
-      const formattedAnswer = unlocked && userAnswer ? formatUserAnswer(badge, userAnswer) : null;
-      const ghostText = unlocked && isGhost ? (config?.ghostDisplayText || 'Débloqué automatiquement') : null;
-      const displayText = formattedAnswer || ghostText || (isBlocked && userAnswer ? formatUserAnswer(badge, userAnswer) : null) || (unlocked ? '' : 'Badge non débloqué');
+      const formattedAnswer = userAnswer ? formatUserAnswer(badge, userAnswer) : null;
+      const ghostText = isGhost ? (config?.ghostDisplayText || 'Débloqué automatiquement') : null;
+      const displayText = formattedAnswer || ghostText || '';
 
       card.innerHTML = `
         <div class="row level-row">
@@ -3028,7 +3399,7 @@ function renderMyBadges() {
       const details = card.querySelector('.all-badge-details');
       
       // Ajouter une classe spéciale si le mode modification est actif
-      if (state.isModifyingBadge && unlocked) {
+      if (state.isModifyingBadge) {
         card.classList.add('modifiable');
       }
       
@@ -3036,8 +3407,8 @@ function renderMyBadges() {
         const tag = e.target.tagName.toLowerCase();
         if (tag === 'input' || tag === 'button' || e.target.closest('form')) return;
         
-        // Si mode modification actif et badge débloqué, ouvrir le formulaire de modification
-        if (state.isModifyingBadge && unlocked) {
+        // Si mode modification actif, ouvrir le formulaire de modification
+        if (state.isModifyingBadge) {
           handleModifyBadgeAnswer(badge);
           return;
         }
@@ -3442,49 +3813,49 @@ async function handleBadgeAnswer(event, badge, providedAnswer = null, feedbackEl
 
 // isMysteryLevel est maintenant importé du module badgeCalculations.js
 
-function formatLevelTag(unlocked, levelLabel, config) {
-  const normalizeSkillText = (text) => {
-    if (typeof text !== 'string') return text;
-    // Remplace les anciens libellés "niv"/"niveau" par "Skill"
-    // Ex: "niv 3/5" -> "Skill 3/5"
-    return text
-      .replace(/\bniv\b/gi, 'Skill')
-      .replace(/\bniveau\b/gi, 'Skill')
-      .replace(/\bniveaux\b/gi, 'Skills');
-  };
+// Convertit un nombre en chiffres romains
+function toRoman(num) {
+  if (num <= 0) return '';
+  if (num >= 1000) return 'M' + toRoman(num - 1000);
+  if (num >= 900) return 'CM' + toRoman(num - 900);
+  if (num >= 500) return 'D' + toRoman(num - 500);
+  if (num >= 400) return 'CD' + toRoman(num - 400);
+  if (num >= 100) return 'C' + toRoman(num - 100);
+  if (num >= 90) return 'XC' + toRoman(num - 90);
+  if (num >= 50) return 'L' + toRoman(num - 50);
+  if (num >= 40) return 'XL' + toRoman(num - 40);
+  if (num >= 10) return 'X' + toRoman(num - 10);
+  if (num >= 9) return 'IX' + toRoman(num - 9);
+  if (num >= 5) return 'V' + toRoman(num - 5);
+  if (num >= 4) return 'IV' + toRoman(num - 4);
+  if (num >= 1) return 'I' + toRoman(num - 1);
+  return '';
+}
 
+function formatLevelTag(unlocked, levelLabel, config) {
   if (!unlocked) {
     // Mode Pokédex : si le badge est bloqué, on masque l'indicateur exact
-    // et on affiche toujours "Skill ?/?"
-    return 'À débloquer · ?/?';
+    return 'À débloquer';
   }
   
   // Niveau 0 = badge bloqué
   if (levelLabel) {
     const labelLower = String(levelLabel).toLowerCase();
     if (labelLower === 'niv 0' || labelLower === 'skill 0' || labelLower === 'niveau 0') {
-      return 'Bloqué · Skill 0';
+      return 'Bloqué · niveau 0';
     }
   }
   
-  if (isMysteryLevel(levelLabel)) return 'Débloqué · Expert';
+  if (isMysteryLevel(levelLabel)) return 'niveau Expert';
   const pos = getLevelPosition(levelLabel, config);
-  if (pos !== null) {
-    // Compter le total de niveaux (incluant le niveau 0 s'il est dans la config)
-    const total = getLevelCount(config);
-    const hasLevel0 = config && Array.isArray(config.levels) && 
-      config.levels.some(l => {
-        const lbl = String(l?.label || '').toLowerCase();
-        return lbl === 'niv 0' || lbl === 'skill 0' || lbl === 'niveau 0';
-      });
-    const displayTotal = hasLevel0 ? total : total + 1; // +1 si le niveau 0 n'est pas dans la config
-    return `Débloqué · Skill ${pos}/${displayTotal}`;
+  if (pos !== null && pos > 0) {
+    // Convertir la position en chiffres romains
+    const romanNum = toRoman(pos);
+    return `niveau ${romanNum}`;
   }
-  const total = getLevelCount(config);
-  if (total > 0) {
-    return levelLabel ? normalizeSkillText(`Débloqué · ${levelLabel}`) : 'Skill débloqué';
-  }
-  return levelLabel ? normalizeSkillText(`Débloqué · ${levelLabel}`) : 'Skill débloqué';
+  
+  // Si on ne peut pas déterminer la position, afficher "Débloqué"
+  return 'Débloqué';
 }
 
 function getLevelPosition(levelLabel, config) {
@@ -4254,17 +4625,12 @@ function renderCommunityProfileBadges(unlockedBadges, isPrivate = false) {
     });
   }
   
-  // Filtrer les badges : afficher uniquement les badges débloqués et rebloqués (pas les bloqués jamais débloqués)
+  // Filtrer les badges : afficher uniquement les badges débloqués
   const allBadges = state.badges.slice();
   const visibleBadges = allBadges.filter(badge => {
     const unlocked = communityUserBadges.has(badge.id);
-    const userAnswer = communityUserBadgeAnswers.get(badge.id);
-    const hasAnswer = userAnswer !== undefined && userAnswer !== null;
-    const wasEverUnlocked = communityWasEverUnlocked.has(badge.id);
-    const isBlocked = !unlocked && hasAnswer;
-    const isReblocked = isBlocked && wasEverUnlocked;
-    // Afficher uniquement si débloqué OU rebloqué (pas les bloqués jamais débloqués)
-    return unlocked || isReblocked;
+    // Afficher uniquement si débloqué
+    return unlocked;
   });
   
   if (!visibleBadges.length) {
@@ -4289,61 +4655,41 @@ function renderCommunityProfileBadges(unlockedBadges, isPrivate = false) {
 
   themes.forEach((t) => {
     const themeBadges = groups.get(t) || [];
-    if (themeBadges.length === 0) return;
+    // Filtrer pour ne garder que les badges débloqués
+    const unlockedThemeBadges = themeBadges.filter(b => communityUserBadges.has(b.id));
+    if (unlockedThemeBadges.length === 0) return;
     
     const title = document.createElement('div');
     title.className = 'section-subtitle theme-title';
-    const hasAnyUnlockedInTheme = themeBadges.some(b => communityUserBadges.has(b.id));
-    if (!hasAnyUnlockedInTheme) {
-      title.classList.add('theme-locked');
-      title.textContent = '?????';
-      title.dataset.theme = t;
-    } else {
-      title.textContent = t;
-    }
+    title.textContent = t;
     els.communityProfileBadgesList.appendChild(title);
 
     themeBadges.sort(sortById).forEach(badge => {
       const unlocked = communityUserBadges.has(badge.id);
+      // Ne traiter que les badges débloqués
+      if (!unlocked) return;
+      
       const levelLabel = communityUserBadgeLevels.get(badge.id);
-        const config = parseConfig(badge.answer);
+      const config = parseConfig(badge.answer);
       const userAnswer = communityUserBadgeAnswers.get(badge.id);
-      const hasAnswer = userAnswer !== undefined && userAnswer !== null;
-      const wasEverUnlocked = communityWasEverUnlocked.has(badge.id);
-      const isBlocked = !unlocked && hasAnswer;
-      const isReblocked = isBlocked && wasEverUnlocked;
 
       const card = document.createElement('article');
-      card.className = `card-badge clickable compact all-badge-card my-catalog-card${unlocked ? '' : ' locked'}${isBlocked ? ' blocked' : ''}${isReblocked ? ' reblocked' : ''}`;
+      card.className = 'card-badge clickable compact all-badge-card my-catalog-card';
 
-      const safeEmoji = unlocked || isReblocked ? getBadgeEmoji(badge) : '❓';
-      const safeTitle = unlocked || isReblocked ? stripEmojis(badge.name || '') : '?????';
+      const safeEmoji = getBadgeEmoji(badge);
+      const safeTitle = stripEmojis(badge.name || '');
 
-      let statusLabel;
-      let statusClass;
-      
-      if (unlocked) {
-        statusLabel = formatLevelTag(unlocked, levelLabel, config);
-        statusClass = isMysteryLevel(levelLabel) ? 'mystery' : 'success';
-      } else if (isReblocked) {
-        statusLabel = 'Rebloqué';
-        statusClass = 'reblocked';
-      } else if (isBlocked) {
-        statusLabel = 'Bloqué';
-        statusClass = 'blocked';
-          } else {
-        statusLabel = 'À débloquer';
-        statusClass = 'locked';
-      }
-      const isExpert = unlocked && isMysteryLevel(levelLabel);
+      const statusLabel = formatLevelTag(unlocked, levelLabel, config);
+      const statusClass = isMysteryLevel(levelLabel) ? 'mystery' : 'success';
+      const isExpert = isMysteryLevel(levelLabel);
       
       if (isExpert) {
         card.classList.add('expert-badge');
       }
 
-      const formattedAnswer = unlocked && userAnswer ? formatUserAnswer(badge, userAnswer) : null;
-      const ghostText = unlocked && isGhostBadge(badge) ? (config?.ghostDisplayText || 'Débloqué automatiquement') : null;
-      const displayText = formattedAnswer || ghostText || (isBlocked && userAnswer ? formatUserAnswer(badge, userAnswer) : null) || (unlocked ? '' : 'Badge non débloqué');
+      const formattedAnswer = userAnswer ? formatUserAnswer(badge, userAnswer) : null;
+      const ghostText = isGhostBadge(badge) ? (config?.ghostDisplayText || 'Débloqué automatiquement') : null;
+      const displayText = formattedAnswer || ghostText || '';
 
       card.innerHTML = `
         <div class="row level-row">
@@ -5604,20 +5950,9 @@ function updateCalendarBadge() {
   }
 }
 
-// Met à jour la pastille sur le bouton de l'onglet roue
+// Fonction supprimée - la pastille sur le bouton roue n'est plus utilisée
 function updateWheelBadge() {
-  if (els.wheelBadge) {
-    const hasTokens = (state.tokens || 0) >= 1;
-    
-    // Afficher la pastille uniquement si l'utilisateur a des jetons (peut tourner la roue)
-    if (hasTokens) {
-      els.wheelBadge.textContent = state.tokens || 0;
-      els.wheelBadge.classList.remove('hidden');
-    } else {
-      // Cacher la pastille si l'utilisateur n'a plus de jetons
-      els.wheelBadge.classList.add('hidden');
-    }
-  }
+  // Fonction désactivée - la pastille a été supprimée
 }
 
 // Ouvre le panneau latéral du calendrier
