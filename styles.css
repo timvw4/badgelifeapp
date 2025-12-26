@@ -984,7 +984,11 @@ button {
 }
 
 .tab-content {
-  margin-top: 12px;
+  margin-top: 0;
+}
+
+.tab-content.hidden {
+  display: none !important;
 }
 
 .grid {
@@ -1753,167 +1757,178 @@ button {
     color: var(--text);
   }
 
-  .wheel-wrapper {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 20px;
-    margin: 30px auto;
-    max-width: 600px;
+  /* Slider de thèmes */
+  .themes-slider-container {
+    margin: 30px 0;
+    padding: 0 18px;
   }
 
-  .wheel-wrapper-content {
+  .themes-stats {
     display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 30px;
-    width: 100%;
-  }
-
-  .wheel-container {
-    position: relative;
-    max-width: 400px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 20px;
-    flex: 1;
-    min-width: 300px;
-  }
-
-  /* Jauge de progression des badges */
-  .badge-progress-gauge {
-    display: flex;
-    flex-direction: column;
     align-items: center;
     gap: 8px;
-    padding: 12px 10px;
-    background: rgba(17, 24, 39, 0.5);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 12px;
-    min-width: 50px;
-    align-self: center;
-    margin-top: 50px;
+    margin-bottom: 16px;
+    padding: 0 4px;
   }
 
-  .gauge-header {
+  .themes-completed-label {
+    font-size: 14px;
+    color: var(--muted);
+  }
+
+  .themes-completed-count {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--accent);
+  }
+
+  .themes-slider {
+    display: flex;
+    gap: 16px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scroll-behavior: smooth;
+    padding: 10px 0 20px 0;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(6, 182, 212, 0.5) transparent;
+  }
+
+  .themes-slider::-webkit-scrollbar {
+    height: 8px;
+  }
+
+  .themes-slider::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .themes-slider::-webkit-scrollbar-thumb {
+    background: rgba(6, 182, 212, 0.5);
+    border-radius: 4px;
+  }
+
+  .themes-slider::-webkit-scrollbar-thumb:hover {
+    background: rgba(6, 182, 212, 0.7);
+  }
+
+  .theme-card {
+    flex: 0 0 280px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 20px;
     display: flex;
     flex-direction: column;
+    gap: 16px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    position: relative;
+  }
+
+  .theme-card:hover:not(:disabled) {
+    transform: translateY(-4px);
+    box-shadow: 0 8px 24px rgba(6, 182, 212, 0.2);
+    border-color: var(--accent);
+  }
+
+  .theme-card:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+  }
+
+  .theme-card.theme-complete {
+    background: rgba(34, 197, 94, 0.1);
+    border-color: rgba(34, 197, 94, 0.3);
+  }
+
+  .theme-card-header {
+    display: flex;
+    justify-content: space-between;
     align-items: center;
-    gap: 3px;
   }
 
-  .gauge-label {
-    font-size: 10px;
-    font-weight: 600;
-    color: var(--muted);
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-  }
-
-  .gauge-count {
-    font-size: 16px;
+  .theme-name {
+    font-size: 20px;
     font-weight: 700;
     color: var(--text);
-    text-align: center;
+    margin: 0;
   }
 
-  .gauge-container {
-    width: 18px;
-    height: 250px;
-    margin: 10px;
-    position: relative;
+  .theme-complete-badge {
+    font-size: 12px;
+    font-weight: 600;
+    color: #22c55e;
+    background: rgba(34, 197, 94, 0.2);
+    padding: 4px 10px;
+    border-radius: 12px;
   }
 
-  .gauge-track {
-    width: 100%;
-    height: 100%;
-    background: rgba(255, 255, 255, 0.1);
-    border-radius: 10px;
-    position: relative;
-    overflow: hidden;
-  }
-
-  .gauge-fill {
-    position: absolute;
-    bottom: 0;
-    width: 100%;
-    background: linear-gradient(180deg, rgba(6, 182, 212, 0.9) 0%, rgba(139, 92, 246, 0.9) 100%);
-    border-radius: 10px;
-    transition: height 0.5s ease-out;
-    min-height: 0;
-  }
-
-  .wheel {
-    position: relative;
-    width: 100%;
-    height: 300px;
-    overflow: hidden;
-    border: 3px solid rgba(6, 182, 212, 0.3);
-    border-radius: 20px;
-    background: rgba(17, 24, 39, 0.5);
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-  }
-
-  .wheel-items {
+  .theme-progress-container {
     display: flex;
     flex-direction: column;
-    transition: transform 0s;
-    will-change: transform;
+    gap: 8px;
   }
 
-  .wheel-item-badge {
-  color: #9ca3af; /* Gris pour le "?" des badges */
-}
-
-.wheel-item {
-    height: 60px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 40px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-    background: rgba(255, 255, 255, 0.02);
+  .theme-progress-bar {
     width: 100%;
-    box-sizing: border-box;
-  }
-
-  .wheel-item:last-child {
-    border-bottom: none;
-  }
-
-  .wheel-indicator {
-    position: absolute;
-    top: 58%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    width: 100%;
-    height: 60px;
-    border-top: 3px solid rgba(6, 182, 212, 0.8);
-    border-bottom: 3px solid rgba(6, 182, 212, 0.8);
-    background: rgba(6, 182, 212, 0.1);
-    pointer-events: none;
-    z-index: 10;
-  }
-
-  .spin-button-wrapper {
+    height: 8px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+    overflow: hidden;
     position: relative;
-    display: inline-block;
-    cursor: pointer;
-    pointer-events: auto;
   }
 
-  .spin-button {
-    padding: 14px 28px;
-    font-size: 16px;
+  .theme-progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent), var(--accent-2));
+    border-radius: 4px;
+    transition: width 0.5s ease-out;
+  }
+
+  .theme-card.theme-complete .theme-progress-fill {
+    background: linear-gradient(90deg, #22c55e, #16a34a);
+  }
+
+  .theme-progress-text {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 14px;
+  }
+
+  .theme-progress-percentage {
+    font-weight: 700;
+    color: var(--text);
+  }
+
+  .theme-progress-count {
+    color: var(--muted);
+    font-size: 12px;
+  }
+
+  .theme-cost {
+    font-size: 12px;
+    color: var(--accent);
     font-weight: 600;
-    min-width: 200px;
+    text-align: center;
+    margin-top: 4px;
   }
 
-  .spin-button:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
+  /* Modal pour les questions de badges */
+  .badge-question-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(4px);
+    z-index: 999;
+    animation: fadeIn 0.3s ease-out;
+  }
+
+  .badge-question-overlay.hidden {
+    display: none;
   }
 
   .badge-question-container {
@@ -1926,9 +1941,7 @@ button {
     align-items: center;
     justify-content: center;
     z-index: 1000;
-    background: rgba(0, 0, 0, 0.7);
-    backdrop-filter: blur(4px);
-    animation: fadeIn 0.3s ease-out;
+    pointer-events: none;
   }
 
   .badge-question-container.hidden {
@@ -1940,8 +1953,9 @@ button {
     width: 100%;
     max-width: 600px;
     margin: 20px;
-    animation: zoomOut 0.4s ease-out;
+    animation: modalAppear 0.4s ease-out;
     transform-origin: center;
+    pointer-events: auto;
   }
 
   .badge-question-container #selected-badge-name {
@@ -1961,14 +1975,14 @@ button {
     }
   }
 
-  @keyframes zoomOut {
+  @keyframes modalAppear {
     from {
       opacity: 0;
-      transform: scale(0.8);
+      transform: scale(0.9) translateY(20px);
     }
     to {
       opacity: 1;
-      transform: scale(1);
+      transform: scale(1) translateY(0);
     }
   }
 

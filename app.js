@@ -99,6 +99,181 @@ function getAvailableThemes() {
   return availableThemes;
 }
 
+// Calcule le pourcentage de badges débloqués pour un thème donné
+function calculateThemeProgress(themeName) {
+  const themeNameFunc = (b) => (b.theme && String(b.theme).trim()) ? String(b.theme).trim() : 'Autres';
+  
+  // Calculer les points de skills pour vérifier les conditions des badges fantômes
+  let tempSkillPoints = 0;
+  state.userBadgeLevels.forEach((lvl, badgeId) => {
+    tempSkillPoints += getSkillPointsForBadge(badgeId, lvl);
+  });
+  state.userBadges.forEach(badgeId => {
+    if (!state.userBadgeLevels.has(badgeId)) {
+      const badge = getBadgeById(badgeId);
+      if (badge) {
+        const userAnswer = state.userBadgeAnswers.get(badgeId);
+        tempSkillPoints += calculatePointsForBadgeWithoutLevel(badge, badgeId, userAnswer);
+      }
+    }
+  });
+  
+  // Filtrer les badges du thème
+  const themeBadges = state.badges.filter(badge => {
+    const badgeTheme = themeNameFunc(badge);
+    return badgeTheme === themeName;
+  });
+  
+  // Compter les badges débloqués du thème
+  let unlocked = 0;
+  let total = 0;
+  
+  themeBadges.forEach(badge => {
+    const isUnlocked = state.userBadges.has(badge.id);
+    const isGhost = isGhostBadge(badge);
+    
+    if (isGhost) {
+      // Pour les badges fantômes, vérifier s'ils devraient être débloqués
+      const shouldBeUnlocked = checkGhostBadgeConditionsForUser(badge, state.userBadges, tempSkillPoints);
+      if (shouldBeUnlocked) {
+        // Badge fantôme débloqué : compte dans le total et dans les débloqués
+        total++;
+        unlocked++;
+      }
+      // Si le badge fantôme n'est pas débloqué, il ne compte pas dans le total
+    } else {
+      // Badge normal : toujours compté dans le total
+      total++;
+      if (isUnlocked) {
+        unlocked++;
+      }
+    }
+  });
+  
+  const percentage = total > 0 ? Math.round((unlocked / total) * 100) : 0;
+  const isComplete = percentage === 100;
+  
+  return { unlocked, total, percentage, isComplete };
+}
+
+// Récupère tous les thèmes uniques (y compris ceux complétés à 100%)
+function getAllThemes() {
+  const themeNameFunc = (b) => (b.theme && String(b.theme).trim()) ? String(b.theme).trim() : 'Autres';
+  const themesSet = new Set();
+  
+  // Calculer les points de skills une seule fois pour tous les badges fantômes
+  let tempSkillPoints = 0;
+  state.userBadgeLevels.forEach((lvl, badgeId) => {
+    tempSkillPoints += getSkillPointsForBadge(badgeId, lvl);
+  });
+  state.userBadges.forEach(badgeId => {
+    if (!state.userBadgeLevels.has(badgeId)) {
+      const badge = getBadgeById(badgeId);
+      if (badge) {
+        const userAnswer = state.userBadgeAnswers.get(badgeId);
+        tempSkillPoints += calculatePointsForBadgeWithoutLevel(badge, badgeId, userAnswer);
+      }
+    }
+  });
+  
+  state.badges.forEach(badge => {
+    // Exclure uniquement les badges fantômes non débloqués
+    if (isGhostBadge(badge)) {
+      const shouldBeUnlocked = checkGhostBadgeConditionsForUser(badge, state.userBadges, tempSkillPoints);
+      if (!shouldBeUnlocked) {
+        return; // Badge fantôme non débloqué, ne pas compter son thème
+      }
+    }
+    
+    const theme = themeNameFunc(badge);
+    themesSet.add(theme);
+  });
+  
+  return Array.from(themesSet).sort(compareThemesFixed);
+}
+
+// Affiche le slider de thèmes avec les cartes et barres de progression
+function renderThemesSlider() {
+  if (!els.themesSlider) {
+    return;
+  }
+  
+  const allThemes = getAllThemes();
+  
+  if (allThemes.length === 0) {
+    els.themesSlider.innerHTML = '<p class="muted" style="text-align: center; padding: 20px;">Aucun thème disponible.</p>';
+    if (els.themesCompletedCount) {
+      els.themesCompletedCount.textContent = '0/0';
+    }
+    return;
+  }
+  
+  // Calculer le nombre de thèmes complétés et trier les thèmes
+  let completedCount = 0;
+  const themesWithProgress = allThemes.map(themeName => {
+    const progress = calculateThemeProgress(themeName);
+    if (progress.isComplete) {
+      completedCount++;
+    }
+    return { themeName, progress };
+  });
+  
+  // Trier : thèmes non complétés d'abord, puis thèmes complétés à la fin
+  themesWithProgress.sort((a, b) => {
+    // Si l'un est complété et l'autre non, le complété va à la fin
+    if (a.progress.isComplete && !b.progress.isComplete) return 1;
+    if (!a.progress.isComplete && b.progress.isComplete) return -1;
+    // Si les deux ont le même statut, garder l'ordre original
+    return 0;
+  });
+  
+  // Mettre à jour le compteur de thèmes complétés
+  if (els.themesCompletedCount) {
+    els.themesCompletedCount.textContent = `${completedCount}/${allThemes.length}`;
+  }
+  
+  els.themesSlider.innerHTML = '';
+  
+  themesWithProgress.forEach(({ themeName, progress }) => {
+    // Créer la carte de thème
+    const themeCard = document.createElement('button');
+    themeCard.className = 'theme-card';
+    themeCard.type = 'button';
+    themeCard.dataset.theme = themeName;
+    
+    // Si le thème est complété à 100%, ajouter la classe et désactiver
+    if (progress.isComplete) {
+      themeCard.classList.add('theme-complete');
+      themeCard.disabled = true;
+    }
+    
+    // Contenu de la carte
+    themeCard.innerHTML = `
+      <div class="theme-card-header">
+        <h4 class="theme-name">${themeName}</h4>
+        ${progress.isComplete ? '<span class="theme-complete-badge">100% complété</span>' : ''}
+      </div>
+      <div class="theme-progress-container">
+        <div class="theme-progress-bar">
+          <div class="theme-progress-fill" style="width: ${progress.percentage}%"></div>
+        </div>
+        <div class="theme-progress-text">
+          <span class="theme-progress-percentage">${progress.percentage}%</span>
+          <span class="theme-progress-count">${progress.unlocked}/${progress.total}</span>
+        </div>
+      </div>
+      ${!progress.isComplete ? '<span class="theme-cost">1 jeton</span>' : ''}
+    `;
+    
+    // Attacher l'événement de clic si le thème n'est pas complété
+    if (!progress.isComplete) {
+      themeCard.addEventListener('click', () => handleThemeButtonClick(themeName));
+    }
+    
+    els.themesSlider.appendChild(themeCard);
+  });
+}
+
 function compareThemesFixed(a, b) {
   // "Badges cachés" toujours en bas
   const hiddenTheme = 'Badges cachés';
@@ -154,7 +329,7 @@ document.addEventListener('DOMContentLoaded', () => {
   attachCommunityTabListeners();
   attachIdeaListeners();
   attachTokensTooltip();
-  attachSpinButtonTooltip();
+  // Slider de thèmes initialisé
   attachCalendarListeners();
   setupPullToRefresh();
   lockOrientation();
@@ -231,18 +406,13 @@ function cacheElements() {
   els.ideaDescription = document.getElementById('idea-description');
   els.ideaMessage = document.getElementById('idea-message');
   els.ideaList = document.getElementById('idea-list');
-  // Éléments de la roue
+  // Éléments des jetons et slider de thèmes
   els.tokensCounter = document.getElementById('tokens-counter');
   els.tokensCount = document.getElementById('tokens-count');
-  els.wheelContainer = document.getElementById('wheel-container');
-  els.wheel = document.getElementById('wheel');
-  els.wheelItems = document.getElementById('wheel-items');
-  els.wheelIndicator = document.getElementById('wheel-indicator');
-  els.spinButton = document.getElementById('spin-button');
-  els.badgeProgressGauge = document.getElementById('badge-progress-gauge');
-  els.gaugeFill = document.getElementById('gauge-fill');
-  els.gaugeCount = document.getElementById('gauge-count');
+  els.themesSlider = document.getElementById('themes-slider');
+  els.themesCompletedCount = document.getElementById('themes-completed-count');
   els.badgeQuestionContainer = document.getElementById('badge-question-container');
+  els.badgeQuestionOverlay = document.getElementById('badge-question-overlay');
   els.selectedBadgeName = document.getElementById('selected-badge-name');
   els.selectedBadgeQuestion = document.getElementById('selected-badge-question');
   els.badgeAnswerForm = document.getElementById('badge-answer-form');
@@ -250,12 +420,10 @@ function cacheElements() {
   els.badgeAnswerMessage = document.getElementById('badge-answer-message');
   els.modifyBadgeOverlay = document.getElementById('modify-badge-overlay');
   els.tokensTooltip = document.getElementById('tokens-tooltip');
-  els.spinButtonTooltip = document.getElementById('spin-button-tooltip');
   els.improveBadgeBtn = document.getElementById('improve-badge-btn');
   // Éléments du calendrier
   els.calendarBtn = document.getElementById('calendar-btn');
   els.calendarBadge = document.getElementById('calendar-badge');
-  els.wheelBadge = document.getElementById('wheel-badge');
   els.calendarDrawer = document.getElementById('calendar-drawer');
   els.calendarOverlay = document.getElementById('calendar-overlay');
   els.calendarCloseBtn = document.getElementById('calendar-close-btn');
@@ -359,118 +527,6 @@ function attachTokensTooltip() {
 }
 
 // Attache l'événement pour afficher/masquer l'infobulle du bouton tourner la roue
-function attachSpinButtonTooltip() {
-  if (!els.spinButton || !els.spinButtonTooltip) {
-    return;
-  }
-  
-  // Éviter les duplications : vérifier si les listeners sont déjà attachés
-  if (els.spinButton.hasAttribute('data-tooltip-attached')) {
-    return;
-  }
-  
-  // Trouver le wrapper parent (comme pour tokens-counter)
-  const wrapper = els.spinButton.parentElement;
-  if (!wrapper) {
-    return;
-  }
-  
-  // S'assurer que le wrapper est cliquable
-  wrapper.style.cursor = 'pointer';
-  wrapper.style.pointerEvents = 'auto';
-  
-  // Créer les handlers une seule fois pour pouvoir les supprimer si nécessaire
-  const handleButtonClick = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    
-    // État bloqué : pas de jetons - afficher l'infobulle
-    if ((state.tokens || 0) < 1) {
-      if (els.spinButtonTooltip) {
-        els.spinButtonTooltip.classList.remove('hidden');
-      }
-      return;
-    }
-    
-    // État débloqué : avec jetons - cacher l'infobulle et lancer la roue
-    if (els.spinButtonTooltip) {
-      els.spinButtonTooltip.classList.add('hidden');
-    }
-    if (!state.isWheelSpinning) {
-      handleSpinWheel();
-    }
-  };
-  
-  // Attacher l'événement directement sur le bouton pour gérer les deux états
-  els.spinButton.addEventListener('click', handleButtonClick);
-  
-  // Utiliser la délégation d'événements sur le wrapper pour capturer les clics quand le bouton est disabled
-  // Cela fonctionne même si le bouton est disabled
-  const handleWrapperClick = (e) => {
-    // Vérifier si le clic est sur le wrapper ou le bouton
-    const clickedOnWrapper = wrapper.contains(e.target) || e.target === wrapper || e.target === els.spinButton;
-    
-    if (clickedOnWrapper) {
-      // État bloqué : pas de jetons - afficher l'infobulle
-      if ((state.tokens || 0) < 1) {
-        e.preventDefault();
-        e.stopPropagation();
-        
-        if (els.spinButtonTooltip) {
-          els.spinButtonTooltip.classList.remove('hidden');
-        }
-      } else {
-        // Si l'utilisateur a des jetons, cacher l'infobulle
-        if (els.spinButtonTooltip) {
-          els.spinButtonTooltip.classList.add('hidden');
-        }
-      }
-    }
-  };
-  
-  // Fermer l'infobulle si on clique ailleurs
-  const handleCloseTooltip = (e) => {
-    if (els.spinButtonTooltip && !els.spinButtonTooltip.classList.contains('hidden')) {
-      const clickedInside = e.target === els.spinButton || 
-                           els.spinButton.contains(e.target) ||
-                           e.target === els.spinButtonTooltip ||
-                           els.spinButtonTooltip.contains(e.target) ||
-                           wrapper.contains(e.target);
-      if (!clickedInside) {
-        els.spinButtonTooltip.classList.add('hidden');
-      }
-    }
-  };
-  
-  // Supprimer les anciens listeners s'ils existent (pour éviter les duplications)
-  if (els.spinButton._tooltipHandlers) {
-    const oldHandlers = els.spinButton._tooltipHandlers;
-    document.removeEventListener('click', oldHandlers.wrapperClick, true);
-    document.removeEventListener('mousedown', oldHandlers.wrapperClick, true);
-    document.removeEventListener('touchstart', oldHandlers.wrapperClick, true);
-    document.removeEventListener('click', oldHandlers.closeTooltip);
-    if (oldHandlers.buttonClick) {
-      els.spinButton.removeEventListener('click', oldHandlers.buttonClick);
-    }
-  }
-  
-  // Attacher sur le document avec capture pour intercepter quand le bouton est disabled
-  document.addEventListener('click', handleWrapperClick, true);
-  document.addEventListener('mousedown', handleWrapperClick, true);
-  document.addEventListener('touchstart', handleWrapperClick, true);
-  document.addEventListener('click', handleCloseTooltip);
-  
-  // Stocker les handlers pour pouvoir les supprimer si nécessaire
-  els.spinButton._tooltipHandlers = {
-    buttonClick: handleButtonClick,
-    wrapperClick: handleWrapperClick,
-    closeTooltip: handleCloseTooltip
-  };
-  
-  // Marquer que les listeners sont attachés
-  els.spinButton.setAttribute('data-tooltip-attached', 'true');
-}
-
 // Attache les événements pour le calendrier
 function attachCalendarListeners() {
   // Bouton pour ouvrir le calendrier (dans le header)
@@ -1099,9 +1155,15 @@ function showTokenRewardNotification(amount = 2, type = 'daily') {
   }, 3000);
 }
 
-// Affiche une notification quand un badge est retourné dans la roue
 // Affiche une notification "Jetons insuffisants"
-function showInsufficientTokensNotification() {
+// Vérifie d'abord s'il n'y a pas déjà une notification affichée pour éviter les doublons
+function showInsufficientTokensNotification(message = 'Jetons insuffisants') {
+  // Vérifier s'il y a déjà une notification affichée
+  const existingNotification = document.querySelector('.insufficient-tokens-notification');
+  if (existingNotification) {
+    return; // Ne pas afficher de doublon
+  }
+  
   // Créer une infobulle temporaire
   const notification = document.createElement('div');
   notification.className = 'token-reward-notification insufficient-tokens-notification';
@@ -1109,7 +1171,7 @@ function showInsufficientTokensNotification() {
   notification.innerHTML = `
     <div class="token-reward-content">
       <span class="token-emoji">⚠️</span>
-      <span>Jetons insuffisants</span>
+      <span>${message}</span>
     </div>
   `;
   document.body.appendChild(notification);
@@ -1268,31 +1330,6 @@ function updateTokensDisplay() {
   if (!els.tokensCount) return;
   els.tokensCount.textContent = state.tokens || 0;
   
-  // Activer/désactiver le bouton selon le nombre de jetons
-  if (els.spinButton) {
-    const hasTokens = (state.tokens || 0) >= 1;
-    const shouldDisable = !hasTokens || state.isWheelSpinning;
-    els.spinButton.disabled = shouldDisable;
-    els.spinButton.textContent = state.isWheelSpinning 
-      ? 'Roue en cours...' 
-      : `Tourne la roue (1 jeton)`;
-    
-    // S'assurer que l'infobulle est cachée lors de la mise à jour de l'affichage
-    // Elle ne s'affichera que lors d'un clic explicite sur le bouton
-    if (els.spinButtonTooltip) {
-      els.spinButtonTooltip.classList.add('hidden');
-    }
-    
-    // Même si le bouton est désactivé, permettre le clic pour afficher l'infobulle
-    if (!hasTokens) {
-      els.spinButton.style.pointerEvents = 'auto';
-      els.spinButton.style.cursor = 'pointer';
-    } else {
-      els.spinButton.style.pointerEvents = '';
-      els.spinButton.style.cursor = '';
-    }
-  }
-  
   // Mettre à jour la pastille sur le bouton de l'onglet roue
   updateWheelBadge();
 }
@@ -1301,8 +1338,8 @@ async function fetchBadges() {
   // On récupère en priorité depuis Supabase.
   // Si on définit window.USE_LOCAL_BADGES = true, ou si Supabase échoue,
   // on charge un fichier local badges.json (plus simple à éditer dans le code).
-  const selectWithEmoji = 'id,name,description,question,answer,emoji,low_skill,theme';
-  const selectFallback = 'id,name,description,question,answer,theme';
+  const selectWithEmoji = 'id,name,description,question,answer,emoji,low_skill,theme,expert_name';
+  const selectFallback = 'id,name,description,question,answer,theme,expert_name';
   const useLocalOnly = typeof window !== 'undefined' && window.USE_LOCAL_BADGES === true;
 
   if (!useLocalOnly) {
@@ -1596,9 +1633,7 @@ function render() {
   renderAllBadges();
   renderMyBadges();
   // Mettre à jour la roue si elle est visible (ne pas interférer si elle tourne)
-  if (!state.isWheelSpinning) {
-    renderWheelBadges();
-  }
+  renderThemesSlider();
 }
 
 function isGhostBadge(badge) {
@@ -1727,206 +1762,33 @@ async function syncGhostBadges() {
   }
 
   if (changed) {
-    await updateCounters(false);
+    // Synchroniser le profil pour mettre à jour les skill_points dans la base de données
+    // car les badges fantômes peuvent avoir des skill points personnalisés
+    await updateCounters(true);
     render();
   }
 }
 
 function renderAllBadges() {
-  // Nouvelle fonction pour afficher la roue au lieu de la liste de badges
-  renderWheelBadges();
+  // Afficher le slider de thèmes
+  renderThemesSlider();
 }
 
-// Affiche la roue avec les badges non débloqués (hors fantômes) + joker
-function renderWheelBadges() {
-  if (!els.wheelContainer) {
-    return;
+// Gère le clic sur un bouton de thème
+async function handleThemeButtonClick(themeName) {
+  // Vérifier que le thème n'est pas à 100%
+  const progress = calculateThemeProgress(themeName);
+  if (progress.isComplete) {
+    return; // Ne devrait pas arriver car le bouton est désactivé
   }
   
-  // Vérifier si wheelItems existe, sinon le recréer (peut arriver si la roue était vide)
-  if (!els.wheelItems) {
-    // Chercher si wheel existe déjà
-    let wheelEl = els.wheelContainer.querySelector('#wheel');
-    if (!wheelEl) {
-      // Recréer la structure complète de la roue
-      wheelEl = document.createElement('div');
-      wheelEl.id = 'wheel';
-      wheelEl.className = 'wheel';
-      els.wheelContainer.innerHTML = '';
-      els.wheelContainer.appendChild(wheelEl);
-    }
-    // Créer wheelItems s'il n'existe pas
-    els.wheelItems = document.createElement('div');
-    els.wheelItems.id = 'wheel-items';
-    els.wheelItems.className = 'wheel-items';
-    wheelEl.appendChild(els.wheelItems);
-    
-    // Recréer l'indicateur s'il n'existe pas
-    let indicatorEl = els.wheelContainer.querySelector('#wheel-indicator');
-    if (!indicatorEl) {
-      indicatorEl = document.createElement('div');
-      indicatorEl.id = 'wheel-indicator';
-      indicatorEl.className = 'wheel-indicator';
-      els.wheelContainer.appendChild(indicatorEl);
-    }
-    
-    // Recréer le wrapper du bouton spin s'il n'existe pas
-    let spinWrapper = els.wheelContainer.querySelector('.spin-button-wrapper');
-    if (!spinWrapper) {
-      spinWrapper = document.createElement('div');
-      spinWrapper.className = 'spin-button-wrapper';
-      const spinButton = document.createElement('button');
-      spinButton.id = 'spin-button';
-      spinButton.className = 'primary spin-button';
-      spinButton.disabled = true;
-      spinButton.textContent = 'Tourne la roue (1 jeton)';
-      spinWrapper.appendChild(spinButton);
-      els.wheelContainer.appendChild(spinWrapper);
-      // Mettre à jour la référence
-      els.spinButton = spinButton;
-    }
-  }
-  
-  // Obtenir les thèmes disponibles (ayant au moins un badge non débloqué)
-  const availableThemes = getAvailableThemes();
-  
-  if (availableThemes.length === 0) {
-    // Cacher la roue et afficher un message, mais garder la structure pour pouvoir la recréer facilement
-    const wheelEl = els.wheelContainer.querySelector('#wheel');
-    const indicatorEl = els.wheelContainer.querySelector('#wheel-indicator');
-    const spinWrapper = els.wheelContainer.querySelector('.spin-button-wrapper');
-    
-    if (wheelEl) wheelEl.style.display = 'none';
-    if (indicatorEl) indicatorEl.style.display = 'none';
-    if (spinWrapper) spinWrapper.style.display = 'none';
-    
-    // Afficher le message seulement s'il n'existe pas déjà
-    let messageEl = els.wheelContainer.querySelector('.wheel-empty-message');
-    if (!messageEl) {
-      messageEl = document.createElement('p');
-      messageEl.className = 'muted wheel-empty-message';
-      messageEl.textContent = 'Tous les badges sont débloqués ! 🎉';
-      els.wheelContainer.appendChild(messageEl);
-    }
-    
-    state.wheelThemeIds = null; // Réinitialiser l'ordre
-    return;
-  }
-  
-  // Cacher le message et réafficher la roue
-  const messageEl = els.wheelContainer.querySelector('.wheel-empty-message');
-  if (messageEl) {
-    messageEl.remove();
-  }
-  const wheelEl = els.wheelContainer.querySelector('#wheel');
-  const indicatorEl = els.wheelContainer.querySelector('#wheel-indicator');
-  const spinWrapper = els.wheelContainer.querySelector('.spin-button-wrapper');
-  if (wheelEl) wheelEl.style.display = '';
-  if (indicatorEl) indicatorEl.style.display = '';
-  if (spinWrapper) spinWrapper.style.display = '';
-  
-  // Créer un tableau avec les thèmes + joker
-  const JOKER_EMOJI = '🃏';
-  const JOKER_ID = 'joker';
-  
-  // Créer le tableau des éléments de la roue (thèmes + 1 joker)
-  const wheelElements = [];
-  availableThemes.forEach(theme => {
-    // Afficher le nom complet du thème (le CSS gérera le troncage avec ellipsis)
-    wheelElements.push({ type: 'theme', theme, emoji: theme, id: `theme-${theme}` });
-  });
-  // Ajouter un seul joker pour l'affichage (garde son emoji 🃏)
-  wheelElements.push({ type: 'joker', emoji: JOKER_EMOJI, id: JOKER_ID });
-  
-  // Vérifier si les thèmes ont changé (pour savoir si on doit remélanger)
-  const currentThemeIds = availableThemes.sort().join(',');
-  const needsReshuffle = !state.wheelThemeIds || state.wheelThemeIds !== currentThemeIds;
-  
-  let shuffledElements;
-  if (needsReshuffle) {
-    // Les thèmes ont changé, on remélange
-    shuffledElements = wheelElements.sort(() => Math.random() - 0.5);
-    // Stocker l'ordre pour éviter de remélanger inutilement
-    state.wheelThemeIds = currentThemeIds;
-    state.wheelOrder = shuffledElements.map(e => e.id);
-  } else {
-    // Même thèmes, on garde le même ordre
-    const orderMap = new Map(state.wheelOrder.map((id, index) => [id, index]));
-    shuffledElements = wheelElements.sort((a, b) => {
-      const aIndex = orderMap.get(a.id) ?? 999;
-      const bIndex = orderMap.get(b.id) ?? 999;
-      return aIndex - bIndex;
-    });
-  }
-  
-  // Vider la roue
-  els.wheelItems.innerHTML = '';
-  
-  // Répéter les éléments plusieurs fois pour créer un effet de boucle
-  const REPEAT_COUNT = Math.max(5, Math.ceil(300 / shuffledElements.length));
-  
-  // Créer les éléments de la roue en boucle
-  for (let i = 0; i < REPEAT_COUNT; i++) {
-    shuffledElements.forEach(element => {
-      const item = document.createElement('div');
-      item.className = 'wheel-item';
-      if (element.type === 'joker') {
-        item.classList.add('wheel-item-joker');
-      } else if (element.type === 'theme') {
-        // Ajouter une classe pour les thèmes
-        item.classList.add('wheel-item-theme');
-      }
-      item.dataset.themeId = element.type === 'theme' ? element.theme : undefined;
-      item.dataset.type = element.type;
-      item.dataset.id = element.id;
-      item.textContent = element.emoji;
-      els.wheelItems.appendChild(item);
-    });
-  }
-  
-  // Mettre à jour l'affichage des jetons
-  updateTokensDisplay();
-  
-  // Réattacher l'infobulle du bouton spin (nécessaire car les éléments peuvent être recréés)
-  // Mettre à jour les références après le rendu
-  els.spinButton = document.getElementById('spin-button');
-  els.spinButtonTooltip = document.getElementById('spin-button-tooltip');
-  
-  if (els.spinButton && els.spinButtonTooltip) {
-    attachSpinButtonTooltip();
-  }
-  
-  // Attacher l'événement au formulaire de réponse
-  if (els.badgeAnswerForm && !els.badgeAnswerForm.hasAttribute('data-listener-attached')) {
-    els.badgeAnswerForm.addEventListener('submit', handleBadgeAnswerFromWheel);
-    els.badgeAnswerForm.setAttribute('data-listener-attached', 'true');
-  }
-}
-
-// Fait tourner la roue et sélectionne un badge aléatoirement
-async function handleSpinWheel() {
-  if (state.isWheelSpinning) {
-    return;
-  }
-  
-  // Vérifier si l'utilisateur a des jetons
+  // Vérifier que l'utilisateur a au moins 1 jeton
   if ((state.tokens || 0) < 1) {
+    showInsufficientTokensNotification();
     return;
   }
   
-  // Obtenir les thèmes disponibles pour la roue
-  const availableThemes = getAvailableThemes();
-  
-  if (availableThemes.length === 0) {
-    alert('Tous les badges sont débloqués ! 🎉');
-    return;
-  }
-  
-  // Marquer immédiatement que la roue tourne pour éviter les doubles clics
-  state.isWheelSpinning = true;
-  updateTokensDisplay();
-  
-  // Consommer un jeton
+  // Consommer 1 jeton
   const newTokens = (state.tokens || 0) - 1;
   
   // Mettre à jour l'état local immédiatement (optimiste)
@@ -1948,112 +1810,16 @@ async function handleSpinWheel() {
     if (state.profile) {
       state.profile.tokens = state.tokens;
     }
-    state.isWheelSpinning = false;
     updateTokensDisplay();
     alert('Erreur lors de la mise à jour des jetons. Veuillez réessayer.');
     return;
   }
   
-  // Sélection avec exactement 10% de chance pour le joker
-  const JOKER_ID = 'joker';
-  const JOKER_CHANCE = 0.10; // 10% de chance
-  
-  // D'abord, déterminer si c'est le joker (10% de chance)
-  const jokerRoll = Math.random();
-  const isJoker = jokerRoll < JOKER_CHANCE;
-  
-  let selectedElement;
-  if (isJoker) {
-    // Joker sélectionné
-    selectedElement = { type: 'joker', id: JOKER_ID };
-  } else {
-    // Sélectionner un thème aléatoirement parmi les thèmes disponibles
-    const randomThemeIndex = Math.floor(Math.random() * availableThemes.length);
-    const theme = availableThemes[randomThemeIndex];
-    selectedElement = { type: 'theme', theme, id: `theme-${theme}` };
-  }
-  
-  // Stocker le type de sélection
-  state.selectedThemeFromWheel = isJoker ? null : selectedElement.theme;
-  state.selectedIsJoker = isJoker;
-  
-  // Animation de la roue
-  const wheelItems = els.wheelItems.querySelectorAll('.wheel-item');
-  const itemHeight = 60;
-  const jokerCountForDisplay = 1; // Un seul joker affiché dans la roue
-  const totalElementsPerSet = availableThemes.length + jokerCountForDisplay;
-  const singleSetHeight = totalElementsPerSet * itemHeight;
-  
-  // Trouver le premier élément correspondant dans la première moitié de la roue
-  let targetIndex = -1;
-  const firstHalfItems = Math.floor(wheelItems.length / 2);
-  for (let i = 0; i < firstHalfItems; i++) {
-    if (isJoker && wheelItems[i].dataset.type === 'joker') {
-      targetIndex = i;
-      break;
-    } else if (!isJoker && wheelItems[i].dataset.id === selectedElement.id) {
-      targetIndex = i;
-      break;
-    }
-  }
-  
-  // Si on ne trouve pas dans la première moitié, prendre le premier trouvé
-  if (targetIndex === -1) {
-    for (let i = 0; i < wheelItems.length; i++) {
-      if (isJoker && wheelItems[i].dataset.type === 'joker') {
-        targetIndex = i;
-        break;
-      } else if (!isJoker && wheelItems[i].dataset.id === selectedElement.id) {
-        targetIndex = i;
-        break;
-      }
-    }
-  }
-  
-  // Calculer la position finale
-  const wheelHeight = 300;
-  const indicatorCenter = wheelHeight / 2;
-  const itemCenterOffset = itemHeight / 2;
-  const targetItemCenter = targetIndex * itemHeight + itemCenterOffset;
-  const minDistance = 2 * singleSetHeight;
-  const finalPosition = -(minDistance + targetItemCenter - indicatorCenter);
-  
-  // Animation
-  els.wheelItems.style.transition = 'none';
-  els.wheelItems.style.transform = 'translateY(0)';
-  void els.wheelItems.offsetHeight;
-  els.wheelItems.style.transition = 'transform 3s cubic-bezier(0.17, 0.67, 0.12, 0.99)';
-  els.wheelItems.style.transform = `translateY(${finalPosition}px)`;
-  
-  // Après l'animation
-  setTimeout(async () => {
-    state.isWheelSpinning = false;
-    if (els.spinButtonTooltip) {
-      els.spinButtonTooltip.classList.add('hidden');
-    }
-    updateTokensDisplay();
-    
-    if (isJoker) {
-      // Joker tiré : 20% Malus, 30% Bonus modif, 50% Bonus jetons
-      const jokerRoll = Math.random();
-      if (jokerRoll < 0.20) {
-        // Malus (20%) - Perte d'un badge
-        handleJokerMalus();
-      } else if (jokerRoll < 0.50) {
-        // Bonus modification (30%) - Modifier une réponse
-        handleJokerBonus();
-      } else {
-        // Bonus jetons (50%) - Recevoir 3 jetons gratuits
-        handleJokerBonusTokens();
-      }
-    } else {
-      // Thème sélectionné
-      handleThemeSelected(selectedElement.theme);
-    }
-  }, 3000);
+  // Appeler handleThemeSelected pour afficher le modal
+  handleThemeSelected(themeName);
 }
 
-// Gère la sélection d'un thème depuis la roue
+// Gère la sélection d'un thème
 function handleThemeSelected(themeName) {
   if (!els.badgeQuestionContainer) return;
   
@@ -2075,7 +1841,7 @@ function handleThemeSelected(themeName) {
   if (themeBadges.length === 0) {
     // Ne devrait pas arriver normalement, mais gérer le cas
     alert('Aucun badge disponible dans ce thème.');
-    renderWheelBadges(); // Mettre à jour la roue
+    renderThemesSlider(); // Mettre à jour le slider
     return;
   }
   
@@ -2210,7 +1976,10 @@ function handleThemeSelected(themeName) {
     });
   }
   
-  // Afficher le conteneur
+  // Afficher le modal avec animation
+  if (els.badgeQuestionOverlay) {
+    els.badgeQuestionOverlay.classList.remove('hidden');
+  }
   els.badgeQuestionContainer.classList.remove('hidden');
   
   // Attacher le gestionnaire de clic pour fermer la carte en cliquant en dehors
@@ -2365,7 +2134,7 @@ function showJokerMalusRoulette(unlockedBadges, badgeToLose) {
       
       // Re-rendre les badges
       await updateCounters(false);
-      renderWheelBadges();
+      renderThemesSlider();
       renderMyBadges();
     }
     
@@ -2669,7 +2438,10 @@ function showBadgeQuestion(badge) {
     });
   }
   
-  // Afficher le conteneur
+  // Afficher le modal avec animation
+  if (els.badgeQuestionOverlay) {
+    els.badgeQuestionOverlay.classList.remove('hidden');
+  }
   els.badgeQuestionContainer.classList.remove('hidden');
   
   // Attacher le gestionnaire de clic pour fermer la carte en cliquant en dehors
@@ -2705,8 +2477,11 @@ function closeBadgeQuestion() {
   if (els.badgeQuestionContainer) {
     els.badgeQuestionContainer.classList.add('hidden');
   }
-  // Note: La roue est mise à jour par handleBadgeAnswerFromWheel ou render()
-  // Ne pas appeler renderWheelBadges() ici pour éviter les sauts visuels
+  if (els.badgeQuestionOverlay) {
+    els.badgeQuestionOverlay.classList.add('hidden');
+  }
+  // Note: Le slider est mis à jour par handleBadgeAnswerFromWheel ou render()
+  // Ne pas appeler renderThemesSlider() ici pour éviter les sauts visuels
 }
 
 // Gère la réponse au badge depuis la roue
@@ -2745,8 +2520,9 @@ async function handleBadgeAnswerFromWheel(e) {
       // Récupérer le vrai emoji du badge
       const realEmoji = getBadgeEmoji(state.selectedBadgeFromWheel);
       
-      // Récupérer le nom du badge (sans emoji)
-      const badgeName = stripEmojis(state.selectedBadgeFromWheel.name || '');
+      // Récupérer le nom du badge (sans emoji) - utiliser expert_name si niveau expert
+      const displayName = getBadgeDisplayName(state.selectedBadgeFromWheel, badgeLevel);
+      const badgeName = stripEmojis(displayName);
       
       // Formater le message selon le niveau
       const config = parseConfig(state.selectedBadgeFromWheel.answer);
@@ -2822,6 +2598,7 @@ async function handleBadgeAnswerFromWheel(e) {
             // Attacher l'événement au bouton pour rediriger vers le badge
             if (viewButton) {
               viewButton.addEventListener('click', () => {
+                closeBadgeQuestion();
                 scrollToBadgeInProfile(state.selectedBadgeFromWheel.id);
               });
             }
@@ -2853,13 +2630,19 @@ async function handleBadgeAnswerFromWheel(e) {
     // Si tous les badges du thème sont débloqués, retirer le thème de la roue
     const allThemeBadgesUnlocked = themeBadges.length === 0;
     
-    // Mettre à jour la roue et les badges IMMÉDIATEMENT (avant le délai)
-    renderWheelBadges();
+    // Mettre à jour le slider et les badges IMMÉDIATEMENT (avant le délai)
+    renderThemesSlider();
     renderMyBadges();
     
     // Le message reste affiché jusqu'à ce que l'utilisateur clique sur le bouton ou ferme manuellement
     // L'utilisateur peut aussi cliquer ailleurs pour fermer (géré par attachBadgeQuestionCloseHandler)
   } else {
+    // Effacer le message d'erreur dans le formulaire s'il existe
+    if (els.badgeAnswerMessage) {
+      els.badgeAnswerMessage.textContent = '';
+      els.badgeAnswerMessage.className = 'message';
+    }
+    
     // S'assurer que le conteneur est visible
     if (els.badgeQuestionContainer) {
       els.badgeQuestionContainer.classList.remove('hidden');
@@ -2871,21 +2654,35 @@ async function handleBadgeAnswerFromWheel(e) {
       // Récupérer le message personnalisé depuis la config du badge
       const config = parseConfig(state.selectedBadgeFromWheel.answer);
       const customMessage = config?.blockedMessage;
-      const errorMessage = customMessage || 'Ta réponse n\'a pas suffi pour débloquer ce badge. Le badge retourne dans la roue, tu peux réessayer !';
+      const errorMessage = customMessage || 'Ta réponse n\'a pas suffi pour débloquer ce badge. Le badge retourne dans le slider, tu peux réessayer !';
       
       card.innerHTML = `
         <p class="badge-error-message" style="text-align: center; color: white; margin: 20px 0; font-size: 18px; line-height: 1.5;">
           ${errorMessage}
         </p>
+        <div style="display: flex; justify-content: center; margin-top: 20px;">
+          <button class="primary" id="close-error-button" style="padding: 12px 24px; font-size: 16px;">
+            Fermer
+          </button>
+        </div>
       `;
       // Mettre à jour la référence à selectedBadgeName après avoir modifié le HTML
       els.selectedBadgeName = card.querySelector('#selected-badge-name');
+      
+      // Attacher l'événement au bouton de fermeture
+      const closeButton = card.querySelector('#close-error-button');
+      if (closeButton) {
+        closeButton.addEventListener('click', () => {
+          closeBadgeQuestion();
+        });
+      }
+      
       // Réattacher le gestionnaire de fermeture (maintenant la fermeture est autorisée car une réponse a été donnée)
       attachBadgeQuestionCloseHandler();
     }
     
-    // Mettre à jour la roue IMMÉDIATEMENT (le badge retourne dans la roue)
-    renderWheelBadges();
+    // Mettre à jour le slider IMMÉDIATEMENT (le badge retourne dans le slider)
+    renderThemesSlider();
   }
 }
 
@@ -3200,8 +2997,8 @@ function handleModifyBadgeAnswer(badge) {
           banner.remove();
         }
         
-        // Mettre à jour la roue pour que le badge soit disponible
-        renderWheelBadges();
+        // Mettre à jour le slider pour que le badge soit disponible
+        renderThemesSlider();
         
         // Mettre à jour l'affichage de la collection pour retirer le badge
         state.badgeQuestionAnswered = true;
@@ -3368,7 +3165,8 @@ function renderMyBadges() {
 
       // Afficher les badges débloqués normalement
       const safeEmoji = getBadgeEmoji(badge);
-      const safeTitle = stripEmojis(badge.name || '');
+      const displayName = getBadgeDisplayName(badge, levelLabel);
+      const safeTitle = stripEmojis(displayName);
 
       // Déterminer le label : afficher le niveau
       const statusLabel = formatLevelTag(unlocked, levelLabel, config);
@@ -3696,8 +3494,8 @@ async function handleBadgeAnswer(event, badge, providedAnswer = null, feedbackEl
     state.attemptedBadges.add(badge.id);
     
     // Le badge retourne automatiquement dans la roue (il n'est plus débloqué)
-    // Mettre à jour la roue immédiatement pour que le badge soit disponible
-    renderWheelBadges();
+    // Mettre à jour le slider immédiatement pour que le badge soit disponible
+    renderThemesSlider();
     
     // Si on est dans une carte (section "Badges non-débloqués"), la supprimer immédiatement
     if (cardElement) {
@@ -3782,10 +3580,10 @@ async function handleBadgeAnswer(event, badge, providedAnswer = null, feedbackEl
       cardElement.remove();
     }, 300);
     
-    // Mettre à jour la roue IMMÉDIATEMENT
-    // Le badge ne devrait pas apparaître dans la roue car il est débloqué (filtré par renderWheelBadges)
+    // Mettre à jour le slider IMMÉDIATEMENT
+    // Le badge ne devrait pas apparaître dans le slider car il est débloqué (filtré par renderThemesSlider)
     // Le state.userBadges a été mis à jour AVANT, donc le filtre fonctionnera correctement
-    renderWheelBadges();
+    renderThemesSlider();
     
     // Basculer vers l'onglet "Mon profil" et scroller vers le badge débloqué IMMÉDIATEMENT
     // Ne pas attendre, car le badge est débloqué et ne doit PAS aller dans la roue
@@ -4283,6 +4081,23 @@ function getBadgeEmoji(badge) {
   return '🏅';
 }
 
+// Retourne le nom du badge à afficher selon le niveau
+// Si le badge est au niveau expert et qu'un expert_name est défini, retourne expert_name
+// Sinon retourne le nom normal
+function getBadgeDisplayName(badge, levelLabel = null) {
+  if (!badge) return '';
+  
+  // Si un niveau est fourni et que c'est un niveau expert, utiliser expert_name si disponible
+  if (levelLabel && isMysteryLevel(levelLabel)) {
+    if (badge.expert_name && typeof badge.expert_name === 'string' && badge.expert_name.trim()) {
+      return badge.expert_name.trim();
+    }
+  }
+  
+  // Sinon, retourner le nom normal
+  return badge.name || '';
+}
+
 function stripEmojis(text) {
   if (!text) return '';
   // Supprime les caractères emoji pour ne garder que le texte
@@ -4677,7 +4492,8 @@ function renderCommunityProfileBadges(unlockedBadges, isPrivate = false) {
       card.className = 'card-badge clickable compact all-badge-card my-catalog-card';
 
       const safeEmoji = getBadgeEmoji(badge);
-      const safeTitle = stripEmojis(badge.name || '');
+      const displayName = getBadgeDisplayName(badge, levelLabel);
+      const safeTitle = stripEmojis(displayName);
 
       const statusLabel = formatLevelTag(unlocked, levelLabel, config);
       const statusClass = isMysteryLevel(levelLabel) ? 'mystery' : 'success';
@@ -4763,13 +4579,6 @@ function setMessage(text, isError = false) {
 }
 
 // Met à jour la jauge de progression des badges
-function updateBadgeProgressGauge(unlockedCount, totalCount) {
-  if (!els.gaugeFill || !els.gaugeCount) return;
-  
-  const percentage = totalCount > 0 ? (unlockedCount / totalCount) * 100 : 0;
-  els.gaugeFill.style.height = `${percentage}%`;
-  els.gaugeCount.textContent = `${unlockedCount}`;
-}
 
 async function updateCounters(syncProfile = false) {
   // Calculer d'abord les points pour tous les badges (nécessaire pour vérifier les conditions des badges fantômes)
@@ -4858,8 +4667,8 @@ async function updateCounters(syncProfile = false) {
   if (els.skillCount) els.skillCount.textContent = `${totalSkillPoints}`;
   state.currentSkillPoints = totalSkillPoints;
   
-  // Mettre à jour la jauge de progression des badges
-  updateBadgeProgressGauge(badgeCount, totalBadges);
+  // Mettre à jour le slider de thèmes
+  renderThemesSlider();
   
   // Rang (uniquement si l'élément existe, car le header a été supprimé)
   const rankMeta = getRankMeta(totalSkillPoints);
@@ -5274,37 +5083,63 @@ async function checkAndUpdateConnectionDay() {
   // Cela garantit qu'on ne mélange pas les jours de différentes semaines
   const connectionDaysThisWeek = filterDatesByCurrentWeek(state.connectionDays, currentWeekStartStr);
   
+  // Variable pour savoir si on a modifié quelque chose
+  let hasChanged = false;
+  
   // Ajouter seulement la date d'aujourd'hui si pas déjà présente
   // Les jours précédents sont déjà chargés depuis Supabase via loadConnectionDays()
   if (!connectionDaysThisWeek.includes(todayStr)) {
     connectionDaysThisWeek.push(todayStr);
-    state.connectionDays = connectionDaysThisWeek;
-    state.profile.connection_days = [...state.connectionDays];
-    
-    // Vérifier si tous les 7 jours sont connectés
-    if (state.connectionDays.length === 7) {
-      // Tous les jours sont connectés : rendre le bonus disponible
-      state.canClaimBonus = true;
-      state.profile.week_bonus_available = true;
-    }
-    
-    // Sauvegarder dans Supabase seulement si on a ajouté un nouveau jour
-    await supabase
+    hasChanged = true;
+  }
+  
+  // Mettre à jour state.connectionDays avec les jours filtrés (même si rien n'a changé)
+  // Cela garantit que state.connectionDays contient toujours les bons jours
+  state.connectionDays = connectionDaysThisWeek;
+  state.profile.connection_days = [...state.connectionDays];
+  
+  // Vérifier si tous les 7 jours sont connectés
+  const allDaysConnected = state.connectionDays.length === 7;
+  if (allDaysConnected) {
+    // Tous les jours sont connectés : rendre le bonus disponible
+    state.canClaimBonus = true;
+    state.profile.week_bonus_available = true;
+  }
+  
+  // IMPORTANT : Toujours sauvegarder dans Supabase pour s'assurer que tous les jours sont bien enregistrés
+  // Cela garantit que même si une sauvegarde précédente a échoué, les jours seront bien sauvegardés
+  try {
+    const { error } = await supabase
       .from('profiles')
       .update({ 
         connection_days: state.connectionDays,
         week_bonus_available: state.profile.week_bonus_available
       })
       .eq('id', state.user.id);
-  } else {
-    // Le jour est déjà présent, juste mettre à jour state.connectionDays avec les jours filtrés
-    state.connectionDays = connectionDaysThisWeek;
-    state.profile.connection_days = [...state.connectionDays];
     
-    // Vérifier si tous les 7 jours sont connectés (même si on n'a rien ajouté)
-    if (state.connectionDays.length === 7) {
-      state.canClaimBonus = true;
-      state.profile.week_bonus_available = true;
+    if (error) {
+      console.error('Erreur lors de la sauvegarde des connection_days:', error);
+      // En cas d'erreur, sauvegarder dans localStorage comme backup
+      if (state.user) {
+        try {
+          localStorage.setItem(`connection_days_${state.user.id}`, JSON.stringify(state.connectionDays));
+        } catch (e) {
+          console.warn('Impossible de sauvegarder dans localStorage:', e);
+        }
+      }
+    } else if (hasChanged) {
+      console.log('✅ Jour de connexion sauvegardé:', todayStr);
+      console.log('📅 Tous les jours de connexion:', state.connectionDays);
+    }
+  } catch (error) {
+    console.error('Erreur lors de la sauvegarde des connection_days:', error);
+    // En cas d'erreur, sauvegarder dans localStorage comme backup
+    if (state.user) {
+      try {
+        localStorage.setItem(`connection_days_${state.user.id}`, JSON.stringify(state.connectionDays));
+      } catch (e) {
+        console.warn('Impossible de sauvegarder dans localStorage:', e);
+      }
     }
   }
   

@@ -35,6 +35,7 @@ function cacheEls() {
   els.formMsg = document.getElementById('form-message');
   els.id = document.getElementById('badge-id');
   els.name = document.getElementById('badge-name');
+  els.expertName = document.getElementById('badge-expert-name');
   els.emoji = document.getElementById('badge-emoji');
   els.theme = document.getElementById('badge-theme');
   els.q = document.getElementById('badge-question');
@@ -140,12 +141,16 @@ function bindForm() {
     if (!isGhost && !payload.question) return setFormMsg('Question requise.', true);
     setFormMsg('Enregistrement...');
     let { error } = await supabase.from('badges').upsert(payload);
-    // Si la colonne emoji n'existe pas, on retente sans le champ emoji
-    if (error && error.message && error.message.toLowerCase().includes('emoji')) {
-      const payloadNoEmoji = { ...payload };
-      delete payloadNoEmoji.emoji;
-      const retry = await supabase.from('badges').upsert(payloadNoEmoji);
-      error = retry.error;
+    // Si la colonne emoji ou expert_name n'existe pas, on retente sans ces champs
+    if (error && error.message) {
+      const errorMsg = error.message.toLowerCase();
+      if (errorMsg.includes('emoji') || errorMsg.includes('expert_name')) {
+        const payloadFallback = { ...payload };
+        if (errorMsg.includes('emoji')) delete payloadFallback.emoji;
+        if (errorMsg.includes('expert_name')) delete payloadFallback.expert_name;
+        const retry = await supabase.from('badges').upsert(payloadFallback);
+        error = retry.error;
+      }
     }
     if (error) {
       setFormMsg(error.message || 'Erreur lors de la sauvegarde.', true);
@@ -202,8 +207,8 @@ function toggleApp(isConnected) {
 }
 
 async function loadBadges() {
-  const selectWithEmoji = 'id,name,description,question,answer,emoji,low_skill,theme';
-  const selectFallback = 'id,name,description,question,answer,theme';
+  const selectWithEmoji = 'id,name,description,question,answer,emoji,low_skill,theme,expert_name';
+  const selectFallback = 'id,name,description,question,answer,theme,expert_name';
 
   const { data, error } = await safeSupabaseSelect(
     supabase,
@@ -410,6 +415,7 @@ function getLevelSummary(answer, isLowSkill = false) {
 function fillForm(b) {
   els.id.value = b.id ?? '';
   els.name.value = b.name ?? '';
+  if (els.expertName) els.expertName.value = b.expert_name ?? '';
   els.emoji.value = b.emoji ?? '';
   if (els.theme) els.theme.value = b.theme ?? '';
   els.q.value = b.question ?? '';
@@ -535,6 +541,11 @@ function buildPayloadFromForm() {
     emoji: els.emoji.value.trim(),
     low_skill: Boolean(Number(els.lowSkillHidden?.value || '0')),
   };
+  // Ajouter expert_name seulement si défini
+  const expertNameValue = (els.expertName?.value || '').trim();
+  if (expertNameValue) {
+    payload.expert_name = expertNameValue;
+  }
   const rawId = els.id.value.trim();
   // On accepte soit un nombre (auto-incr.), soit un texte (UUID).
   if (rawId) {

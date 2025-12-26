@@ -158,59 +158,29 @@
             <span id="tokens-count" class="tokens-count">0</span>
             <!-- Infobulle des jetons -->
             <div id="tokens-tooltip" class="tokens-tooltip hidden">
-              <p>Obtient des jetons dans le calendrier. Utilise-les pour tourner la roue et débloquer de nouveaux badges !</p>
+              <p>Obtient des jetons dans le calendrier. Utilise-les pour sélectionner un thème et débloquer de nouveaux badges !</p>
             </div>
           </div>
         </div>
 
-        <!-- Interface de la roue -->
-        <div class="wheel-wrapper">
-          <div class="wheel-wrapper-content">
-            <div id="wheel-container" class="wheel-container">
-                <!-- Titre de la roue -->
-                <h3 class="wheel-title-text" style="text-align: center; color: white; margin: 0 0 4px 0; font-size: 20px; font-weight: 700; width: 100%;">
-                  Questions aléatoire
-                </h3>
-                <!-- Texte d'information au-dessus de la roue -->
-                <p class="wheel-info-text" style="text-align: center; color: white; margin: 0 0 12px 0; font-size: 14px; line-height: 1.5; width: 100%;">
-                  Répond à une question d'un thème aléatoire et tente de débloquer un badge. Attention, certains badges te feront perdre des skills.
-                </p>
-            <div id="wheel" class="wheel">
-              <div id="wheel-items" class="wheel-items"></div>
-            </div>
-            <div id="wheel-indicator" class="wheel-indicator"></div>
-            <div class="spin-button-wrapper">
-              <button id="spin-button" class="primary spin-button" disabled>Tourne la roue (1 jeton)</button>
-              <!-- Infobulle pour le bouton tourner la roue -->
-              <div id="spin-button-tooltip" class="tokens-tooltip hidden">
-                <p>Tu n'as pas assez de jetons pour tourner la roue. Tu recevras 2 jetons chaque jour. Reviens demain pour continuer à débloquer des badges !</p>
-              </div>
-            </div>
+        <!-- Slider de thèmes -->
+        <div class="themes-slider-container">
+          <div class="themes-stats">
+            <span class="themes-completed-label">Thèmes complétés: </span>
+            <span id="themes-completed-count" class="themes-completed-count">0/0</span>
           </div>
+          <div id="themes-slider" class="themes-slider"></div>
+        </div>
           
-          <!-- Jauge de progression des badges -->
-          <div id="badge-progress-gauge" class="badge-progress-gauge">
-            <div class="gauge-header">
-              <div class="gauge-label">Badges</div>
-              <div id="gauge-count" class="gauge-count">0</div>
-            </div>
-            <div class="gauge-container">
-              <div class="gauge-track">
-                <div id="gauge-fill" class="gauge-fill"></div>
-              </div>
-            </div>
-          </div>
-          </div>
-          
-          <!-- Section Améliore tes badges -->
-          <div class="improve-badges-section">
-            <h3>Améliore tes badges</h3>
-            <p class="muted section-description">Tu peux améliorer une réponse d'un badge que tu as déjà débloqué pour obtenir un meilleur niveau.</p>
-            <button id="improve-badge-btn" class="primary">Améliore un badge (5 jetons)</button>
-          </div>
+        <!-- Section Améliore tes badges -->
+        <div class="improve-badges-section">
+          <h3>Améliore tes badges</h3>
+          <p class="muted section-description">Tu peux améliorer une réponse d'un badge que tu as déjà débloqué pour obtenir un meilleur niveau.</p>
+          <button id="improve-badge-btn" class="primary">Améliore un badge (5 jetons)</button>
         </div>
 
-        <!-- Zone pour afficher la question après le spin -->
+        <!-- Modal pour afficher la question du badge -->
+        <div id="badge-question-overlay" class="badge-question-overlay hidden"></div>
         <div id="badge-question-container" class="badge-question-container hidden">
           <div class="card">
             <h3 id="selected-badge-name"></h3>
