@@ -95,7 +95,12 @@ export function renderSubscriptionStats(followersCount, subscriptionsCount) {
  * @returns {Function} - Fonction pour arrêter l'écoute
  */
 export function setupRealtimeSubscriptions() {
-  if (!supabaseClient || !currentUserId) return () => {};
+  if (!supabaseClient || !currentUserId) {
+    console.warn('setupRealtimeSubscriptions: supabaseClient ou currentUserId manquant');
+    return () => {};
+  }
+  
+  console.log('Configuration Realtime pour les abonnements, userId:', currentUserId);
   
   const channel = supabaseClient
     .channel(`subscriptions:${currentUserId}`)
@@ -108,10 +113,21 @@ export function setupRealtimeSubscriptions() {
         filter: `following_id=eq.${currentUserId}` // Quand quelqu'un s'abonne à moi
       },
       async (payload) => {
-        // Mettre à jour le compteur d'abonnés
-        const followersCount = await Subscriptions.getFollowersCount(supabaseClient, currentUserId);
+        console.log('Realtime INSERT détecté - quelqu\'un s\'abonne à moi:', payload);
+        // Mettre à jour le compteur d'abonnés immédiatement
+        // On récupère le compteur actuel et on l'incrémente
+        const currentFollowers = parseInt(document.getElementById('profile-section-followers-count')?.textContent || '0', 10);
+        const newFollowersCount = currentFollowers + 1;
         const subscriptionsCount = await Subscriptions.getSubscriptionsCount(supabaseClient, currentUserId);
-        renderSubscriptionStats(followersCount, subscriptionsCount);
+        console.log('Mise à jour compteurs - abonnés:', newFollowersCount, 'abonnements:', subscriptionsCount);
+        renderSubscriptionStats(newFollowersCount, subscriptionsCount);
+        
+        // Vérifier aussi après un court délai pour s'assurer de la cohérence
+        setTimeout(async () => {
+          const actualFollowersCount = await Subscriptions.getFollowersCount(supabaseClient, currentUserId);
+          const actualSubscriptionsCount = await Subscriptions.getSubscriptionsCount(supabaseClient, currentUserId);
+          renderSubscriptionStats(actualFollowersCount, actualSubscriptionsCount);
+        }, 500);
       }
     )
     .on(
@@ -123,10 +139,20 @@ export function setupRealtimeSubscriptions() {
         filter: `following_id=eq.${currentUserId}` // Quand quelqu'un se désabonne de moi
       },
       async (payload) => {
-        // Mettre à jour le compteur d'abonnés
-        const followersCount = await Subscriptions.getFollowersCount(supabaseClient, currentUserId);
+        console.log('Realtime DELETE détecté - quelqu\'un se désabonne de moi:', payload);
+        // Mettre à jour le compteur d'abonnés immédiatement
+        const currentFollowers = parseInt(document.getElementById('profile-section-followers-count')?.textContent || '0', 10);
+        const newFollowersCount = Math.max(0, currentFollowers - 1);
         const subscriptionsCount = await Subscriptions.getSubscriptionsCount(supabaseClient, currentUserId);
-        renderSubscriptionStats(followersCount, subscriptionsCount);
+        console.log('Mise à jour compteurs - abonnés:', newFollowersCount, 'abonnements:', subscriptionsCount);
+        renderSubscriptionStats(newFollowersCount, subscriptionsCount);
+        
+        // Vérifier aussi après un court délai pour s'assurer de la cohérence
+        setTimeout(async () => {
+          const actualFollowersCount = await Subscriptions.getFollowersCount(supabaseClient, currentUserId);
+          const actualSubscriptionsCount = await Subscriptions.getSubscriptionsCount(supabaseClient, currentUserId);
+          renderSubscriptionStats(actualFollowersCount, actualSubscriptionsCount);
+        }, 500);
       }
     )
     .on(
@@ -138,10 +164,20 @@ export function setupRealtimeSubscriptions() {
         filter: `follower_id=eq.${currentUserId}` // Quand je m'abonne à quelqu'un
       },
       async (payload) => {
-        // Mettre à jour le compteur d'abonnements
+        console.log('Realtime INSERT détecté - je m\'abonne à quelqu\'un:', payload);
+        // Mettre à jour le compteur d'abonnements immédiatement
         const followersCount = await Subscriptions.getFollowersCount(supabaseClient, currentUserId);
-        const subscriptionsCount = await Subscriptions.getSubscriptionsCount(supabaseClient, currentUserId);
-        renderSubscriptionStats(followersCount, subscriptionsCount);
+        const currentSubscriptions = parseInt(document.getElementById('profile-section-subscriptions-count')?.textContent || '0', 10);
+        const newSubscriptionsCount = currentSubscriptions + 1;
+        console.log('Mise à jour compteurs - abonnés:', followersCount, 'abonnements:', newSubscriptionsCount);
+        renderSubscriptionStats(followersCount, newSubscriptionsCount);
+        
+        // Vérifier aussi après un court délai pour s'assurer de la cohérence
+        setTimeout(async () => {
+          const actualFollowersCount = await Subscriptions.getFollowersCount(supabaseClient, currentUserId);
+          const actualSubscriptionsCount = await Subscriptions.getSubscriptionsCount(supabaseClient, currentUserId);
+          renderSubscriptionStats(actualFollowersCount, actualSubscriptionsCount);
+        }, 500);
       }
     )
     .on(
@@ -153,16 +189,29 @@ export function setupRealtimeSubscriptions() {
         filter: `follower_id=eq.${currentUserId}` // Quand je me désabonne de quelqu'un
       },
       async (payload) => {
-        // Mettre à jour le compteur d'abonnements
+        console.log('Realtime DELETE détecté - je me désabonne de quelqu\'un:', payload);
+        // Mettre à jour le compteur d'abonnements immédiatement
         const followersCount = await Subscriptions.getFollowersCount(supabaseClient, currentUserId);
-        const subscriptionsCount = await Subscriptions.getSubscriptionsCount(supabaseClient, currentUserId);
-        renderSubscriptionStats(followersCount, subscriptionsCount);
+        const currentSubscriptions = parseInt(document.getElementById('profile-section-subscriptions-count')?.textContent || '0', 10);
+        const newSubscriptionsCount = Math.max(0, currentSubscriptions - 1);
+        console.log('Mise à jour compteurs - abonnés:', followersCount, 'abonnements:', newSubscriptionsCount);
+        renderSubscriptionStats(followersCount, newSubscriptionsCount);
+        
+        // Vérifier aussi après un court délai pour s'assurer de la cohérence
+        setTimeout(async () => {
+          const actualFollowersCount = await Subscriptions.getFollowersCount(supabaseClient, currentUserId);
+          const actualSubscriptionsCount = await Subscriptions.getSubscriptionsCount(supabaseClient, currentUserId);
+          renderSubscriptionStats(actualFollowersCount, actualSubscriptionsCount);
+        }, 500);
       }
     )
-    .subscribe();
+    .subscribe((status) => {
+      console.log('Statut de souscription Realtime abonnements:', status);
+    });
   
   // Retourner une fonction pour se désabonner
   return () => {
+    console.log('Arrêt de l\'écoute Realtime des abonnements');
     supabaseClient.removeChannel(channel);
   };
 }
