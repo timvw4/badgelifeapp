@@ -4,6 +4,9 @@ import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js
 import { SUPABASE_URL, SUPABASE_ANON_KEY, ADMIN_USER_IDS } from './config.js';
 import { isMysteryLevel } from './badgeCalculations.js';
 import { parseBadgeAnswer, parseConfig, safeSupabaseSelect, pseudoToEmail, isAdminUser } from './utils.js';
+import * as Subscriptions from './subscriptions.js';
+import * as SubscriptionUI from './subscriptionUI.js';
+import * as NotificationUI from './notificationUI.js';
 
 // Nom du bucket d'avatars dans Supabase Storage
 const AVATAR_BUCKET = 'avatars';
@@ -99,11 +102,8 @@ function getAvailableThemes() {
   return availableThemes;
 }
 
-// Calcule le pourcentage de badges débloqués pour un thème donné
-function calculateThemeProgress(themeName) {
-  const themeNameFunc = (b) => (b.theme && String(b.theme).trim()) ? String(b.theme).trim() : 'Autres';
-  
-  // Calculer les points de skills pour vérifier les conditions des badges fantômes
+// Helper : calcule les points de skills actuels de l'utilisateur
+function calculateCurrentSkillPoints() {
   let tempSkillPoints = 0;
   state.userBadgeLevels.forEach((lvl, badgeId) => {
     tempSkillPoints += getSkillPointsForBadge(badgeId, lvl);
@@ -117,6 +117,39 @@ function calculateThemeProgress(themeName) {
       }
     }
   });
+  return tempSkillPoints;
+}
+
+// Calcule le pourcentage de badges débloqués pour un thème donné
+function calculateThemeProgress(themeName) {
+  const themeNameFunc = (b) => (b.theme && String(b.theme).trim()) ? String(b.theme).trim() : 'Autres';
+  
+  // Calculer les points de skills une seule fois (utilisé pour vérifier les conditions des badges fantômes)
+  const tempSkillPoints = calculateCurrentSkillPoints();
+  
+  // Cas spécial pour "Badges cachés" : compter tous les badges fantômes
+  if (themeName === 'Badges cachés') {
+    // Filtrer uniquement les badges fantômes
+    const ghostBadges = state.badges.filter(badge => isGhostBadge(badge));
+    
+    // Compter les badges fantômes débloqués
+    let unlocked = 0;
+    const total = ghostBadges.length; // Total de tous les badges fantômes
+    
+    ghostBadges.forEach(badge => {
+      const shouldBeUnlocked = checkGhostBadgeConditionsForUser(badge, state.userBadges, tempSkillPoints);
+      if (shouldBeUnlocked) {
+        unlocked++;
+      }
+    });
+    
+    const percentage = total > 0 ? Math.round((unlocked / total) * 100) : 0;
+    const isComplete = percentage === 100;
+    
+    return { unlocked, total, percentage, isComplete };
+  }
+  
+  // Pour les autres thèmes, logique normale
   
   // Filtrer les badges du thème
   const themeBadges = state.badges.filter(badge => {
@@ -162,19 +195,19 @@ function getAllThemes() {
   const themesSet = new Set();
   
   // Calculer les points de skills une seule fois pour tous les badges fantômes
-  let tempSkillPoints = 0;
-  state.userBadgeLevels.forEach((lvl, badgeId) => {
-    tempSkillPoints += getSkillPointsForBadge(badgeId, lvl);
-  });
-  state.userBadges.forEach(badgeId => {
-    if (!state.userBadgeLevels.has(badgeId)) {
-      const badge = getBadgeById(badgeId);
-      if (badge) {
-        const userAnswer = state.userBadgeAnswers.get(badgeId);
-        tempSkillPoints += calculatePointsForBadgeWithoutLevel(badge, badgeId, userAnswer);
-      }
+  const tempSkillPoints = calculateCurrentSkillPoints();
+  
+  // Vérifier si au moins un badge fantôme est débloqué
+  let hasUnlockedGhostBadge = false;
+  const ghostBadges = state.badges.filter(badge => isGhostBadge(badge));
+  
+  for (const badge of ghostBadges) {
+    const shouldBeUnlocked = checkGhostBadgeConditionsForUser(badge, state.userBadges, tempSkillPoints);
+    if (shouldBeUnlocked) {
+      hasUnlockedGhostBadge = true;
+      break;
     }
-  });
+  }
   
   state.badges.forEach(badge => {
     // Exclure uniquement les badges fantômes non débloqués
@@ -188,6 +221,11 @@ function getAllThemes() {
     const theme = themeNameFunc(badge);
     themesSet.add(theme);
   });
+  
+  // Ajouter "Badges cachés" seulement si au moins un badge fantôme est débloqué
+  if (hasUnlockedGhostBadge) {
+    themesSet.add('Badges cachés');
+  }
   
   return Array.from(themesSet).sort(compareThemesFixed);
 }
@@ -218,13 +256,10 @@ function renderThemesSlider() {
     return { themeName, progress };
   });
   
-  // Trier : thèmes non complétés d'abord, puis thèmes complétés à la fin
+  // Trier du moins complet au plus complet (par pourcentage croissant)
   themesWithProgress.sort((a, b) => {
-    // Si l'un est complété et l'autre non, le complété va à la fin
-    if (a.progress.isComplete && !b.progress.isComplete) return 1;
-    if (!a.progress.isComplete && b.progress.isComplete) return -1;
-    // Si les deux ont le même statut, garder l'ordre original
-    return 0;
+    // Trier par pourcentage de complétion (croissant : du moins complet au plus complet)
+    return a.progress.percentage - b.progress.percentage;
   });
   
   // Mettre à jour le compteur de thèmes complétés
@@ -241,8 +276,11 @@ function renderThemesSlider() {
     themeCard.type = 'button';
     themeCard.dataset.theme = themeName;
     
-    // Si le thème est complété à 100%, ajouter la classe et désactiver
-    if (progress.isComplete) {
+    // Le thème "Badges cachés" n'est jamais cliquable
+    const isHiddenTheme = themeName === 'Badges cachés';
+    
+    // Si le thème est complété à 100% ou si c'est "Badges cachés", désactiver
+    if (progress.isComplete || isHiddenTheme) {
       themeCard.classList.add('theme-complete');
       themeCard.disabled = true;
     }
@@ -262,11 +300,11 @@ function renderThemesSlider() {
           <span class="theme-progress-count">${progress.unlocked}/${progress.total}</span>
         </div>
       </div>
-      ${!progress.isComplete ? '<span class="theme-cost">1 jeton</span>' : ''}
+      ${!progress.isComplete && !isHiddenTheme ? '<span class="theme-cost">1 jeton</span>' : ''}
     `;
     
-    // Attacher l'événement de clic si le thème n'est pas complété
-    if (!progress.isComplete) {
+    // Attacher l'événement de clic seulement si le thème n'est pas complété et n'est pas "Badges cachés"
+    if (!progress.isComplete && !isHiddenTheme) {
       themeCard.addEventListener('click', () => handleThemeButtonClick(themeName));
     }
     
@@ -337,6 +375,14 @@ document.addEventListener('DOMContentLoaded', () => {
   // Attacher l'événement au bouton "Améliore un badge"
   if (els.improveBadgeBtn) {
     els.improveBadgeBtn.addEventListener('click', handleImproveBadgeFromWheel);
+    
+    // Navigation entre sections dans l'onglet "à débloquer"
+    if (els.navThemesBtn) {
+      els.navThemesBtn.addEventListener('click', () => switchAllBadgesSection('themes'));
+    }
+    if (els.navImproveBtn) {
+      els.navImproveBtn.addEventListener('click', () => switchAllBadgesSection('improve'));
+    }
   }
   bootstrapSession();
 });
@@ -410,6 +456,10 @@ function cacheElements() {
   els.tokensCounter = document.getElementById('tokens-counter');
   els.tokensCount = document.getElementById('tokens-count');
   els.themesSlider = document.getElementById('themes-slider');
+  els.navThemesBtn = document.getElementById('nav-themes-btn');
+  els.navImproveBtn = document.getElementById('nav-improve-btn');
+  els.themesSection = document.getElementById('themes-section');
+  els.improveSection = document.getElementById('improve-section');
   els.themesCompletedCount = document.getElementById('themes-completed-count');
   els.badgeQuestionContainer = document.getElementById('badge-question-container');
   els.badgeQuestionOverlay = document.getElementById('badge-question-overlay');
@@ -698,6 +748,11 @@ function showTab(tab) {
   
   // Fermer le calendrier si un onglet est sélectionné
   closeCalendarDrawer();
+  
+  // Fermer le modal de profil communautaire si un onglet est sélectionné
+  if (els.communityProfileModal) {
+    els.communityProfileModal.classList.add('hidden');
+  }
 }
 
 function attachSettingsMenuListeners() {
@@ -1032,7 +1087,30 @@ async function loadAppData() {
   try { await fetchCommunity(); } catch (e) { console.error(e); }
   try { await fetchIdeas(); } catch (e) { console.error(e); }
   try { await fetchIdeaVotes(); } catch (e) { console.error(e); }
+  
+  // Initialiser les modules d'abonnement et notifications
+  if (state.user) {
+    SubscriptionUI.initSubscriptionUI(supabase, state.user.id);
+    NotificationUI.initNotificationUI(supabase, state.user.id);
+    
+    // Charger les stats d'abonnement
+    try {
+      const followersCount = await Subscriptions.getFollowersCount(supabase, state.user.id);
+      const subscriptionsCount = await Subscriptions.getSubscriptionsCount(supabase, state.user.id);
+      SubscriptionUI.renderSubscriptionStats(followersCount, subscriptionsCount);
+    } catch (e) { console.error('Erreur lors du chargement des stats d\'abonnement:', e); }
+    
+    // Charger et afficher les notifications
+    try {
+      await NotificationUI.refreshNotificationBadge();
+      // Configurer l'écoute Realtime pour les notifications
+      NotificationUI.setupRealtimeNotificationListener();
+    } catch (e) { console.error('Erreur lors du chargement des notifications:', e); }
+  }
+  
   render();
+  // Mettre à jour les statistiques d'amélioration après le chargement
+  renderImproveBadgesStats();
 }
 
 async function fetchProfile() {
@@ -1634,6 +1712,8 @@ function render() {
   renderMyBadges();
   // Mettre à jour la roue si elle est visible (ne pas interférer si elle tourne)
   renderThemesSlider();
+  // Mettre à jour les statistiques d'amélioration
+  renderImproveBadgesStats();
 }
 
 function isGhostBadge(badge) {
@@ -1772,6 +1852,26 @@ async function syncGhostBadges() {
 function renderAllBadges() {
   // Afficher le slider de thèmes
   renderThemesSlider();
+}
+
+// Bascule entre les sections "Thèmes" et "Améliorer" dans l'onglet "à débloquer"
+function switchAllBadgesSection(section) {
+  // Mettre à jour les boutons
+  if (els.navThemesBtn && els.navImproveBtn) {
+    els.navThemesBtn.classList.toggle('active', section === 'themes');
+    els.navImproveBtn.classList.toggle('active', section === 'improve');
+  }
+  
+  // Afficher/masquer les sections
+  if (els.themesSection && els.improveSection) {
+    if (section === 'themes') {
+      els.themesSection.classList.remove('hidden');
+      els.improveSection.classList.add('hidden');
+    } else if (section === 'improve') {
+      els.themesSection.classList.add('hidden');
+      els.improveSection.classList.remove('hidden');
+    }
+  }
 }
 
 // Gère le clic sur un bouton de thème
@@ -2037,6 +2137,204 @@ async function handleImproveBadgeFromWheel() {
   
   // Afficher un message d'instruction
   renderMyBadges();
+}
+
+// Calcule les statistiques d'amélioration des badges
+function calculateBadgeImprovementStats() {
+  let expertCount = 0;
+  let totalUnlockedLevels = 0;
+  let totalMaxLevels = 0;
+  const badgesWithGap = [];
+
+  // Parcourir tous les badges débloqués
+  state.userBadges.forEach(badgeId => {
+    const badge = getBadgeById(badgeId);
+    if (!badge) return;
+
+    const levelLabel = state.userBadgeLevels.get(badgeId);
+    const config = parseConfig(badge.answer);
+
+    // Compter les niveaux expert
+    if (levelLabel && isMysteryLevel(levelLabel)) {
+      expertCount++;
+    }
+
+    // Calculer les niveaux débloqués et max
+    const currentLevelPos = getLevelPosition(levelLabel, config);
+    const maxLevelCount = getLevelCount(config);
+
+    // Si le badge a des niveaux
+    if (maxLevelCount > 0) {
+      // Niveau actuel : si c'est Expert, on considère qu'il est au niveau max
+      if (levelLabel && isMysteryLevel(levelLabel)) {
+        totalUnlockedLevels += maxLevelCount;
+        totalMaxLevels += maxLevelCount;
+      } else if (currentLevelPos !== null && currentLevelPos > 0) {
+        totalUnlockedLevels += currentLevelPos;
+        totalMaxLevels += maxLevelCount;
+        
+        // Calculer l'écart pour les badges non-expert
+        const gap = maxLevelCount - currentLevelPos;
+        if (gap > 0) {
+          const displayName = getBadgeDisplayName(badge, levelLabel);
+          badgesWithGap.push({
+            badgeId,
+            name: stripEmojis(displayName),
+            emoji: getBadgeEmoji(badge),
+            gap,
+            currentLevel: currentLevelPos,
+            maxLevel: maxLevelCount
+          });
+        }
+      } else {
+        // Badge débloqué mais sans niveau défini, compter comme 1 niveau
+        totalUnlockedLevels += 1;
+        totalMaxLevels += maxLevelCount > 0 ? maxLevelCount : 1;
+      }
+    } else {
+      // Badge sans niveaux (text, boolean simple), compter comme 1 niveau débloqué sur 1 max
+      totalUnlockedLevels += 1;
+      totalMaxLevels += 1;
+    }
+  });
+
+  // Trier les badges par écart décroissant et prendre les 3 premiers
+  badgesWithGap.sort((a, b) => b.gap - a.gap);
+  const top3Badges = badgesWithGap.slice(0, 3);
+
+  return {
+    expertCount,
+    totalUnlockedLevels,
+    totalMaxLevels,
+    top3Badges
+  };
+}
+
+// Affiche les statistiques d'amélioration dans la section
+function renderImproveBadgesStats() {
+  const expertCountEl = document.getElementById('expert-count');
+  const levelsProgressEl = document.getElementById('levels-progress');
+  const suggestionsEl = document.getElementById('badge-suggestions');
+
+  if (!expertCountEl || !levelsProgressEl || !suggestionsEl) return;
+
+  // Si l'utilisateur n'a pas de badges débloqués, afficher des valeurs par défaut
+  if (!state.userBadges || state.userBadges.size === 0) {
+    expertCountEl.innerHTML = '<span class="stat-number">0</span>';
+    levelsProgressEl.innerHTML = '<span class="stat-number">0</span><span class="stat-separator">/</span><span class="stat-number">0</span>';
+    suggestionsEl.innerHTML = '<p class="muted" style="margin: 8px 0; font-size: 13px;">Débloque des badges pour voir les suggestions d\'amélioration.</p>';
+    return;
+  }
+
+  const stats = calculateBadgeImprovementStats();
+
+  // Afficher le nombre de niveaux expert avec icône
+  expertCountEl.innerHTML = `<span class="stat-number">${stats.expertCount}</span>`;
+
+  // Afficher la progression des niveaux avec pourcentage
+  const progressPercent = stats.totalMaxLevels > 0 
+    ? Math.round((stats.totalUnlockedLevels / stats.totalMaxLevels) * 100) 
+    : 0;
+  levelsProgressEl.innerHTML = `
+    <span class="stat-number">${stats.totalUnlockedLevels}</span>
+    <span class="stat-separator">/</span>
+    <span class="stat-number">${stats.totalMaxLevels}</span>
+    <span class="stat-percent">${progressPercent}%</span>
+  `;
+
+  // Afficher les suggestions de badges
+  suggestionsEl.innerHTML = '';
+  
+  if (stats.top3Badges.length === 0) {
+    suggestionsEl.innerHTML = '<p class="muted" style="margin: 8px 0; font-size: 13px;">Tous tes badges sont au niveau maximum ! 🎉</p>';
+  } else {
+    stats.top3Badges.forEach(badgeInfo => {
+      const badgeBtn = document.createElement('button');
+      badgeBtn.className = 'suggested-badge-btn';
+      badgeBtn.type = 'button';
+      badgeBtn.dataset.badgeId = badgeInfo.badgeId;
+      badgeBtn.innerHTML = `
+        <span class="suggested-badge-emoji">${badgeInfo.emoji}</span>
+        <div class="suggested-badge-info">
+          <span class="suggested-badge-name">${badgeInfo.name}</span>
+          <span class="suggested-badge-gap">niv ${badgeInfo.currentLevel} sur ${badgeInfo.maxLevel}</span>
+        </div>
+        <span class="suggested-badge-arrow">→</span>
+      `;
+      badgeBtn.addEventListener('click', () => handleSuggestedBadgeClick(badgeInfo.badgeId));
+      suggestionsEl.appendChild(badgeBtn);
+    });
+  }
+}
+
+// Gère le clic sur un badge suggéré (coûte 5 jetons)
+async function handleSuggestedBadgeClick(badgeId) {
+  // Vérifier que l'utilisateur est connecté
+  if (!state.user) {
+    alert('Tu dois être connecté pour améliorer un badge.');
+    return;
+  }
+  
+  // Vérifier si l'utilisateur a assez de jetons
+  if ((state.tokens || 0) < 5) {
+    alert('Tu n\'as pas assez de jetons (5 requis).');
+    return;
+  }
+  
+  // Consommer 5 jetons
+  const newTokens = (state.tokens || 0) - 5;
+  state.tokens = newTokens;
+  if (state.profile) {
+    state.profile.tokens = newTokens;
+  }
+  
+  const { error } = await supabase
+    .from('profiles')
+    .update({ tokens: newTokens })
+    .eq('id', state.user.id);
+  
+  if (error) {
+    console.error('Erreur lors de la consommation des jetons:', error);
+    state.tokens = (state.tokens || 0) + 5;
+    if (state.profile) {
+      state.profile.tokens = state.tokens;
+    }
+    alert('Erreur lors de la mise à jour des jetons. Veuillez réessayer.');
+    return;
+  }
+  
+  updateTokensDisplay();
+  
+  // Stocker le coût de la modification (5 jetons pour section amélioration)
+  state.modifyBadgeCost = 5;
+  
+  // Activer le mode modification
+  state.isModifyingBadge = true;
+  
+  // Basculer vers l'onglet "Mes badges"
+  showTab('my-badges');
+  
+  // Attendre que l'onglet soit visible et les badges rendus
+  setTimeout(() => {
+    renderMyBadges();
+    // Attendre que les badges soient rendus avant d'ouvrir le modal
+    setTimeout(() => {
+      const badge = getBadgeById(badgeId);
+      if (badge) {
+        // Ouvrir le modal de modification du badge
+        handleModifyBadgeAnswer(badge);
+      } else {
+        // Si le badge n'est pas trouvé, scroller vers le haut de la section
+        const myBadgesSection = document.getElementById('my-badges');
+        if (myBadgesSection) {
+          myBadgesSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      }
+    }, 100);
+  }, 100);
+  
+  // Mettre à jour les statistiques après la consommation des jetons
+  renderImproveBadgesStats();
 }
 
 // Gère le Joker Malus : l'utilisateur perd un badge débloqué aléatoirement
@@ -2475,10 +2773,30 @@ function attachBadgeQuestionCloseHandler() {
 // Ferme la carte du badge
 function closeBadgeQuestion() {
   if (els.badgeQuestionContainer) {
-    els.badgeQuestionContainer.classList.add('hidden');
-  }
-  if (els.badgeQuestionOverlay) {
-    els.badgeQuestionOverlay.classList.add('hidden');
+    const card = els.badgeQuestionContainer.querySelector('.card');
+    
+    // Ajouter l'animation de dézoom avant de masquer
+    if (card) {
+      card.classList.add('zoom-out');
+      // Attendre la fin de l'animation avant de masquer
+      setTimeout(() => {
+        card.classList.remove('zoom-out');
+        els.badgeQuestionContainer.classList.add('hidden');
+        if (els.badgeQuestionOverlay) {
+          els.badgeQuestionOverlay.classList.add('hidden');
+        }
+      }, 300);
+    } else {
+      // Si pas de carte, masquer directement
+      els.badgeQuestionContainer.classList.add('hidden');
+      if (els.badgeQuestionOverlay) {
+        els.badgeQuestionOverlay.classList.add('hidden');
+      }
+    }
+  } else {
+    if (els.badgeQuestionOverlay) {
+      els.badgeQuestionOverlay.classList.add('hidden');
+    }
   }
   // Note: Le slider est mis à jour par handleBadgeAnswerFromWheel ou render()
   // Ne pas appeler renderThemesSlider() ici pour éviter les sauts visuels
@@ -2778,6 +3096,15 @@ function handleModifyBadgeAnswer(badge) {
   
   els.modifyBadgeOverlay.classList.remove('hidden');
   
+  // Ajouter l'animation de zoom au modal
+  if (modal) {
+    modal.classList.add('zoom-in');
+    // Retirer la classe après l'animation pour permettre de la réappliquer
+    setTimeout(() => {
+      modal.classList.remove('zoom-in');
+    }, 300);
+  }
+  
   // Attacher les événements pour les boutons boolean
   if (config?.type === 'boolean') {
     const hiddenInput = modal.querySelector('input[name="answer"]');
@@ -3052,11 +3379,18 @@ async function refundModifyBadgeTokens() {
 // Ferme l'overlay de modification de badge
 async function closeModifyBadgeOverlay() {
   if (els.modifyBadgeOverlay) {
-    els.modifyBadgeOverlay.classList.add('hidden');
     const modal = els.modifyBadgeOverlay.querySelector('.modify-badge-modal .card');
+    
+    // Ajouter l'animation de dézoom avant de masquer
     if (modal) {
+      modal.classList.add('zoom-out');
+      // Attendre la fin de l'animation avant de masquer
+      await new Promise(resolve => setTimeout(resolve, 300));
+      modal.classList.remove('zoom-out');
       modal.innerHTML = '';
     }
+    
+    els.modifyBadgeOverlay.classList.add('hidden');
   }
   
   // Si le mode modification est toujours actif et qu'aucune modification n'a été effectuée, rembourser
@@ -3602,6 +3936,9 @@ async function handleBadgeAnswer(event, badge, providedAnswer = null, feedbackEl
   }
   
   render();
+  
+  // Mettre à jour les statistiques d'amélioration après une modification de badge
+  renderImproveBadgesStats();
   
   // Retourner true si on demande le statut de validation (pour la roue) - une réponse valide a été traitée
   if (returnValidationStatus) {
@@ -4293,7 +4630,27 @@ function showCommunityProfile(data) {
   els.communityProfileMystery.textContent = `${data.skills || 0} skill(s)`;
   renderCommunityProfileBadges([], isPrivate);
   els.communityProfileModal.classList.remove('hidden');
-  if (data.userId) {
+  
+  // Charger les stats d'abonnement pour ce profil
+  if (data.userId && state.user) {
+    const isOwnProfile = data.userId === state.user.id;
+    
+    Promise.all([
+      Subscriptions.getFollowersCount(supabase, data.userId),
+      Subscriptions.getSubscriptionsCount(supabase, data.userId),
+      Subscriptions.isSubscribed(supabase, state.user.id, data.userId)
+    ]).then(([followersCount, subscriptionsCount, isSubscribed]) => {
+      SubscriptionUI.renderCommunityProfileSubscription(
+        data.userId,
+        isOwnProfile,
+        followersCount,
+        subscriptionsCount,
+        isSubscribed
+      );
+    }).catch(err => {
+      console.error('Erreur lors du chargement des stats d\'abonnement:', err);
+    });
+    
     fetchCommunityUserStats(data.userId, isPrivate);
   }
 }
@@ -4302,6 +4659,10 @@ function hideCommunityProfile() {
   if (!els.communityProfileModal) return;
   els.communityProfileModal.classList.add('hidden');
 }
+
+// Exposer showCommunityProfile et getRankMeta globalement pour les modules d'abonnement
+window.showCommunityProfile = showCommunityProfile;
+window.getRankMeta = getRankMeta;
 
 // Fermer modal communauté
 document.addEventListener('click', (e) => {
@@ -4318,7 +4679,7 @@ document.addEventListener('DOMContentLoaded', () => {
 // Stats supplémentaires pour un profil communauté
 async function fetchCommunityUserStats(userId, isPrivate = false) {
   try {
-    const rows = await fetchPublicUserBadges(userId);
+    const rows = await fetchPublicUserBadges(userId, isPrivate);
     if (!rows || !rows.length) {
       renderCommunityProfileBadges([], isPrivate);
       return;
@@ -4396,8 +4757,21 @@ async function fetchCommunityUserStats(userId, isPrivate = false) {
   }
 }
 
-async function fetchPublicUserBadges(userId) {
-  // Essaye d’abord une vue publique, sinon retombe sur user_badges
+async function fetchPublicUserBadges(userId, isPrivate = false) {
+  // Vérifier si l'utilisateur actuel peut voir les badges
+  if (state.user) {
+    const canView = await Subscriptions.canViewBadges(supabase, state.user.id, userId, isPrivate);
+    if (!canView) {
+      return []; // Ne pas retourner de badges si l'utilisateur ne peut pas les voir
+    }
+  } else {
+    // Si l'utilisateur n'est pas connecté, ne peut voir que les profils publics
+    if (isPrivate) {
+      return [];
+    }
+  }
+  
+  // Essaye d'abord une vue publique, sinon retombe sur user_badges
   const sources = [
     { table: 'public_user_badges_min', fields: 'badge_id,level,success,user_answer' },
     { table: 'user_badges', fields: 'badge_id,level,success,user_answer' },
