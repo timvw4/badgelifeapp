@@ -136,16 +136,48 @@ export function setupRealtimeSubscriptions() {
             console.log('✅ Je m\'abonne à quelqu\'un!');
             shouldUpdate = true;
           }
-        } else if (payload.eventType === 'DELETE' && oldData) {
-          // Quelqu'un se désabonne de moi
-          if (oldData.following_id === currentUserId) {
-            console.log('✅ Quelqu\'un se désabonne de moi!');
-            shouldUpdate = true;
+        } else if (payload.eventType === 'DELETE') {
+          // Pour DELETE, oldData peut ne contenir que l'ID
+          // On doit récupérer les données complètes depuis la base si nécessaire
+          let followerId = oldData?.follower_id;
+          let followingId = oldData?.following_id;
+          
+          // Si les données complètes ne sont pas disponibles, récupérer depuis la base
+          if (!followerId && !followingId && oldData?.id) {
+            console.log('⚠️ Old data incomplet, récupération depuis la base pour l\'ID:', oldData.id);
+            try {
+              const { data: subscriptionData } = await supabaseClient
+                .from('subscriptions')
+                .select('follower_id, following_id')
+                .eq('id', oldData.id)
+                .single();
+              
+              // Si on trouve encore la ligne, c'est qu'elle n'a pas été supprimée
+              // Sinon, on doit vérifier différemment
+              if (subscriptionData) {
+                followerId = subscriptionData.follower_id;
+                followingId = subscriptionData.following_id;
+              } else {
+                // La ligne a été supprimée, on doit vérifier tous les changements
+                console.log('⚠️ Ligne déjà supprimée, mise à jour forcée des compteurs');
+                shouldUpdate = true;
+              }
+            } catch (err) {
+              // La ligne n'existe plus, on doit mettre à jour quand même
+              console.log('⚠️ Impossible de récupérer les données, mise à jour forcée');
+              shouldUpdate = true;
+            }
           }
-          // Je me désabonne de quelqu'un
-          else if (oldData.follower_id === currentUserId) {
-            console.log('✅ Je me désabonne de quelqu\'un!');
-            shouldUpdate = true;
+          
+          // Vérifier si l'événement nous concerne
+          if (!shouldUpdate) {
+            if (followingId === currentUserId) {
+              console.log('✅ Quelqu\'un se désabonne de moi!');
+              shouldUpdate = true;
+            } else if (followerId === currentUserId) {
+              console.log('✅ Je me désabonne de quelqu\'un!');
+              shouldUpdate = true;
+            }
           }
         }
         
@@ -153,7 +185,7 @@ export function setupRealtimeSubscriptions() {
           console.log('🔄 Mise à jour des compteurs nécessaire');
           
           // Récupérer directement les valeurs depuis la base de données pour être sûr
-          // On fait ça immédiatement car Supabase Realtime se déclenche après l'insertion
+          // On fait ça immédiatement car Supabase Realtime se déclenche après l'insertion/suppression
           const followersCount = await Subscriptions.getFollowersCount(supabaseClient, currentUserId);
           const subscriptionsCount = await Subscriptions.getSubscriptionsCount(supabaseClient, currentUserId);
           
