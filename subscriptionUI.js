@@ -137,40 +137,16 @@ export function setupRealtimeSubscriptions() {
             shouldUpdate = true;
           }
         } else if (payload.eventType === 'DELETE') {
-          // Pour DELETE, oldData peut ne contenir que l'ID
-          // On doit récupérer les données complètes depuis la base si nécessaire
+          // Pour DELETE, oldData peut ne contenir que l'ID sans follower_id/following_id
+          // Comme la ligne est déjà supprimée, on ne peut pas récupérer les données
+          // Solution : toujours mettre à jour les compteurs lors d'un DELETE
+          // car on ne peut pas déterminer avec certitude si l'événement nous concerne
+          
           let followerId = oldData?.follower_id;
           let followingId = oldData?.following_id;
           
-          // Si les données complètes ne sont pas disponibles, récupérer depuis la base
-          if (!followerId && !followingId && oldData?.id) {
-            console.log('⚠️ Old data incomplet, récupération depuis la base pour l\'ID:', oldData.id);
-            try {
-              const { data: subscriptionData } = await supabaseClient
-                .from('subscriptions')
-                .select('follower_id, following_id')
-                .eq('id', oldData.id)
-                .single();
-              
-              // Si on trouve encore la ligne, c'est qu'elle n'a pas été supprimée
-              // Sinon, on doit vérifier différemment
-              if (subscriptionData) {
-                followerId = subscriptionData.follower_id;
-                followingId = subscriptionData.following_id;
-              } else {
-                // La ligne a été supprimée, on doit vérifier tous les changements
-                console.log('⚠️ Ligne déjà supprimée, mise à jour forcée des compteurs');
-                shouldUpdate = true;
-              }
-            } catch (err) {
-              // La ligne n'existe plus, on doit mettre à jour quand même
-              console.log('⚠️ Impossible de récupérer les données, mise à jour forcée');
-              shouldUpdate = true;
-            }
-          }
-          
-          // Vérifier si l'événement nous concerne
-          if (!shouldUpdate) {
+          // Si on a les données complètes, vérifier si ça nous concerne
+          if (followerId || followingId) {
             if (followingId === currentUserId) {
               console.log('✅ Quelqu\'un se désabonne de moi!');
               shouldUpdate = true;
@@ -178,6 +154,11 @@ export function setupRealtimeSubscriptions() {
               console.log('✅ Je me désabonne de quelqu\'un!');
               shouldUpdate = true;
             }
+          } else {
+            // Pas de données complètes : on met à jour quand même par sécurité
+            // car un DELETE peut nous concerner et on ne peut pas le vérifier
+            console.log('⚠️ DELETE détecté mais oldData incomplet (ID seulement), mise à jour des compteurs par sécurité');
+            shouldUpdate = true;
           }
         }
         
