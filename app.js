@@ -4660,9 +4660,10 @@ function hideCommunityProfile() {
   els.communityProfileModal.classList.add('hidden');
 }
 
-// Exposer showCommunityProfile et getRankMeta globalement pour les modules d'abonnement
+// Exposer showCommunityProfile, getRankMeta et formatRankText globalement pour les modules d'abonnement
 window.showCommunityProfile = showCommunityProfile;
 window.getRankMeta = getRankMeta;
+window.formatRankText = formatRankText;
 
 // Fermer modal communauté
 document.addEventListener('click', (e) => {

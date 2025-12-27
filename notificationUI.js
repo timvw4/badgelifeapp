@@ -25,26 +25,26 @@ export function initNotificationUI(supabase, userId) {
   
   // Écouteurs pour le modal de notifications
   const notificationsModalClose = document.getElementById('notifications-modal-close');
-  const markAllReadBtn = document.getElementById('mark-all-notifications-read');
+  const notificationsModal = document.getElementById('notifications-modal');
+  
+  // Fonction pour fermer le modal et marquer toutes les notifications comme lues
+  const closeModalAndMarkAsRead = async () => {
+    if (notificationsModal) {
+      notificationsModal.classList.add('hidden');
+    }
+    // Marquer toutes les notifications comme lues quand on ferme le modal
+    await markAllNotificationsAsRead();
+  };
   
   if (notificationsModalClose) {
-    notificationsModalClose.addEventListener('click', () => {
-      document.getElementById('notifications-modal')?.classList.add('hidden');
-    });
-  }
-  
-  if (markAllReadBtn) {
-    markAllReadBtn.addEventListener('click', async () => {
-      await markAllNotificationsAsRead();
-    });
+    notificationsModalClose.addEventListener('click', closeModalAndMarkAsRead);
   }
   
   // Fermer le modal en cliquant en dehors
-  const notificationsModal = document.getElementById('notifications-modal');
   if (notificationsModal) {
-    notificationsModal.addEventListener('click', (e) => {
+    notificationsModal.addEventListener('click', async (e) => {
       if (e.target === notificationsModal) {
-        notificationsModal.classList.add('hidden');
+        await closeModalAndMarkAsRead();
       }
     });
   }
@@ -78,30 +78,18 @@ export async function showNotificationsModal() {
   
   const modal = document.getElementById('notifications-modal');
   const list = document.getElementById('notifications-list');
-  const markAllReadBtn = document.getElementById('mark-all-notifications-read');
   
   if (!modal || !list) return;
   
   modal.classList.remove('hidden');
   list.innerHTML = '<p class="muted">Chargement...</p>';
   
-  if (markAllReadBtn) {
-    markAllReadBtn.style.display = 'none';
-  }
-  
   try {
     const notifications = await SubscriptionNotifications.getNotifications(supabaseClient, currentUserId);
     
     if (notifications.length === 0) {
       list.innerHTML = '<p class="muted">Aucune notification pour le moment.</p>';
-      if (markAllReadBtn) {
-        markAllReadBtn.style.display = 'none';
-      }
       return;
-    }
-    
-    if (markAllReadBtn) {
-      markAllReadBtn.style.display = 'block';
     }
     
     list.innerHTML = '';
@@ -217,15 +205,17 @@ async function handleNotificationClick(notification) {
 async function markAllNotificationsAsRead() {
   if (!supabaseClient || !currentUserId) return;
   
-  const result = await SubscriptionNotifications.markAllNotificationsAsRead(supabaseClient, currentUserId);
-  
-  if (result.success) {
-    // Recharger la liste des notifications
-    await showNotificationsModal();
-    // Mettre à jour le badge
-    await refreshNotificationBadge();
-  } else {
-    alert(result.error || 'Une erreur est survenue.');
+  try {
+    const result = await SubscriptionNotifications.markAllNotificationsAsRead(supabaseClient, currentUserId);
+    
+    if (result.success) {
+      // Mettre à jour le badge pour qu'il disparaisse
+      await refreshNotificationBadge();
+    } else {
+      console.error('Erreur lors du marquage des notifications comme lues:', result.error);
+    }
+  } catch (err) {
+    console.error('Erreur lors du marquage des notifications comme lues:', err);
   }
 }
 

@@ -1276,12 +1276,23 @@ button {
   box-shadow: 0 16px 60px rgba(0,0,0,0.45);
   max-height: 94vh;         /* occupe presque toute la hauteur */
   overflow-y: auto;
+  overflow-x: hidden;
   position: relative;
+  display: flex;
+  flex-direction: column;
 }
 
+/* Assurer que le contenu du modal peut scroller jusqu'en bas */
 .modal-card.wide {
   max-width: 1200px;
   width: min(1200px, 95vw);
+  padding-bottom: 40px; /* Ajout de padding en bas pour permettre de voir tous les badges */
+}
+
+/* Styles spécifiques pour la liste des badges dans le modal communauté */
+#community-profile-badges-list {
+  margin-bottom: 20px; /* Ajout de marge en bas pour permettre de voir le dernier badge */
+  padding-bottom: 10px; /* Ajout de padding en bas */
 }
 
 .modal-card .close-btn {

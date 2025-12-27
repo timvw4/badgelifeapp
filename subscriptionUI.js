@@ -222,6 +222,12 @@ export async function showSubscribersList(userId) {
     list.innerHTML = '';
     
     followers.forEach(follower => {
+      // Calculer le rang depuis les skill points pour avoir le format correct
+      const rankMeta = window.getRankMeta ? window.getRankMeta(follower.skill_points || 0) : { name: follower.rank || '—', isGold: false, color: 'inherit' };
+      const rankText = window.formatRankText ? window.formatRankText(rankMeta.name) : rankMeta.name;
+      const rankStyle = rankMeta.isGold ? '' : `style="color: ${rankMeta.color || 'inherit'} !important"`;
+      const rankClass = rankMeta.isGold ? 'rank-gold' : 'muted';
+      
       const item = document.createElement('div');
       item.className = 'list-item clickable';
       item.innerHTML = `
@@ -229,7 +235,7 @@ export async function showSubscribersList(userId) {
           <img src="${follower.avatar_url || './icons/logobl.png'}" alt="Avatar" class="logo small avatar">
           <div>
             <strong>${follower.username || 'Utilisateur'}</strong>
-            <p class="muted">${follower.rank || '—'}</p>
+            <p class="${rankClass}" ${rankStyle}>${rankText}</p>
           </div>
         </div>
       `;
@@ -243,9 +249,10 @@ export async function showSubscribersList(userId) {
             userId: follower.id,
             username: follower.username,
             avatar: follower.avatar_url,
-            rank: follower.rank,
+            rank: rankMeta.name,
             badges: 0,
-            mystery: follower.skill_points || 0,
+            skills: follower.skill_points || 0,
+            skillPoints: follower.skill_points || 0,
             isPrivate: false
           });
         }
@@ -285,6 +292,12 @@ export async function showSubscriptionsList(userId) {
     list.innerHTML = '';
     
     subscriptions.forEach(subscription => {
+      // Calculer le rang depuis les skill points pour avoir le format correct
+      const rankMeta = window.getRankMeta ? window.getRankMeta(subscription.skill_points || 0) : { name: subscription.rank || '—', isGold: false, color: 'inherit' };
+      const rankText = window.formatRankText ? window.formatRankText(rankMeta.name) : rankMeta.name;
+      const rankStyle = rankMeta.isGold ? '' : `style="color: ${rankMeta.color || 'inherit'} !important"`;
+      const rankClass = rankMeta.isGold ? 'rank-gold' : 'muted';
+      
       const item = document.createElement('div');
       item.className = 'list-item clickable';
       item.innerHTML = `
@@ -292,7 +305,7 @@ export async function showSubscriptionsList(userId) {
           <img src="${subscription.avatar_url || './icons/logobl.png'}" alt="Avatar" class="logo small avatar">
           <div>
             <strong>${subscription.username || 'Utilisateur'}</strong>
-            <p class="muted">${subscription.rank || '—'}</p>
+            <p class="${rankClass}" ${rankStyle}>${rankText}</p>
           </div>
         </div>
       `;
@@ -306,9 +319,10 @@ export async function showSubscriptionsList(userId) {
             userId: subscription.id,
             username: subscription.username,
             avatar: subscription.avatar_url,
-            rank: subscription.rank,
+            rank: rankMeta.name,
             badges: 0,
-            mystery: subscription.skill_points || 0,
+            skills: subscription.skill_points || 0,
+            skillPoints: subscription.skill_points || 0,
             isPrivate: false
           });
         }
