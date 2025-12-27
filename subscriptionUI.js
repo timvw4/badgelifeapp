@@ -90,6 +90,84 @@ export function renderSubscriptionStats(followersCount, subscriptionsCount) {
 }
 
 /**
+ * Configure l'écoute Realtime pour les abonnements
+ * Met à jour automatiquement les compteurs quand quelqu'un s'abonne/se désabonne
+ * @returns {Function} - Fonction pour arrêter l'écoute
+ */
+export function setupRealtimeSubscriptions() {
+  if (!supabaseClient || !currentUserId) return () => {};
+  
+  const channel = supabaseClient
+    .channel(`subscriptions:${currentUserId}`)
+    .on(
+      'postgres_changes',
+      {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'subscriptions',
+        filter: `following_id=eq.${currentUserId}` // Quand quelqu'un s'abonne à moi
+      },
+      async (payload) => {
+        // Mettre à jour le compteur d'abonnés
+        const followersCount = await Subscriptions.getFollowersCount(supabaseClient, currentUserId);
+        const subscriptionsCount = await Subscriptions.getSubscriptionsCount(supabaseClient, currentUserId);
+        renderSubscriptionStats(followersCount, subscriptionsCount);
+      }
+    )
+    .on(
+      'postgres_changes',
+      {
+        event: 'DELETE',
+        schema: 'public',
+        table: 'subscriptions',
+        filter: `following_id=eq.${currentUserId}` // Quand quelqu'un se désabonne de moi
+      },
+      async (payload) => {
+        // Mettre à jour le compteur d'abonnés
+        const followersCount = await Subscriptions.getFollowersCount(supabaseClient, currentUserId);
+        const subscriptionsCount = await Subscriptions.getSubscriptionsCount(supabaseClient, currentUserId);
+        renderSubscriptionStats(followersCount, subscriptionsCount);
+      }
+    )
+    .on(
+      'postgres_changes',
+      {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'subscriptions',
+        filter: `follower_id=eq.${currentUserId}` // Quand je m'abonne à quelqu'un
+      },
+      async (payload) => {
+        // Mettre à jour le compteur d'abonnements
+        const followersCount = await Subscriptions.getFollowersCount(supabaseClient, currentUserId);
+        const subscriptionsCount = await Subscriptions.getSubscriptionsCount(supabaseClient, currentUserId);
+        renderSubscriptionStats(followersCount, subscriptionsCount);
+      }
+    )
+    .on(
+      'postgres_changes',
+      {
+        event: 'DELETE',
+        schema: 'public',
+        table: 'subscriptions',
+        filter: `follower_id=eq.${currentUserId}` // Quand je me désabonne de quelqu'un
+      },
+      async (payload) => {
+        // Mettre à jour le compteur d'abonnements
+        const followersCount = await Subscriptions.getFollowersCount(supabaseClient, currentUserId);
+        const subscriptionsCount = await Subscriptions.getSubscriptionsCount(supabaseClient, currentUserId);
+        renderSubscriptionStats(followersCount, subscriptionsCount);
+      }
+    )
+    .subscribe();
+  
+  // Retourner une fonction pour se désabonner
+  return () => {
+    supabaseClient.removeChannel(channel);
+  };
+}
+
+/**
  * Affiche les stats et le bouton d'abonnement dans le modal communauté
  * @param {string} profileId - ID du profil affiché
  * @param {boolean} isOwnProfile - Si c'est le propre profil de l'utilisateur
@@ -342,6 +420,7 @@ export const SubscriptionUI = {
   renderSubscriptionStats,
   renderCommunityProfileSubscription,
   showSubscribersList,
-  showSubscriptionsList
+  showSubscriptionsList,
+  setupRealtimeSubscriptions
 };
 

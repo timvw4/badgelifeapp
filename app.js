@@ -1106,6 +1106,11 @@ async function loadAppData() {
       // Configurer l'écoute Realtime pour les notifications
       NotificationUI.setupRealtimeNotificationListener();
     } catch (e) { console.error('Erreur lors du chargement des notifications:', e); }
+    
+    // Configurer l'écoute Realtime pour les abonnements (mise à jour instantanée des compteurs)
+    try {
+      SubscriptionUI.setupRealtimeSubscriptions();
+    } catch (e) { console.error('Erreur lors de la configuration Realtime des abonnements:', e); }
   }
   
   render();
