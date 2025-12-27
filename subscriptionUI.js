@@ -301,6 +301,37 @@ async function handleSubscribeClick(profileId, currentlySubscribed) {
       const mySubscriptionsCount = await Subscriptions.getSubscriptionsCount(supabaseClient, currentUserId);
       renderSubscriptionStats(followersCount, mySubscriptionsCount);
     }
+    
+    // Si on s'est désabonné et que le modal de ce profil est ouvert, recharger les badges
+    // (si le profil est privé, les badges ne seront plus visibles)
+    if (!currentlySubscribed && window.showCommunityProfile) {
+      const modal = document.getElementById('community-profile-modal');
+      if (modal && !modal.classList.contains('hidden')) {
+        const modalUserId = modal.dataset.userId;
+        if (modalUserId === profileId) {
+          // Masquer immédiatement la description de soupçon car on n'est plus mutuellement abonné
+          const suspicionDescription = document.getElementById('community-profile-suspicion-description');
+          if (suspicionDescription) {
+            suspicionDescription.style.display = 'none';
+          }
+          
+          // Récupérer les infos du profil pour vérifier si c'est privé
+          const { data: profileData } = await supabaseClient
+            .from('profiles')
+            .select('is_private')
+            .eq('id', profileId)
+            .single();
+          
+          const isPrivate = profileData?.is_private === true || profileData?.is_private === 'true';
+          
+          // Recharger les badges (sera vide si privé et non abonné)
+          // Cela va aussi masquer tous les boutons de soupçon car isMutual sera false
+          if (window.fetchCommunityUserStats) {
+            await window.fetchCommunityUserStats(profileId, isPrivate);
+          }
+        }
+      }
+    }
   } else {
     alert(result.error || 'Une erreur est survenue.');
   }

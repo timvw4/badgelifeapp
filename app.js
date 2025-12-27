@@ -437,6 +437,7 @@ function cacheElements() {
   els.allBadgesList = document.getElementById('all-badges-list');
   els.communityList = document.getElementById('community-list');
   els.communityProfileModal = document.getElementById('community-profile-modal');
+  els.communityProfileSuspicionDescription = document.getElementById('community-profile-suspicion-description');
   els.communityProfileClose = document.getElementById('community-profile-close');
   els.communityProfileAvatar = document.getElementById('community-profile-avatar');
   els.communityProfileUsername = document.getElementById('community-profile-username');
@@ -4807,6 +4808,25 @@ function showCommunityProfile(data) {
   if (data.userId && state.user) {
     const isOwnProfile = data.userId === state.user.id;
     
+    // Vérifier l'abonnement mutuel pour afficher/masquer la description
+    if (!isOwnProfile) {
+      Subscriptions.isMutuallySubscribed(supabase, state.user.id, data.userId).then(isMutual => {
+        if (els.communityProfileSuspicionDescription) {
+          els.communityProfileSuspicionDescription.style.display = isMutual ? 'block' : 'none';
+        }
+      }).catch(err => {
+        console.error('Erreur lors de la vérification de l\'abonnement mutuel:', err);
+        if (els.communityProfileSuspicionDescription) {
+          els.communityProfileSuspicionDescription.style.display = 'none';
+        }
+      });
+    } else {
+      // Masquer la description si c'est notre propre profil
+      if (els.communityProfileSuspicionDescription) {
+        els.communityProfileSuspicionDescription.style.display = 'none';
+      }
+    }
+    
     Promise.all([
       Subscriptions.getFollowersCount(supabase, data.userId),
       Subscriptions.getSubscriptionsCount(supabase, data.userId),
@@ -4824,6 +4844,11 @@ function showCommunityProfile(data) {
     });
     
     fetchCommunityUserStats(data.userId, isPrivate);
+  } else {
+    // Masquer la description si l'utilisateur n'est pas connecté
+    if (els.communityProfileSuspicionDescription) {
+      els.communityProfileSuspicionDescription.style.display = 'none';
+    }
   }
 }
 
@@ -4832,10 +4857,11 @@ function hideCommunityProfile() {
   els.communityProfileModal.classList.add('hidden');
 }
 
-// Exposer showCommunityProfile, getRankMeta et formatRankText globalement pour les modules d'abonnement
+// Exposer showCommunityProfile, getRankMeta, formatRankText et fetchCommunityUserStats globalement pour les modules d'abonnement
 window.showCommunityProfile = showCommunityProfile;
 window.getRankMeta = getRankMeta;
 window.formatRankText = formatRankText;
+window.fetchCommunityUserStats = fetchCommunityUserStats;
 
 // Fermer modal communauté
 document.addEventListener('click', (e) => {
@@ -4984,21 +5010,31 @@ async function renderCommunityProfileBadges(unlockedBadges, isPrivate = false) {
   if (!isOwnProfile && profileUserId && state.user) {
     isMutual = await Subscriptions.isMutuallySubscribed(supabase, state.user.id, profileUserId);
     
-    // Si abonnement mutuel, charger les données de soupçons pour tous les badges
-    if (isMutual) {
-      for (const row of unlockedBadges || []) {
+    // Si abonnement mutuel, charger toutes les données de soupçons en une seule requête
+    if (isMutual && unlockedBadges && unlockedBadges.length > 0) {
+      const badgeIds = unlockedBadges
+        .filter(row => row.badge_id)
+        .map(row => row.badge_id);
+      
+      // Charger toutes les données de soupçons en une seule requête
+      const allSuspicionData = await BadgeSuspicions.getAllSuspicionData(
+        supabase,
+        state.user.id,
+        profileUserId,
+        badgeIds
+      );
+      
+      // Construire la Map finale avec les données de blocage
+      unlockedBadges.forEach(row => {
         if (row.badge_id) {
-          const [count, hasSuspected] = await Promise.all([
-            BadgeSuspicions.getSuspicionCount(supabase, profileUserId, row.badge_id),
-            BadgeSuspicions.hasSuspected(supabase, state.user.id, profileUserId, row.badge_id)
-          ]);
+          const suspicionInfo = allSuspicionData.get(row.badge_id) || { count: 0, hasSuspected: false };
           suspicionData.set(row.badge_id, {
-            count,
-            hasSuspected,
+            count: suspicionInfo.count,
+            hasSuspected: suspicionInfo.hasSuspected,
             isBlocked: row.is_blocked_by_suspicions === true
           });
         }
-      }
+      });
     }
   }
   
@@ -5112,9 +5148,9 @@ async function renderCommunityProfileBadges(unlockedBadges, isPrivate = false) {
       // Construire le HTML avec les boutons de soupçon si abonnement mutuel
       let suspicionHTML = '';
       if (isMutual && !isOwnProfile) {
-        suspicionHTML = `
-          <div class="suspicion-section" style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border-color, #e5e7eb);">
-            <p class="muted" style="font-size: 0.875rem; margin-bottom: 8px;">Signale les badges de ton ami que tu soupçonnes être faux.</p>
+            suspicionHTML = `
+            <div class="suspicion-section" style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border-color, #e5e7eb);">
+              <p style="font-size: 0.875rem; margin-bottom: 8px; color: white;">Signale ce badge si tu soupçonne ton pote de mentir.</p>
             ${suspicionCount > 0 ? `<p class="muted" style="font-size: 0.875rem; margin-bottom: 8px;">${suspicionCount} soupçon(s)</p>` : ''}
             ${hasSuspected 
               ? `<button class="ghost small suspicion-btn" data-badge-id="${badge.id}" data-action="remove">Retirer soupçon</button>`

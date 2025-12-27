@@ -261,6 +261,70 @@ export async function getSuspiciousUsers(supabase, userId, badgeId) {
   }
 }
 
+/**
+ * Récupérer toutes les données de soupçons pour plusieurs badges en une seule requête
+ * @param {Object} supabase - Client Supabase
+ * @param {string} suspiciousUserId - ID de l'utilisateur qui regarde (pour vérifier s'il a soupçonné)
+ * @param {string} userId - ID de l'utilisateur propriétaire des badges
+ * @param {Array<string>} badgeIds - Liste des IDs des badges
+ * @returns {Promise<Map>} - Map avec badgeId -> { count, hasSuspected }
+ */
+export async function getAllSuspicionData(supabase, suspiciousUserId, userId, badgeIds) {
+  if (!badgeIds || badgeIds.length === 0) {
+    return new Map();
+  }
+  
+  try {
+    // Récupérer tous les soupçons pour ces badges en une seule requête
+    const { data: allSuspicions, error: suspicionsError } = await supabase
+      .from('badge_suspicions')
+      .select('badge_id, suspicious_user_id')
+      .eq('user_id', userId)
+      .in('badge_id', badgeIds);
+    
+    if (suspicionsError) {
+      console.error('Erreur lors de la récupération des soupçons:', suspicionsError);
+      return new Map();
+    }
+    
+    // Créer une Map pour compter les soupçons par badge
+    const suspicionCounts = new Map();
+    const hasSuspectedMap = new Map();
+    
+    // Initialiser tous les badges avec 0 soupçons
+    badgeIds.forEach(badgeId => {
+      suspicionCounts.set(badgeId, 0);
+      hasSuspectedMap.set(badgeId, false);
+    });
+    
+    // Compter les soupçons et vérifier si l'utilisateur actuel a soupçonné
+    (allSuspicions || []).forEach(suspicion => {
+      const badgeId = suspicion.badge_id;
+      const currentCount = suspicionCounts.get(badgeId) || 0;
+      suspicionCounts.set(badgeId, currentCount + 1);
+      
+      // Vérifier si l'utilisateur actuel a soupçonné ce badge
+      if (suspicion.suspicious_user_id === suspiciousUserId) {
+        hasSuspectedMap.set(badgeId, true);
+      }
+    });
+    
+    // Créer la Map finale avec toutes les données
+    const result = new Map();
+    badgeIds.forEach(badgeId => {
+      result.set(badgeId, {
+        count: suspicionCounts.get(badgeId) || 0,
+        hasSuspected: hasSuspectedMap.get(badgeId) || false
+      });
+    });
+    
+    return result;
+  } catch (err) {
+    console.error('Erreur lors de la récupération des données de soupçons:', err);
+    return new Map();
+  }
+}
+
 // Export de toutes les fonctions
 export const BadgeSuspicions = {
   suspectBadge,
@@ -268,6 +332,7 @@ export const BadgeSuspicions = {
   getSuspicionCount,
   hasSuspected,
   checkAndBlockBadge,
-  getSuspiciousUsers
+  getSuspiciousUsers,
+  getAllSuspicionData
 };
 

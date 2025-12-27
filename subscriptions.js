@@ -262,8 +262,8 @@ export async function canViewBadges(supabase, viewerId, profileId, isPrivate) {
     return true;
   }
   
-  // Si le profil est privé, vérifier si l'utilisateur est abonné
-  return await isSubscribed(supabase, viewerId, profileId);
+  // Si le profil est privé, vérifier l'abonnement mutuel (les deux doivent être abonnés l'un à l'autre)
+  return await isMutuallySubscribed(supabase, viewerId, profileId);
 }
 
 // Export de toutes les fonctions sous un objet
