@@ -136,28 +136,15 @@ export function setupRealtimeSubscriptions() {
             console.log('✅ Je m\'abonne à quelqu\'un!');
             shouldUpdate = true;
           }
-        } else if (payload.eventType === 'DELETE') {
-          // Pour DELETE, oldData peut ne contenir que l'ID sans follower_id/following_id
-          // Comme la ligne est déjà supprimée, on ne peut pas récupérer les données
-          // Solution : toujours mettre à jour les compteurs lors d'un DELETE
-          // car on ne peut pas déterminer avec certitude si l'événement nous concerne
-          
-          let followerId = oldData?.follower_id;
-          let followingId = oldData?.following_id;
-          
-          // Si on a les données complètes, vérifier si ça nous concerne
-          if (followerId || followingId) {
-            if (followingId === currentUserId) {
-              console.log('✅ Quelqu\'un se désabonne de moi!');
-              shouldUpdate = true;
-            } else if (followerId === currentUserId) {
-              console.log('✅ Je me désabonne de quelqu\'un!');
-              shouldUpdate = true;
-            }
-          } else {
-            // Pas de données complètes : on met à jour quand même par sécurité
-            // car un DELETE peut nous concerner et on ne peut pas le vérifier
-            console.log('⚠️ DELETE détecté mais oldData incomplet (ID seulement), mise à jour des compteurs par sécurité');
+        } else if (payload.eventType === 'DELETE' && oldData) {
+          // Quelqu'un se désabonne de moi
+          if (oldData.following_id === currentUserId) {
+            console.log('✅ Quelqu\'un se désabonne de moi!');
+            shouldUpdate = true;
+          }
+          // Je me désabonne de quelqu'un
+          else if (oldData.follower_id === currentUserId) {
+            console.log('✅ Je me désabonne de quelqu\'un!');
             shouldUpdate = true;
           }
         }
@@ -166,7 +153,7 @@ export function setupRealtimeSubscriptions() {
           console.log('🔄 Mise à jour des compteurs nécessaire');
           
           // Récupérer directement les valeurs depuis la base de données pour être sûr
-          // On fait ça immédiatement car Supabase Realtime se déclenche après l'insertion/suppression
+          // On fait ça immédiatement car Supabase Realtime se déclenche après l'insertion
           const followersCount = await Subscriptions.getFollowersCount(supabaseClient, currentUserId);
           const subscriptionsCount = await Subscriptions.getSubscriptionsCount(supabaseClient, currentUserId);
           
