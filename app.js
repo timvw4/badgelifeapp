@@ -5150,7 +5150,6 @@ async function renderCommunityProfileBadges(unlockedBadges, isPrivate = false) {
       if (isMutual && !isOwnProfile) {
             suspicionHTML = `
             <div class="suspicion-section" style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border-color, #e5e7eb);">
-              <p style="font-size: 0.875rem; margin-bottom: 8px; color: white;">Signale ce badge si tu soupçonne ton pote de mentir.</p>
             ${suspicionCount > 0 ? `<p class="muted" style="font-size: 0.875rem; margin-bottom: 8px;">${suspicionCount} soupçon(s)</p>` : ''}
             ${hasSuspected 
               ? `<button class="ghost small suspicion-btn" data-badge-id="${badge.id}" data-action="remove">Retirer soupçon</button>`

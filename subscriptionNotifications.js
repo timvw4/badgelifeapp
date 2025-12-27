@@ -124,11 +124,15 @@ export async function getNotifications(supabase, userId) {
         badge_id,
         suspicion_count,
         badge_owner_id,
+        suspicious_user_id,
         created_at,
         badges:badge_id (
           name
         ),
         profiles:badge_owner_id (
+          username
+        ),
+        suspicious_profiles:suspicious_user_id (
           username
         )
       `)
@@ -160,6 +164,8 @@ export async function getNotifications(supabase, userId) {
       badge_name: notif.badges?.name || 'ce badge',
       suspicion_count: notif.suspicion_count,
       badge_owner_id: notif.badge_owner_id || null,
+      suspicious_user_id: notif.suspicious_user_id || null,
+      suspicious_username: notif.suspicious_profiles?.username || null,
       profiles: notif.profiles || null,
       created_at: notif.created_at
     }));
@@ -320,6 +326,60 @@ export function setupRealtimeNotifications(supabase, userId, callback) {
 }
 
 /**
+ * Créer une notification pour un soupçon individuel
+ * @param {Object} supabase - Client Supabase
+ * @param {string} userId - ID de l'utilisateur propriétaire du badge
+ * @param {string} badgeId - ID du badge soupçonné
+ * @param {string} suspiciousUserId - ID de l'utilisateur qui soupçonne
+ * @returns {Promise<{success: boolean, error?: string}>}
+ */
+export async function createIndividualSuspicionNotification(supabase, userId, badgeId, suspiciousUserId) {
+  try {
+    // Récupérer le nom du badge
+    const { data: badgeData, error: badgeError } = await supabase
+      .from('badges')
+      .select('name')
+      .eq('id', badgeId)
+      .single();
+    
+    if (badgeError || !badgeData) {
+      console.error('Erreur lors de la récupération du badge:', badgeError);
+      return { success: false, error: 'Badge introuvable' };
+    }
+    
+    // Compter les soupçons actuels
+    const { count } = await supabase
+      .from('badge_suspicions')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', userId)
+      .eq('badge_id', badgeId);
+    
+    const suspicionCount = (count || 0);
+    
+    // Créer une notification pour le propriétaire du badge
+    // Utiliser suspicion_count = 1 et ne pas mettre badge_owner_id pour indiquer que c'est un soupçon individuel
+    const { error: notificationError } = await supabase
+      .from('suspicion_notifications')
+      .insert({
+        user_id: userId,
+        badge_id: badgeId,
+        suspicion_count: suspicionCount,
+        suspicious_user_id: suspiciousUserId // Stocker l'ID de l'utilisateur qui soupçonne
+      });
+    
+    if (notificationError) {
+      console.error('Erreur lors de la création de la notification de soupçon:', notificationError);
+      return { success: false, error: notificationError.message };
+    }
+    
+    return { success: true };
+  } catch (err) {
+    console.error('Erreur lors de la création de la notification de soupçon:', err);
+    return { success: false, error: err.message };
+  }
+}
+
+/**
  * Créer des notifications pour un badge bloqué par soupçons
  * @param {Object} supabase - Client Supabase
  * @param {string} userId - ID de l'utilisateur propriétaire du badge
@@ -408,6 +468,7 @@ export const SubscriptionNotifications = {
   markAllNotificationsAsRead,
   getUnreadNotificationsCount,
   setupRealtimeNotifications,
-  createSuspicionNotifications
+  createSuspicionNotifications,
+  createIndividualSuspicionNotification
 };
 

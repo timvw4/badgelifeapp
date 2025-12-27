@@ -54,6 +54,10 @@ export async function suspectBadge(supabase, suspiciousUserId, userId, badgeId) 
       return { success: false, error: insertError.message };
     }
     
+    // Créer une notification pour informer le propriétaire du badge qu'il a été soupçonné
+    const { createIndividualSuspicionNotification } = await import('./subscriptionNotifications.js');
+    await createIndividualSuspicionNotification(supabase, userId, badgeId, suspiciousUserId);
+    
     // Compter les soupçons et vérifier si le badge doit être bloqué
     const result = await checkAndBlockBadge(supabase, userId, badgeId);
     

@@ -21,6 +21,7 @@ CREATE TABLE suspicion_notifications (
   badge_id UUID NOT NULL REFERENCES badges(id) ON DELETE CASCADE,
   suspicion_count INTEGER NOT NULL,
   badge_owner_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
+  suspicious_user_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 

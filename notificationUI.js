@@ -121,7 +121,12 @@ function renderNotificationItem(notification) {
     if (notification.badge_owner_id && notification.badge_owner_id !== notification.user_id) {
       const ownerUsername = notification.profiles?.username || 'un utilisateur';
       text = `Le badge "${notification.badge_name}" de ${ownerUsername} a été bloqué suite à vos soupçons.`;
+    } else if (notification.suspicious_user_id && notification.suspicious_username) {
+      // Notification individuelle : quelqu'un a soupçonné ton badge
+      const suspiciousUsername = notification.suspicious_username || 'Un utilisateur';
+      text = `${suspiciousUsername} a soupçonné ton badge "${notification.badge_name}".`;
     } else {
+      // Notification de blocage (≥3 soupçons)
       text = `Trop d'amis te soupçonnent de mentir pour le badge "${notification.badge_name}".`;
     }
     
