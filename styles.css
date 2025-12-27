@@ -499,29 +499,106 @@ p {
   opacity: 0.65;
 }
 
+/* Badges bloqués par soupçons */
+.badge-blocked-by-suspicions {
+  opacity: 0.5;
+  filter: grayscale(0.7);
+  position: relative;
+}
+
+.badge-blocked-by-suspicions .badge-emoji,
+.badge-blocked-by-suspicions .badge-title {
+  opacity: 0.6;
+}
+
+.suspicion-tag {
+  background: #ef4444 !important;
+  color: white !important;
+  font-size: 0.75rem;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-weight: 600;
+}
+
+.suspicion-section {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border, #1f2937);
+}
+
+.suspicion-btn {
+  font-size: 0.875rem;
+  padding: 6px 12px;
+  margin-top: 4px;
+}
+
+.suspicion-btn.small {
+  font-size: 0.75rem;
+  padding: 4px 8px;
+}
+
 /* Tous les badges : mode Pokédex
    Le nom + emoji sont masqués côté JS (❓ / ?????), mais l'utilisateur peut répondre. */
 
 .subtabs {
   display: flex;
   gap: 8px;
-  margin: 12px 0;
+  margin: 12px 0 60px 0;
 }
 
 .subtab-button {
-  padding: 8px 12px;
+  padding: 12px 20px;
   border-radius: 10px;
   border: 1px solid var(--border);
   background: rgba(255,255,255,0.03);
   color: var(--text);
   cursor: pointer;
   transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  font-size: 15px;
+  font-weight: 600;
 }
 
 .subtab-button.active {
   background: linear-gradient(135deg, var(--accent), var(--accent-2));
   color: #0b1120;
   border-color: transparent;
+}
+
+/* Boutons de filtre communauté */
+.community-filter-buttons {
+  display: flex;
+  gap: 8px;
+  margin: 16px 0 8px 0;
+}
+
+.community-filter-btn {
+  padding: 10px 16px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: rgba(255,255,255,0.03);
+  color: var(--text);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.community-filter-btn.active {
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  color: #0b1120;
+  border-color: transparent;
+}
+
+.community-filter-btn:hover:not(.active) {
+  background: rgba(255,255,255,0.06);
+  border-color: rgba(255,255,255,0.15);
+}
+
+.community-filter-description {
+  margin-top: 0;
+  margin-bottom: 16px;
+  font-size: 13px;
+  color: var(--muted);
 }
 
 .ideas-separator {
@@ -775,7 +852,8 @@ button {
 }
 
 .section-description.community {
-  margin-top: 20px;
+  margin-top: 10px;
+  margin-bottom: 25px;
 }
 
 .badge-filters {
@@ -3558,6 +3636,15 @@ button {
 
 .profile-stat.clickable:hover {
   opacity: 0.8;
+}
+
+/* Stats badges et skills sous la description */
+.profile-badge-skill-stats {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+  margin-bottom: 20px;
 }
 
 /* Badge de notification */

@@ -96,7 +96,8 @@ export async function createNotification(supabase, userId, followerId) {
  */
 export async function getNotifications(supabase, userId) {
   try {
-    const { data, error } = await supabase
+    // Récupérer les notifications d'abonnement
+    const { data: subscriptionData, error: subscriptionError } = await supabase
       .from('subscription_notifications')
       .select(`
         id,
@@ -111,18 +112,38 @@ export async function getNotifications(supabase, userId) {
       .order('created_at', { ascending: false })
       .limit(50);
     
-    if (error) {
-      console.error('Erreur lors de la récupération des notifications:', error);
-      return [];
+    if (subscriptionError) {
+      console.error('Erreur lors de la récupération des notifications d\'abonnement:', subscriptionError);
     }
     
-    if (!data || data.length === 0) {
-      return [];
+    // Récupérer les notifications de soupçon
+    const { data: suspicionData, error: suspicionError } = await supabase
+      .from('suspicion_notifications')
+      .select(`
+        id,
+        badge_id,
+        suspicion_count,
+        badge_owner_id,
+        created_at,
+        badges:badge_id (
+          name
+        ),
+        profiles:badge_owner_id (
+          username
+        )
+      `)
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(50);
+    
+    if (suspicionError) {
+      console.error('Erreur lors de la récupération des notifications de soupçon:', suspicionError);
     }
     
-    // Grouper les notifications récentes
-    const notificationsWithProfiles = data.map(notif => ({
+    // Transformer les notifications d'abonnement
+    const subscriptionNotifications = (subscriptionData || []).map(notif => ({
       id: notif.id,
+      type: 'subscription',
       user_id: userId,
       follower_id: notif.follower_id,
       follower_username: notif.profiles?.username || 'Utilisateur',
@@ -130,7 +151,33 @@ export async function getNotifications(supabase, userId) {
       created_at: notif.created_at
     }));
     
-    return groupRecentNotifications(notificationsWithProfiles, 2);
+    // Transformer les notifications de soupçon
+    const suspicionNotifications = (suspicionData || []).map(notif => ({
+      id: notif.id,
+      type: 'suspicion',
+      user_id: userId,
+      badge_id: notif.badge_id,
+      badge_name: notif.badges?.name || 'ce badge',
+      suspicion_count: notif.suspicion_count,
+      badge_owner_id: notif.badge_owner_id || null,
+      profiles: notif.profiles || null,
+      created_at: notif.created_at
+    }));
+    
+    // Fusionner et trier par date
+    const allNotifications = [...subscriptionNotifications, ...suspicionNotifications]
+      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+      .slice(0, 50);
+    
+    // Grouper les notifications d'abonnement récentes
+    const subscriptionOnly = allNotifications.filter(n => n.type === 'subscription');
+    const groupedSubscriptions = groupRecentNotifications(subscriptionOnly, 2);
+    
+    // Ajouter les notifications de soupçon (non groupées)
+    const suspicionOnly = allNotifications.filter(n => n.type === 'suspicion');
+    
+    return [...groupedSubscriptions, ...suspicionOnly]
+      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
   } catch (err) {
     console.error('Erreur lors de la récupération des notifications:', err);
     return [];
@@ -145,13 +192,24 @@ export async function getNotifications(supabase, userId) {
  */
 export async function markNotificationAsRead(supabase, notificationId) {
   try {
-    const { error } = await supabase
+    // Essayer de supprimer depuis subscription_notifications
+    const { error: subError } = await supabase
       .from('subscription_notifications')
       .delete()
       .eq('id', notificationId);
     
-    if (error) {
-      return { success: false, error: error.message };
+    if (!subError) {
+      return { success: true };
+    }
+    
+    // Si pas trouvé, essayer depuis suspicion_notifications
+    const { error: susError } = await supabase
+      .from('suspicion_notifications')
+      .delete()
+      .eq('id', notificationId);
+    
+    if (susError) {
+      return { success: false, error: susError.message };
     }
     
     return { success: true };
@@ -168,13 +226,24 @@ export async function markNotificationAsRead(supabase, notificationId) {
  */
 export async function markAllNotificationsAsRead(supabase, userId) {
   try {
-    const { error } = await supabase
+    // Supprimer les notifications d'abonnement
+    const { error: subError } = await supabase
       .from('subscription_notifications')
       .delete()
       .eq('user_id', userId);
     
-    if (error) {
-      return { success: false, error: error.message };
+    if (subError) {
+      console.error('Erreur lors de la suppression des notifications d\'abonnement:', subError);
+    }
+    
+    // Supprimer les notifications de soupçon
+    const { error: susError } = await supabase
+      .from('suspicion_notifications')
+      .delete()
+      .eq('user_id', userId);
+    
+    if (susError) {
+      return { success: false, error: susError.message };
     }
     
     return { success: true };
@@ -191,17 +260,27 @@ export async function markAllNotificationsAsRead(supabase, userId) {
  */
 export async function getUnreadNotificationsCount(supabase, userId) {
   try {
-    const { count, error } = await supabase
+    // Compter les notifications d'abonnement
+    const { count: subCount, error: subError } = await supabase
       .from('subscription_notifications')
       .select('*', { count: 'exact', head: true })
       .eq('user_id', userId);
     
-    if (error) {
-      console.error('Erreur lors du comptage des notifications:', error);
-      return 0;
+    if (subError) {
+      console.error('Erreur lors du comptage des notifications d\'abonnement:', subError);
     }
     
-    return count || 0;
+    // Compter les notifications de soupçon
+    const { count: susCount, error: susError } = await supabase
+      .from('suspicion_notifications')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', userId);
+    
+    if (susError) {
+      console.error('Erreur lors du comptage des notifications de soupçon:', susError);
+    }
+    
+    return (subCount || 0) + (susCount || 0);
   } catch (err) {
     console.error('Erreur lors du comptage des notifications:', err);
     return 0;
@@ -240,6 +319,87 @@ export function setupRealtimeNotifications(supabase, userId, callback) {
   };
 }
 
+/**
+ * Créer des notifications pour un badge bloqué par soupçons
+ * @param {Object} supabase - Client Supabase
+ * @param {string} userId - ID de l'utilisateur propriétaire du badge
+ * @param {string} badgeId - ID du badge bloqué
+ * @param {number} suspicionCount - Nombre de soupçons
+ * @param {Array<string>} suspiciousUserIds - Liste des IDs des utilisateurs qui ont soupçonné
+ * @returns {Promise<{success: boolean, error?: string}>}
+ */
+export async function createSuspicionNotifications(supabase, userId, badgeId, suspicionCount, suspiciousUserIds) {
+  try {
+    // Récupérer le nom du badge
+    const { data: badgeData, error: badgeError } = await supabase
+      .from('badges')
+      .select('name')
+      .eq('id', badgeId)
+      .single();
+    
+    if (badgeError || !badgeData) {
+      console.error('Erreur lors de la récupération du badge:', badgeError);
+      return { success: false, error: 'Badge introuvable' };
+    }
+    
+    const badgeName = badgeData.name || 'ce badge';
+    
+    // Récupérer le nom d'utilisateur du propriétaire
+    const { data: userData, error: userError } = await supabase
+      .from('profiles')
+      .select('username')
+      .eq('id', userId)
+      .single();
+    
+    if (userError || !userData) {
+      console.error('Erreur lors de la récupération du profil:', userError);
+      return { success: false, error: 'Profil introuvable' };
+    }
+    
+    const username = userData.username || 'Utilisateur';
+    
+    // Créer une notification pour le propriétaire du badge
+    const { error: ownerError } = await supabase
+      .from('suspicion_notifications')
+      .insert({
+        user_id: userId,
+        badge_id: badgeId,
+        suspicion_count: suspicionCount
+      });
+    
+    if (ownerError) {
+      console.error('Erreur lors de la création de la notification pour le propriétaire:', ownerError);
+      return { success: false, error: ownerError.message };
+    }
+    
+    // Créer une notification pour chaque soupçonneur
+    // Note: On stocke le badge_id et suspicion_count, mais le message sera formaté dans notificationUI.js
+    if (suspiciousUserIds && suspiciousUserIds.length > 0) {
+      const notifications = suspiciousUserIds.map(suspiciousUserId => ({
+        user_id: suspiciousUserId,
+        badge_id: badgeId,
+        suspicion_count: suspicionCount,
+        // Stocker l'ID du propriétaire du badge pour le message
+        badge_owner_id: userId
+      }));
+      
+      const { error: suspiciousError } = await supabase
+        .from('suspicion_notifications')
+        .insert(notifications);
+      
+      if (suspiciousError) {
+        console.error('Erreur lors de la création des notifications pour les soupçonneurs:', suspiciousError);
+        // On continue quand même, la notification du propriétaire a été créée
+      }
+    }
+    
+    return { success: true };
+  } catch (err) {
+    console.error('Erreur lors de la création des notifications de soupçon:', err);
+    return { success: false, error: err.message };
+  }
+}
+
 // Export de toutes les fonctions sous un objet
 export const SubscriptionNotifications = {
   createNotification,
@@ -247,6 +407,7 @@ export const SubscriptionNotifications = {
   markNotificationAsRead,
   markAllNotificationsAsRead,
   getUnreadNotificationsCount,
-  setupRealtimeNotifications
+  setupRealtimeNotifications,
+  createSuspicionNotifications
 };
 

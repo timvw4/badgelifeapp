@@ -217,6 +217,33 @@ export async function getFollowers(supabase, userId) {
 }
 
 /**
+ * Vérifier si deux utilisateurs sont mutuellement abonnés
+ * @param {Object} supabase - Client Supabase
+ * @param {string} userId1 - ID du premier utilisateur
+ * @param {string} userId2 - ID du deuxième utilisateur
+ * @returns {Promise<boolean>}
+ */
+export async function isMutuallySubscribed(supabase, userId1, userId2) {
+  // Si c'est le même utilisateur, retourner false
+  if (userId1 === userId2) {
+    return false;
+  }
+  
+  try {
+    // Vérifier que userId1 suit userId2 ET que userId2 suit userId1
+    const [sub1, sub2] = await Promise.all([
+      isSubscribed(supabase, userId1, userId2),
+      isSubscribed(supabase, userId2, userId1)
+    ]);
+    
+    return sub1 && sub2;
+  } catch (err) {
+    console.error('Erreur lors de la vérification d\'abonnement mutuel:', err);
+    return false;
+  }
+}
+
+/**
  * Vérifier si un utilisateur peut voir les badges d'un autre utilisateur
  * @param {Object} supabase - Client Supabase
  * @param {string} viewerId - ID de l'utilisateur qui regarde
@@ -246,6 +273,7 @@ export const Subscriptions = {
   getSubscriptionsCount,
   getFollowersCount,
   isSubscribed,
+  isMutuallySubscribed,
   getSubscriptions,
   getFollowers,
   canViewBadges

@@ -7,6 +7,7 @@ import { parseBadgeAnswer, parseConfig, safeSupabaseSelect, pseudoToEmail, isAdm
 import * as Subscriptions from './subscriptions.js';
 import * as SubscriptionUI from './subscriptionUI.js';
 import * as NotificationUI from './notificationUI.js';
+import * as BadgeSuspicions from './badgeSuspicions.js';
 
 // Nom du bucket d'avatars dans Supabase Storage
 const AVATAR_BUCKET = 'avatars';
@@ -26,6 +27,7 @@ const state = {
   userBadges: new Set(),
   userBadgeLevels: new Map(),
   userBadgeAnswers: new Map(), // stocke la réponse saisie par badge
+  blockedBySuspicions: new Set(), // badges bloqués par soupçons
   attemptedBadges: new Set(),
   wasEverUnlocked: new Set(), // badges qui ont déjà été débloqués au moins une fois
   themesEnabled: false,
@@ -49,6 +51,7 @@ const state = {
   isClaimingTokens: false, // Verrou pour empêcher les appels multiples simultanés à claimDailyTokens
   claimingDay: null, // Jour en cours de réclamation (pour éviter les doubles clics)
   modifyBadgeCost: null, // Coût en jetons de la modification en cours (2 pour joker, 5 pour section amélioration)
+  communityFilterMode: 'all', // 'all' pour tout le monde, 'top' pour top 5
 };
 
 const els = {};
@@ -365,6 +368,7 @@ document.addEventListener('DOMContentLoaded', () => {
   attachSettingsMenuListeners();
   attachCommunitySearchListener();
   attachCommunityTabListeners();
+  attachCommunityFilterListeners();
   attachIdeaListeners();
   attachTokensTooltip();
   // Slider de thèmes initialisé
@@ -446,6 +450,9 @@ function cacheElements() {
   els.communityIdeasPanel = document.getElementById('community-ideas-panel');
   els.communityTabDiscover = document.getElementById('community-tab-discover');
   els.communityTabShare = document.getElementById('community-tab-share');
+  els.communityFilterAll = document.getElementById('community-filter-all');
+  els.communityFilterTop = document.getElementById('community-filter-top');
+  els.communityFilterDescription = document.getElementById('community-filter-description');
   els.ideaForm = document.getElementById('idea-form');
   els.ideaTitle = document.getElementById('idea-title');
   els.ideaEmoji = document.getElementById('idea-emoji');
@@ -826,6 +833,32 @@ function attachCommunitySearchListener() {
   if (!els.communitySearch) return;
   els.communitySearch.addEventListener('input', (e) => {
     renderCommunityFiltered(e.target.value || '');
+  });
+}
+
+function attachCommunityFilterListeners() {
+  if (!els.communityFilterAll || !els.communityFilterTop || !els.communityFilterDescription) return;
+  
+  // Gestionnaire pour le bouton "Tout le monde"
+  els.communityFilterAll.addEventListener('click', () => {
+    state.communityFilterMode = 'all';
+    els.communityFilterAll.classList.add('active');
+    els.communityFilterTop.classList.remove('active');
+    els.communityFilterDescription.textContent = 'Affiche tous les utilisateurs de l\'application.';
+    // Récupérer la valeur de recherche actuelle
+    const searchTerm = els.communitySearch ? els.communitySearch.value || '' : '';
+    renderCommunityFiltered(searchTerm);
+  });
+  
+  // Gestionnaire pour le bouton "Top profil"
+  els.communityFilterTop.addEventListener('click', () => {
+    state.communityFilterMode = 'top';
+    els.communityFilterTop.classList.add('active');
+    els.communityFilterAll.classList.remove('active');
+    els.communityFilterDescription.textContent = 'Affiche les 5 profils avec le rang le plus élevé.';
+    // Récupérer la valeur de recherche actuelle
+    const searchTerm = els.communitySearch ? els.communitySearch.value || '' : '';
+    renderCommunityFiltered(searchTerm);
   });
 }
 
@@ -1518,7 +1551,7 @@ async function fetchUserBadges() {
   return;
   }
 
-  const { data, error } = await supabase.from('user_badges').select('badge_id, level, success, user_answer, was_ever_unlocked').eq('user_id', state.user.id);
+  const { data, error } = await supabase.from('user_badges').select('badge_id, level, success, user_answer, was_ever_unlocked, is_blocked_by_suspicions').eq('user_id', state.user.id);
   if (error) {
     console.error(error);
     return;
@@ -1529,6 +1562,8 @@ async function fetchUserBadges() {
   // Charger les niveaux et réponses pour tous les badges (débloqués et bloqués avec réponses)
   state.userBadgeLevels = new Map(rows.filter(r => r.level !== null).map(r => [r.badge_id, r.level]));
   state.userBadgeAnswers = new Map(rows.filter(r => r.user_answer).map(r => [r.badge_id, r.user_answer]));
+  // Charger les badges bloqués par soupçons
+  state.blockedBySuspicions = new Set(rows.filter(r => r.is_blocked_by_suspicions === true).map(row => row.badge_id));
   // Charger was_ever_unlocked depuis la base de données
   rows.forEach(row => {
     if (row.was_ever_unlocked === true) {
@@ -1542,12 +1577,13 @@ async function fetchUserBadges() {
 
 async function fetchCommunity() {
   // Utiliser safeSupabaseSelect pour gérer automatiquement la colonne is_private optionnelle
+  // Récupérer tous les utilisateurs (sans limite) pour permettre l'affichage de tous ou du top 5
   const { data, error } = await safeSupabaseSelect(
     supabase,
     'profiles',
     'id,username,badge_count,avatar_url,skill_points,rank,is_private',
     'id,username,badge_count,avatar_url,skill_points,rank',
-    (query) => query.order('badge_count', { ascending: false }).limit(50)
+    (query) => query.order('skill_points', { ascending: false })
   );
   
   if (error) {
@@ -2753,12 +2789,15 @@ function showBadgeQuestion(badge) {
 
 // Attache le gestionnaire de clic pour fermer la carte en cliquant en dehors
 function attachBadgeQuestionCloseHandler() {
-  // Supprimer l'ancien gestionnaire s'il existe
+  // Supprimer les anciens gestionnaires s'ils existent
   if (els.badgeQuestionContainer._closeHandler) {
     els.badgeQuestionContainer.removeEventListener('click', els.badgeQuestionContainer._closeHandler);
   }
+  if (els.badgeQuestionOverlay && els.badgeQuestionOverlay._closeHandler) {
+    els.badgeQuestionOverlay.removeEventListener('click', els.badgeQuestionOverlay._closeHandler);
+  }
   
-  // Créer un nouveau gestionnaire
+  // Créer un gestionnaire pour le conteneur
   els.badgeQuestionContainer._closeHandler = (e) => {
     // Ne pas permettre la fermeture si aucune réponse n'a été donnée
     if (!state.badgeQuestionAnswered) {
@@ -2771,6 +2810,23 @@ function attachBadgeQuestionCloseHandler() {
       closeBadgeQuestion();
     }
   };
+  
+  // Créer un gestionnaire pour l'overlay (permet de fermer en cliquant en dehors)
+  if (els.badgeQuestionOverlay) {
+    els.badgeQuestionOverlay._closeHandler = (e) => {
+      // Ne pas permettre la fermeture si aucune réponse n'a été donnée
+      if (!state.badgeQuestionAnswered) {
+        return;
+      }
+      
+      // Si on clique directement sur l'overlay (pas sur le conteneur ou la carte), fermer
+      if (e.target === els.badgeQuestionOverlay) {
+        closeBadgeQuestion();
+      }
+    };
+    
+    els.badgeQuestionOverlay.addEventListener('click', els.badgeQuestionOverlay._closeHandler);
+  }
   
   els.badgeQuestionContainer.addEventListener('click', els.badgeQuestionContainer._closeHandler);
 }
@@ -3186,6 +3242,12 @@ function handleModifyBadgeAnswer(badge) {
     const result = evaluateBadgeAnswer(badge, newAnswer, selectedOptions);
     
     if (result.ok) {
+      // Si le badge était bloqué par soupçons, le débloquer et supprimer tous les soupçons
+      const wasBlocked = state.blockedBySuspicions.has(badge.id);
+      if (wasBlocked) {
+        // Retirer le blocage dans la mise à jour du badge
+        // (sera fait dans les upsert suivants)
+      }
       // Nouvelle réponse correcte
       const newLevel = result.level || null;
       
@@ -3218,14 +3280,31 @@ function handleModifyBadgeAnswer(badge) {
         }, 2500);
       } else if (newLevelIndex > oldLevelIndex || !oldLevel) {
         // Amélioration ! Mettre à jour
+        // Si le badge était bloqué par soupçons, le débloquer et supprimer tous les soupçons
+        const wasBlocked = state.blockedBySuspicions.has(badge.id);
         const { error } = await supabase.from('user_badges').upsert({
           user_id: state.user.id,
           badge_id: badge.id,
           success: true,
           level: newLevel,
           user_answer: newAnswer,
-          was_ever_unlocked: true
+          was_ever_unlocked: true,
+          is_blocked_by_suspicions: false // Débloquer si c'était bloqué
         });
+        
+        if (!error && wasBlocked) {
+          state.blockedBySuspicions.delete(badge.id);
+          
+          // Supprimer tous les soupçons pour ce badge
+          await supabase
+            .from('badge_suspicions')
+            .delete()
+            .eq('user_id', state.user.id)
+            .eq('badge_id', badge.id);
+          
+          // Recompter les badges et skills
+          await updateCounters(true);
+        }
         
         if (!error) {
           // Mettre à jour l'état local avec la nouvelle réponse et le nouveau niveau
@@ -3257,14 +3336,31 @@ function handleModifyBadgeAnswer(badge) {
         }
       } else if (newLevelIndex === oldLevelIndex) {
         // Même niveau : remplacer la réponse
+        // Si le badge était bloqué par soupçons, le débloquer et supprimer tous les soupçons
+        const wasBlocked = state.blockedBySuspicions.has(badge.id);
         const { error } = await supabase.from('user_badges').upsert({
           user_id: state.user.id,
           badge_id: badge.id,
           success: true,
           level: newLevel,
           user_answer: newAnswer,
-          was_ever_unlocked: true
+          was_ever_unlocked: true,
+          is_blocked_by_suspicions: false // Débloquer si c'était bloqué
         });
+        
+        if (!error && wasBlocked) {
+          state.blockedBySuspicions.delete(badge.id);
+          
+          // Supprimer tous les soupçons pour ce badge
+          await supabase
+            .from('badge_suspicions')
+            .delete()
+            .eq('user_id', state.user.id)
+            .eq('badge_id', badge.id);
+          
+          // Recompter les badges et skills
+          await updateCounters(true);
+        }
         
         if (!error) {
           // Mettre à jour l'état local avec la nouvelle réponse (même niveau)
@@ -3450,10 +3546,10 @@ function renderMyBadges() {
   }
 }
 
-  // Filtrer les badges : afficher uniquement les badges débloqués
+  // Filtrer les badges : afficher uniquement les badges débloqués (y compris ceux bloqués par soupçons)
   const visibleBadges = allBadges.filter(badge => {
     const unlocked = state.userBadges.has(badge.id);
-    // Afficher uniquement si débloqué
+    // Afficher uniquement si débloqué (même si bloqué par soupçons)
     return unlocked;
   });
 
@@ -3497,9 +3593,13 @@ function renderMyBadges() {
       const config = parseConfig(badge.answer);
       const isGhost = isGhostBadge(badge);
       const userAnswer = state.userBadgeAnswers.get(badge.id);
+      const isBlocked = state.blockedBySuspicions.has(badge.id);
 
       const card = document.createElement('article');
       card.className = 'card-badge clickable compact all-badge-card my-catalog-card';
+      if (isBlocked) {
+        card.classList.add('badge-blocked-by-suspicions');
+      }
       card.dataset.badgeId = badge.id; // Ajouter un identifiant pour pouvoir scroller vers le badge
 
       // Afficher les badges débloqués normalement
@@ -3519,10 +3619,24 @@ function renderMyBadges() {
       const formattedAnswer = userAnswer ? formatUserAnswer(badge, userAnswer) : null;
       const ghostText = isGhost ? (config?.ghostDisplayText || 'Débloqué automatiquement') : null;
       const displayText = formattedAnswer || ghostText || '';
+      
+      // Ajouter indicateur "Soupçon" si bloqué
+      const suspicionTag = isBlocked ? '<span class="tag suspicion-tag" style="background: #ef4444; color: white; margin-left: 8px;">Soupçon</span>' : '';
+      
+      // Ajouter bouton de modification si bloqué
+      let modifyButtonHTML = '';
+      if (isBlocked && !state.isModifyingBadge) {
+        modifyButtonHTML = `
+          <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border, #1f2937);">
+            <p class="muted" style="font-size: 0.875rem; margin-bottom: 8px;">Ce badge a été bloqué par tes amis. Tu peux modifier ta réponse pour 3 jetons.</p>
+            <button class="ghost small modify-blocked-badge-btn" data-badge-id="${badge.id}" style="font-size: 0.75rem; padding: 4px 8px;">Modifier ma réponse (3 jetons)</button>
+          </div>
+        `;
+      }
 
       card.innerHTML = `
         <div class="row level-row">
-          <span class="tag ${statusClass}">${statusLabel}</span>
+          <span class="tag ${statusClass}">${statusLabel}</span>${suspicionTag}
         </div>
         <div class="badge-compact">
           <div class="badge-emoji">${safeEmoji}</div>
@@ -3530,8 +3644,46 @@ function renderMyBadges() {
         </div>
         <div class="all-badge-details hidden">
           <p class="muted">${displayText || ''}</p>
+          ${modifyButtonHTML}
         </div>
       `;
+      
+      // Gérer le clic sur le bouton de modification pour badges bloqués
+      const modifyBtn = card.querySelector('.modify-blocked-badge-btn');
+      if (modifyBtn) {
+        modifyBtn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          
+          // Vérifier les jetons
+          if (state.tokens < 3) {
+            alert('Tu n\'as pas assez de jetons. Il te faut 3 jetons pour modifier ce badge.');
+            return;
+          }
+          
+          // Confirmer
+          if (!confirm('Modifier ta réponse pour ce badge coûtera 3 jetons. Continuer ?')) {
+            return;
+          }
+          
+          // Débiter les jetons
+          const newTokens = state.tokens - 3;
+          await supabase
+            .from('profiles')
+            .update({ tokens: newTokens })
+            .eq('id', state.user.id);
+          
+          state.tokens = newTokens;
+          state.profile.tokens = newTokens;
+          updateTokensDisplay();
+          
+          // Activer le mode modification avec coût de 3 jetons
+          state.isModifyingBadge = true;
+          state.modifyBadgeCost = 3;
+          
+          // Ouvrir le formulaire de modification
+          handleModifyBadgeAnswer(badge);
+        });
+      }
 
       const details = card.querySelector('.all-badge-details');
       
@@ -3614,9 +3766,20 @@ function renderCommunity(profiles) {
 function renderCommunityFiltered(term = '') {
   const lower = term.trim().toLowerCase();
   const list = state.communityProfiles || [];
-  const filtered = lower
+  let filtered = lower
     ? list.filter(p => (p.username || '').toLowerCase().includes(lower))
     : list;
+  
+  // Appliquer le mode de filtrage
+  if (state.communityFilterMode === 'top') {
+    // Mode "Top profil" : limiter à 5 utilisateurs avec le rang le plus élevé
+    // Trier par skill_points pour s'assurer qu'on garde les meilleurs
+    filtered = filtered
+      .sort((a, b) => (b.skill_points || 0) - (a.skill_points || 0))
+      .slice(0, 5);
+  }
+  // Mode "Tout le monde" : afficher tous les utilisateurs (pas de limitation)
+  
   renderCommunity(filtered);
 }
 
@@ -4633,6 +4796,10 @@ function showCommunityProfile(data) {
   }
   els.communityProfileBadges.textContent = `${data.badges || 0} badge(s)`;
   els.communityProfileMystery.textContent = `${data.skills || 0} skill(s)`;
+  // Stocker l'userId dans le modal pour y accéder dans renderCommunityProfileBadges
+  if (els.communityProfileModal && data.userId) {
+    els.communityProfileModal.dataset.userId = data.userId;
+  }
   renderCommunityProfileBadges([], isPrivate);
   els.communityProfileModal.classList.remove('hidden');
   
@@ -4687,13 +4854,14 @@ async function fetchCommunityUserStats(userId, isPrivate = false) {
   try {
     const rows = await fetchPublicUserBadges(userId, isPrivate);
     if (!rows || !rows.length) {
-      renderCommunityProfileBadges([], isPrivate);
+      renderCommunityProfileBadges([], isPrivate).catch(err => console.error('Erreur renderCommunityProfileBadges:', err));
       return;
     }
     let unlocked = rows.filter(r => r.success !== false);
     
     // Calculer les points de skills et créer un Set des badges débloqués
     // (nécessaire pour vérifier les conditions des badges fantômes)
+    // Exclure les badges bloqués par soupçons du comptage
     let totalSkills = 0;
     const badgesWithLevels = new Set();
     const userBadgeIds = new Set();
@@ -4701,16 +4869,19 @@ async function fetchCommunityUserStats(userId, isPrivate = false) {
     unlocked.forEach(row => {
       if (row.badge_id) {
         userBadgeIds.add(row.badge_id);
-        if (row.level) {
-          totalSkills += getSkillPointsForBadge(row.badge_id, row.level);
-          badgesWithLevels.add(row.badge_id);
+        // Ne pas compter les skills des badges bloqués par soupçons
+        if (!row.is_blocked_by_suspicions) {
+          if (row.level) {
+            totalSkills += getSkillPointsForBadge(row.badge_id, row.level);
+            badgesWithLevels.add(row.badge_id);
+          }
         }
       }
     });
     
-    // Ajouter les points pour les badges débloqués sans niveau
+    // Ajouter les points pour les badges débloqués sans niveau (sauf ceux bloqués)
     unlocked.forEach(row => {
-      if (row.badge_id && !badgesWithLevels.has(row.badge_id)) {
+      if (row.badge_id && !badgesWithLevels.has(row.badge_id) && !row.is_blocked_by_suspicions) {
         const badge = state.badges.find(b => b.id === row.badge_id);
         if (badge) {
           totalSkills += calculatePointsForBadgeWithoutLevel(badge, row.badge_id, row.user_answer);
@@ -4731,6 +4902,7 @@ async function fetchCommunityUserStats(userId, isPrivate = false) {
     });
     
     // Recalculer les points et le nombre de badges après filtrage
+    // Exclure les badges bloqués par soupçons du comptage
     totalSkills = 0;
     badgesWithLevels.clear();
     const filteredBadgeIds = new Set();
@@ -4738,15 +4910,18 @@ async function fetchCommunityUserStats(userId, isPrivate = false) {
     unlocked.forEach(row => {
       if (row.badge_id) {
         filteredBadgeIds.add(row.badge_id);
-        if (row.level) {
-          totalSkills += getSkillPointsForBadge(row.badge_id, row.level);
-          badgesWithLevels.add(row.badge_id);
+        // Ne pas compter les skills des badges bloqués par soupçons
+        if (!row.is_blocked_by_suspicions) {
+          if (row.level) {
+            totalSkills += getSkillPointsForBadge(row.badge_id, row.level);
+            badgesWithLevels.add(row.badge_id);
+          }
         }
       }
     });
     
     unlocked.forEach(row => {
-      if (row.badge_id && !badgesWithLevels.has(row.badge_id)) {
+      if (row.badge_id && !badgesWithLevels.has(row.badge_id) && !row.is_blocked_by_suspicions) {
         const badge = state.badges.find(b => b.id === row.badge_id);
         if (badge) {
           totalSkills += calculatePointsForBadgeWithoutLevel(badge, row.badge_id, row.user_answer);
@@ -4754,12 +4929,13 @@ async function fetchCommunityUserStats(userId, isPrivate = false) {
       }
     });
     
-    const badgeCount = unlocked.length;
+    // Compter uniquement les badges non bloqués par soupçons
+    const badgeCount = unlocked.filter(r => !r.is_blocked_by_suspicions).length;
     els.communityProfileBadges.textContent = `${badgeCount} badge(s)`;
     els.communityProfileMystery.textContent = `${totalSkills} skill(s)`;
-    renderCommunityProfileBadges(unlocked, isPrivate);
+    renderCommunityProfileBadges(unlocked, isPrivate).catch(err => console.error('Erreur renderCommunityProfileBadges:', err));
   } catch (_) {
-    renderCommunityProfileBadges([], isPrivate);
+    renderCommunityProfileBadges([], isPrivate).catch(err => console.error('Erreur renderCommunityProfileBadges:', err));
   }
 }
 
@@ -4778,9 +4954,10 @@ async function fetchPublicUserBadges(userId, isPrivate = false) {
   }
   
   // Essaye d'abord une vue publique, sinon retombe sur user_badges
+  // Inclure is_blocked_by_suspicions pour savoir si un badge est bloqué
   const sources = [
-    { table: 'public_user_badges_min', fields: 'badge_id,level,success,user_answer' },
-    { table: 'user_badges', fields: 'badge_id,level,success,user_answer' },
+    { table: 'public_user_badges_min', fields: 'badge_id,level,success,user_answer,is_blocked_by_suspicions' },
+    { table: 'user_badges', fields: 'badge_id,level,success,user_answer,is_blocked_by_suspicions' },
   ];
   for (const src of sources) {
     const { data, error } = await supabase
@@ -4793,14 +4970,44 @@ async function fetchPublicUserBadges(userId, isPrivate = false) {
 }
 
 // Rendre les badges du profil communautaire comme dans "Mes badges"
-function renderCommunityProfileBadges(unlockedBadges, isPrivate = false) {
+async function renderCommunityProfileBadges(unlockedBadges, isPrivate = false) {
   if (!els.communityProfileBadgesList) return;
+  
+  // Récupérer l'userId du profil affiché depuis le modal
+  const profileUserId = els.communityProfileModal?.dataset?.userId;
+  const isOwnProfile = profileUserId === state.user?.id;
+  
+  // Vérifier l'abonnement mutuel si ce n'est pas notre propre profil
+  let isMutual = false;
+  let suspicionData = new Map(); // badgeId -> { count, hasSuspected, isBlocked }
+  
+  if (!isOwnProfile && profileUserId && state.user) {
+    isMutual = await Subscriptions.isMutuallySubscribed(supabase, state.user.id, profileUserId);
+    
+    // Si abonnement mutuel, charger les données de soupçons pour tous les badges
+    if (isMutual) {
+      for (const row of unlockedBadges || []) {
+        if (row.badge_id) {
+          const [count, hasSuspected] = await Promise.all([
+            BadgeSuspicions.getSuspicionCount(supabase, profileUserId, row.badge_id),
+            BadgeSuspicions.hasSuspected(supabase, state.user.id, profileUserId, row.badge_id)
+          ]);
+          suspicionData.set(row.badge_id, {
+            count,
+            hasSuspected,
+            isBlocked: row.is_blocked_by_suspicions === true
+          });
+        }
+      }
+    }
+  }
   
   // Créer des Maps et Sets pour les badges de l'utilisateur communautaire
   const communityUserBadges = new Set();
   const communityUserBadgeLevels = new Map();
   const communityUserBadgeAnswers = new Map();
   const communityWasEverUnlocked = new Set();
+  const communityBlockedBadges = new Set();
   
   if (unlockedBadges && unlockedBadges.length > 0) {
     unlockedBadges.forEach(row => {
@@ -4815,6 +5022,10 @@ function renderCommunityProfileBadges(unlockedBadges, isPrivate = false) {
         // Si le badge est débloqué (success !== false), il a été débloqué au moins une fois
         if (row.success !== false) {
           communityWasEverUnlocked.add(row.badge_id);
+        }
+        // Marquer les badges bloqués par soupçons
+        if (row.is_blocked_by_suspicions === true) {
+          communityBlockedBadges.add(row.badge_id);
         }
       }
     });
@@ -4886,10 +5097,39 @@ function renderCommunityProfileBadges(unlockedBadges, isPrivate = false) {
       const formattedAnswer = userAnswer ? formatUserAnswer(badge, userAnswer) : null;
       const ghostText = isGhostBadge(badge) ? (config?.ghostDisplayText || 'Débloqué automatiquement') : null;
       const displayText = formattedAnswer || ghostText || '';
+      
+      // Vérifier si le badge est bloqué par soupçons
+      const isBlocked = communityBlockedBadges.has(badge.id);
+      const suspicionInfo = suspicionData.get(badge.id);
+      const suspicionCount = suspicionInfo?.count || 0;
+      const hasSuspected = suspicionInfo?.hasSuspected || false;
+      
+      // Ajouter classe pour badge bloqué
+      if (isBlocked) {
+        card.classList.add('badge-blocked-by-suspicions');
+      }
+      
+      // Construire le HTML avec les boutons de soupçon si abonnement mutuel
+      let suspicionHTML = '';
+      if (isMutual && !isOwnProfile) {
+        suspicionHTML = `
+          <div class="suspicion-section" style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border-color, #e5e7eb);">
+            <p class="muted" style="font-size: 0.875rem; margin-bottom: 8px;">Signale les badges de ton ami que tu soupçonnes être faux.</p>
+            ${suspicionCount > 0 ? `<p class="muted" style="font-size: 0.875rem; margin-bottom: 8px;">${suspicionCount} soupçon(s)</p>` : ''}
+            ${hasSuspected 
+              ? `<button class="ghost small suspicion-btn" data-badge-id="${badge.id}" data-action="remove">Retirer soupçon</button>`
+              : `<button class="ghost small suspicion-btn" data-badge-id="${badge.id}" data-action="suspect">Soupçonner</button>`
+            }
+          </div>
+        `;
+      }
+      
+      // Ajouter indicateur "Soupçon" si bloqué
+      const suspicionTag = isBlocked ? '<span class="tag suspicion-tag" style="background: #ef4444; color: white; margin-left: 8px;">Soupçon</span>' : '';
 
       card.innerHTML = `
         <div class="row level-row">
-          <span class="tag ${statusClass}">${statusLabel}</span>
+          <span class="tag ${statusClass}">${statusLabel}</span>${suspicionTag}
         </div>
         <div class="badge-compact">
           <div class="badge-emoji">${safeEmoji}</div>
@@ -4897,13 +5137,45 @@ function renderCommunityProfileBadges(unlockedBadges, isPrivate = false) {
         </div>
         <div class="all-badge-details hidden">
           <p class="muted">${displayText || ''}</p>
+          ${suspicionHTML}
         </div>
       `;
 
       const details = card.querySelector('.all-badge-details');
+      
+      // Gérer les clics sur les boutons de soupçon
+      const suspicionBtn = card.querySelector('.suspicion-btn');
+      if (suspicionBtn && !isOwnProfile && profileUserId) {
+        suspicionBtn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          const badgeId = e.target.dataset.badgeId;
+          const action = e.target.dataset.action;
+          
+          if (action === 'suspect') {
+            const result = await BadgeSuspicions.suspectBadge(supabase, state.user.id, profileUserId, badgeId);
+            if (result.success) {
+              // Recharger les badges pour mettre à jour l'affichage
+              const rows = await fetchPublicUserBadges(profileUserId, isPrivate);
+              await renderCommunityProfileBadges(rows, isPrivate);
+            } else {
+              alert(result.error || 'Erreur lors du soupçon.');
+            }
+          } else if (action === 'remove') {
+            const result = await BadgeSuspicions.removeSuspicion(supabase, state.user.id, profileUserId, badgeId);
+            if (result.success) {
+              // Recharger les badges pour mettre à jour l'affichage
+              const rows = await fetchPublicUserBadges(profileUserId, isPrivate);
+              await renderCommunityProfileBadges(rows, isPrivate);
+            } else {
+              alert(result.error || 'Erreur lors du retrait du soupçon.');
+            }
+          }
+        });
+      }
+      
       card.addEventListener('click', (e) => {
         const tag = e.target.tagName.toLowerCase();
-        if (tag === 'input' || tag === 'button' || e.target.closest('form')) return;
+        if (tag === 'input' || tag === 'button' || e.target.closest('form') || e.target.closest('.suspicion-section')) return;
         
         // Fermer tous les autres badges
         const allCards = els.communityProfileBadgesList.querySelectorAll('.my-catalog-card');
@@ -4999,8 +5271,16 @@ async function updateCounters(syncProfile = false) {
     }
   });
   
-  // Recalculer les points en excluant les badges fantômes rebloqués
-  const badgeCount = validBadgeIds.size;
+  // Exclure les badges bloqués par soupçons du comptage
+  const validBadgeIdsWithoutBlocked = new Set();
+  validBadgeIds.forEach(badgeId => {
+    if (!state.blockedBySuspicions.has(badgeId)) {
+      validBadgeIdsWithoutBlocked.add(badgeId);
+    }
+  });
+  
+  // Recalculer les points en excluant les badges fantômes rebloqués et les badges bloqués par soupçons
+  const badgeCount = validBadgeIdsWithoutBlocked.size;
   
   // Calculer le nombre total de badges :
   // - Tous les badges normaux (non-fantômes) comptent toujours
@@ -5021,15 +5301,16 @@ async function updateCounters(syncProfile = false) {
   
   let totalSkillPoints = 0;
   
-  // Compter les points pour les badges avec niveaux
+  // Compter les points pour les badges avec niveaux (exclure les badges bloqués par soupçons)
   state.userBadgeLevels.forEach((lvl, badgeId) => {
-    if (validBadgeIds.has(badgeId)) {
+    if (validBadgeIdsWithoutBlocked.has(badgeId)) {
       totalSkillPoints += getSkillPointsForBadge(badgeId, lvl);
     }
   });
   
   // Compter les points pour les badges débloqués sans niveau (text, boolean, etc.)
-  validBadgeIds.forEach(badgeId => {
+  // Exclure les badges bloqués par soupçons
+  validBadgeIdsWithoutBlocked.forEach(badgeId => {
     // Si le badge n'a pas de niveau défini, c'est un badge sans niveau
     if (!state.userBadgeLevels.has(badgeId)) {
       const badge = getBadgeById(badgeId);

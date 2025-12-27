@@ -113,6 +113,33 @@ function renderNotificationItem(notification) {
   const item = document.createElement('div');
   item.className = 'list-item clickable notification-item';
   
+  // Gérer les notifications de soupçon différemment
+  if (notification.type === 'suspicion') {
+    // Si badge_owner_id existe et est différent de user_id, c'est une notification pour un soupçonneur
+    // Sinon, c'est une notification pour le propriétaire du badge
+    let text;
+    if (notification.badge_owner_id && notification.badge_owner_id !== notification.user_id) {
+      const ownerUsername = notification.profiles?.username || 'un utilisateur';
+      text = `Le badge "${notification.badge_name}" de ${ownerUsername} a été bloqué suite à vos soupçons.`;
+    } else {
+      text = `Trop d'amis te soupçonnent de mentir pour le badge "${notification.badge_name}".`;
+    }
+    
+    item.innerHTML = `
+      <div class="notification-content">
+        <div class="notification-text">
+          <p style="margin: 0; font-size: 14px;">${text}</p>
+        </div>
+      </div>
+    `;
+    
+    item.addEventListener('click', () => {
+      handleSuspicionNotificationClick(notification);
+    });
+    
+    return item;
+  }
+  
   const text = formatNotificationText(notification);
   
   // Si c'est une notification groupée, afficher plusieurs avatars
@@ -138,6 +165,29 @@ function renderNotificationItem(notification) {
   });
   
   return item;
+}
+
+/**
+ * Gère le clic sur une notification de soupçon
+ * @param {Object} notification - Notification de soupçon cliquée
+ */
+async function handleSuspicionNotificationClick(notification) {
+  // Marquer la notification comme lue
+  if (notification.id) {
+    await SubscriptionNotifications.markNotificationAsRead(supabaseClient, notification.id);
+  }
+  
+  // Fermer le modal de notifications
+  const modal = document.getElementById('notifications-modal');
+  if (modal) {
+    modal.classList.add('hidden');
+  }
+  
+  // Mettre à jour le badge de notification
+  await refreshNotificationBadge();
+  
+  // L'utilisateur peut modifier sa réponse depuis son propre profil
+  // On ne fait rien de spécial ici, l'utilisateur devra aller dans son profil
 }
 
 /**

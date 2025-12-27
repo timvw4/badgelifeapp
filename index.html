@@ -136,14 +136,6 @@
             </div>
           </div>
           <div class="profile-section-stats">
-            <div class="profile-stat">
-              <span id="profile-section-badge-count">0<span class="badge-total">/ 0</span></span>
-              <small>badges</small>
-            </div>
-            <div class="profile-stat">
-              <span id="profile-section-skill-count">0</span>
-              <small>skills</small>
-            </div>
             <div class="profile-stat clickable" id="profile-followers-stat">
               <span id="profile-section-followers-count">0</span>
               <small>abonnés</small>
@@ -157,6 +149,16 @@
         </div>
         <h3>Ma collection</h3>
         <p class="muted section-description first">Découvre tous les badges que tu as débloqués.</p>
+        <div class="profile-badge-skill-stats">
+          <div class="profile-stat">
+            <span id="profile-section-badge-count">0<span class="badge-total">/ 0</span></span>
+            <small>badges</small>
+          </div>
+          <div class="profile-stat">
+            <span id="profile-section-skill-count">0</span>
+            <small>skills</small>
+          </div>
+        </div>
         <div id="my-badges-list" class="grid badges-grid"></div>
       </section>
 
@@ -216,7 +218,7 @@
               <span class="stat-label">Niveaux débloqués / Max</span>
             </div>
             <div class="stat-item suggestions-item">
-              <span class="stat-label">Badges à améliorer :</span>
+              <span class="stat-label">Suggestions de badges à améliorer :</span>
               <div class="suggestions" id="badge-suggestions">
                 <!-- Suggestions des 3 badges (cliquables) -->
               </div>
@@ -245,15 +247,20 @@
 
       <section id="community" class="tab-content hidden">
         <h2 class="section-title">Communauté</h2>
+        <p class="muted section-description community">Partage tes badges avec tes potes et découvre les types de vie des autres !</p>
         <div class="subtabs">
           <button id="community-tab-discover" class="subtab-button active" data-community-tab="discover">Découvrir</button>
           <button id="community-tab-share" class="subtab-button" data-community-tab="share">Partager</button>
         </div>
         <div id="community-profiles-panel" class="community-subtab-content">
-          <p class="muted section-description community">Partage tes badges avec tes potes et découvre les types de vie des autres !</p>
           <div class="search-bar">
-            <input id="community-search" type="search" placeholder="Rechercher un utilisateur..." aria-label="Rechercher un utilisateur">
+            <input id="community-search" type="search" placeholder="Recherche un utilisateur..." aria-label="Rechercher un utilisateur">
           </div>
+          <div class="community-filter-buttons">
+            <button id="community-filter-all" class="community-filter-btn active">Tout le monde</button>
+            <button id="community-filter-top" class="community-filter-btn">Top profil</button>
+          </div>
+          <p id="community-filter-description" class="muted community-filter-description">Affiche tous les utilisateurs de l'application.</p>
           <div id="community-list" class="list"></div>
         </div>
         <div id="community-ideas-panel" class="community-subtab-content hidden">
