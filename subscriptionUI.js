@@ -150,37 +150,34 @@ export function setupRealtimeSubscriptions() {
         }
         
         if (shouldUpdate) {
-          // Mettre à jour les compteurs immédiatement
-          const currentFollowers = parseInt(document.getElementById('profile-section-followers-count')?.textContent || '0', 10);
-          const currentSubscriptions = parseInt(document.getElementById('profile-section-subscriptions-count')?.textContent || '0', 10);
+          console.log('🔄 Mise à jour des compteurs nécessaire');
           
-          let newFollowersCount = currentFollowers;
-          let newSubscriptionsCount = currentSubscriptions;
+          // Récupérer directement les valeurs depuis la base de données pour être sûr
+          // On fait ça immédiatement car Supabase Realtime se déclenche après l'insertion
+          const followersCount = await Subscriptions.getFollowersCount(supabaseClient, currentUserId);
+          const subscriptionsCount = await Subscriptions.getSubscriptionsCount(supabaseClient, currentUserId);
           
-          if (payload.eventType === 'INSERT' && newData) {
-            if (newData.following_id === currentUserId) {
-              newFollowersCount = currentFollowers + 1;
-            } else if (newData.follower_id === currentUserId) {
-              newSubscriptionsCount = currentSubscriptions + 1;
-            }
-          } else if (payload.eventType === 'DELETE' && oldData) {
-            if (oldData.following_id === currentUserId) {
-              newFollowersCount = Math.max(0, currentFollowers - 1);
-            } else if (oldData.follower_id === currentUserId) {
-              newSubscriptionsCount = Math.max(0, currentSubscriptions - 1);
-            }
+          console.log('📊 Compteurs récupérés depuis la base - abonnés:', followersCount, 'abonnements:', subscriptionsCount);
+          
+          // Vérifier que les éléments DOM existent
+          const followersEl = document.getElementById('profile-section-followers-count');
+          const subscriptionsEl = document.getElementById('profile-section-subscriptions-count');
+          
+          console.log('🔍 Éléments DOM - abonnés trouvé:', !!followersEl, 'abonnements trouvé:', !!subscriptionsEl);
+          
+          if (followersEl || subscriptionsEl) {
+            renderSubscriptionStats(followersCount, subscriptionsCount);
+            console.log('✅ Compteurs mis à jour dans le DOM');
+          } else {
+            console.warn('⚠️ Éléments DOM non trouvés, réessai dans 100ms...');
+            // Réessayer après un court délai au cas où les éléments ne seraient pas encore chargés
+            setTimeout(async () => {
+              const retryFollowersCount = await Subscriptions.getFollowersCount(supabaseClient, currentUserId);
+              const retrySubscriptionsCount = await Subscriptions.getSubscriptionsCount(supabaseClient, currentUserId);
+              renderSubscriptionStats(retryFollowersCount, retrySubscriptionsCount);
+              console.log('✅ Compteurs mis à jour après réessai');
+            }, 100);
           }
-          
-          console.log('Mise à jour immédiate - abonnés:', newFollowersCount, 'abonnements:', newSubscriptionsCount);
-          renderSubscriptionStats(newFollowersCount, newSubscriptionsCount);
-          
-          // Vérifier aussi après un court délai pour s'assurer de la cohérence avec la base
-          setTimeout(async () => {
-            const actualFollowersCount = await Subscriptions.getFollowersCount(supabaseClient, currentUserId);
-            const actualSubscriptionsCount = await Subscriptions.getSubscriptionsCount(supabaseClient, currentUserId);
-            console.log('Vérification après délai - abonnés:', actualFollowersCount, 'abonnements:', actualSubscriptionsCount);
-            renderSubscriptionStats(actualFollowersCount, actualSubscriptionsCount);
-          }, 500);
         } else {
           console.log('⚠️ Événement ne nous concerne pas, ignoré');
         }
