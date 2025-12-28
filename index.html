@@ -110,11 +110,13 @@
         <div class="section-title-with-settings">
           <h2 class="section-title">Profil</h2>
           <div class="settings-wrapper">
-            <button id="notifications-btn" class="ghost icon-btn notifications-btn" aria-label="Notifications" style="position: relative;">
-              🔔
-              <span id="notifications-dot" class="notifications-dot hidden"></span>
-            </button>
-            <button id="profile-settings-toggle" class="ghost icon-btn profile-settings-btn" aria-label="Réglages">⚙️</button>
+            <div class="settings-buttons-row">
+              <button id="notifications-btn" class="ghost icon-btn notifications-btn" aria-label="Notifications" style="position: relative;">
+                🔔
+                <span id="notification-indicator" class="notification-indicator hidden"></span>
+              </button>
+              <button id="profile-settings-toggle" class="ghost icon-btn profile-settings-btn" aria-label="Réglages">⚙️</button>
+            </div>
             <div id="profile-settings-menu" class="settings-menu hidden">
               <a id="profile-admin-link" class="ghost full-width hidden" href="./admin.html">Admin</a>
               <button id="profile-logout-btn" class="ghost full-width">Se déconnecter</button>

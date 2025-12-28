@@ -295,78 +295,51 @@ export async function getUnreadNotificationsCount(supabase, userId) {
 
 /**
  * Configurer l'écoute Realtime pour les notifications
- * Écoute à la fois les notifications d'abonnement et de soupçon
- * Filtre côté client pour éviter les problèmes avec RLS
+ * Écoute les notifications d'abonnement ET de soupçon (INSERT et DELETE)
  * @param {Object} supabase - Client Supabase
  * @param {string} userId - ID de l'utilisateur
- * @param {Function} callback - Fonction appelée quand une nouvelle notification arrive
+ * @param {Function} callback - Fonction appelée quand une notification change (INSERT ou DELETE)
  * @returns {Function} - Fonction pour arrêter l'écoute
  */
 export function setupRealtimeNotifications(supabase, userId, callback) {
-  console.log('🔔 Configuration Realtime pour les notifications, userId:', userId);
-  
   const channel = supabase
     .channel(`notifications:${userId}`)
-    // Écouter tous les événements sur subscription_notifications et filtrer côté client
+    // Écouter les INSERT et DELETE sur les notifications d'abonnement
     .on(
       'postgres_changes',
       {
-        event: 'INSERT',
+        event: '*', // Écouter INSERT et DELETE
         schema: 'public',
-        table: 'subscription_notifications'
-        // Pas de filter ici, on filtre côté client pour éviter les problèmes RLS
+        table: 'subscription_notifications',
+        filter: `user_id=eq.${userId}`
       },
       (payload) => {
-        console.log('🔔 Événement détecté sur subscription_notifications:', payload);
-        // Filtrer côté client : seulement si c'est pour cet utilisateur
-        if (payload.new && payload.new.user_id === userId) {
-          console.log('🔔 Nouvelle notification d\'abonnement reçue pour cet utilisateur:', payload.new);
-          if (callback) {
-            callback(payload.new);
-          }
-        } else {
-          console.log('🔔 Notification ignorée (pas pour cet utilisateur)');
+        if (callback) {
+          // Pour DELETE, payload.new est null, on passe l'événement complet
+          callback(payload);
         }
       }
     )
-    // Écouter tous les événements sur suspicion_notifications et filtrer côté client
+    // Écouter les INSERT et DELETE sur les notifications de soupçon
     .on(
       'postgres_changes',
       {
-        event: 'INSERT',
+        event: '*', // Écouter INSERT et DELETE
         schema: 'public',
-        table: 'suspicion_notifications'
-        // Pas de filter ici, on filtre côté client pour éviter les problèmes RLS
+        table: 'suspicion_notifications',
+        filter: `user_id=eq.${userId}`
       },
       (payload) => {
-        console.log('🔔 Événement détecté sur suspicion_notifications:', payload);
-        // Filtrer côté client : seulement si c'est pour cet utilisateur
-        if (payload.new && payload.new.user_id === userId) {
-          console.log('🔔 Nouvelle notification de soupçon reçue pour cet utilisateur:', payload.new);
-          if (callback) {
-            callback(payload.new);
-          }
-        } else {
-          console.log('🔔 Notification ignorée (pas pour cet utilisateur)');
+        if (callback) {
+          // Pour DELETE, payload.new est null, on passe l'événement complet
+          callback(payload);
         }
       }
     )
-    .subscribe((status) => {
-      console.log('🔔 Statut de la subscription Realtime:', status);
-      if (status === 'SUBSCRIBED') {
-        console.log('✅ Écoute Realtime activée pour les notifications');
-      } else if (status === 'CHANNEL_ERROR') {
-        console.error('❌ Erreur lors de la connexion Realtime pour les notifications');
-      } else if (status === 'TIMED_OUT') {
-        console.error('❌ Timeout lors de la connexion Realtime pour les notifications');
-      } else if (status === 'CLOSED') {
-        console.warn('⚠️ Canal Realtime fermé pour les notifications');
-      }
-    });
+    .subscribe();
   
   // Retourner une fonction pour se désabonner
   return () => {
-    console.log('🔕 Arrêt de l\'écoute Realtime pour les notifications');
     supabase.removeChannel(channel);
   };
 }

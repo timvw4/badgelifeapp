@@ -152,32 +152,37 @@ export function setupRealtimeSubscriptions() {
         if (shouldUpdate) {
           console.log('🔄 Mise à jour des compteurs nécessaire');
           
-          // Récupérer directement les valeurs depuis la base de données pour être sûr
-          // On fait ça immédiatement car Supabase Realtime se déclenche après l'insertion
-          const followersCount = await Subscriptions.getFollowersCount(supabaseClient, currentUserId);
-          const subscriptionsCount = await Subscriptions.getSubscriptionsCount(supabaseClient, currentUserId);
+          // Pour les DELETE, attendre un petit délai pour s'assurer que la base de données est à jour
+          // Supabase Realtime peut se déclencher avant que la transaction soit complètement finalisée
+          const delay = payload.eventType === 'DELETE' ? 100 : 0;
           
-          console.log('📊 Compteurs récupérés depuis la base - abonnés:', followersCount, 'abonnements:', subscriptionsCount);
-          
-          // Vérifier que les éléments DOM existent
-          const followersEl = document.getElementById('profile-section-followers-count');
-          const subscriptionsEl = document.getElementById('profile-section-subscriptions-count');
-          
-          console.log('🔍 Éléments DOM - abonnés trouvé:', !!followersEl, 'abonnements trouvé:', !!subscriptionsEl);
-          
-          if (followersEl || subscriptionsEl) {
-            renderSubscriptionStats(followersCount, subscriptionsCount);
-            console.log('✅ Compteurs mis à jour dans le DOM');
-          } else {
-            console.warn('⚠️ Éléments DOM non trouvés, réessai dans 100ms...');
-            // Réessayer après un court délai au cas où les éléments ne seraient pas encore chargés
-            setTimeout(async () => {
-              const retryFollowersCount = await Subscriptions.getFollowersCount(supabaseClient, currentUserId);
-              const retrySubscriptionsCount = await Subscriptions.getSubscriptionsCount(supabaseClient, currentUserId);
-              renderSubscriptionStats(retryFollowersCount, retrySubscriptionsCount);
-              console.log('✅ Compteurs mis à jour après réessai');
-            }, 100);
-          }
+          setTimeout(async () => {
+            // Récupérer directement les valeurs depuis la base de données pour être sûr
+            const followersCount = await Subscriptions.getFollowersCount(supabaseClient, currentUserId);
+            const subscriptionsCount = await Subscriptions.getSubscriptionsCount(supabaseClient, currentUserId);
+            
+            console.log('📊 Compteurs récupérés depuis la base - abonnés:', followersCount, 'abonnements:', subscriptionsCount);
+            
+            // Vérifier que les éléments DOM existent
+            const followersEl = document.getElementById('profile-section-followers-count');
+            const subscriptionsEl = document.getElementById('profile-section-subscriptions-count');
+            
+            console.log('🔍 Éléments DOM - abonnés trouvé:', !!followersEl, 'abonnements trouvé:', !!subscriptionsEl);
+            
+            if (followersEl || subscriptionsEl) {
+              renderSubscriptionStats(followersCount, subscriptionsCount);
+              console.log('✅ Compteurs mis à jour dans le DOM');
+            } else {
+              console.warn('⚠️ Éléments DOM non trouvés, réessai dans 100ms...');
+              // Réessayer après un court délai au cas où les éléments ne seraient pas encore chargés
+              setTimeout(async () => {
+                const retryFollowersCount = await Subscriptions.getFollowersCount(supabaseClient, currentUserId);
+                const retrySubscriptionsCount = await Subscriptions.getSubscriptionsCount(supabaseClient, currentUserId);
+                renderSubscriptionStats(retryFollowersCount, retrySubscriptionsCount);
+                console.log('✅ Compteurs mis à jour après réessai');
+              }, 100);
+            }
+          }, delay);
         } else {
           console.log('⚠️ Événement ne nous concerne pas, ignoré');
         }
