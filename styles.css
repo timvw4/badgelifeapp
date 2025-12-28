@@ -4004,12 +4004,27 @@ button {
 
 .notification-item {
   cursor: pointer;
-  transition: background 0.2s ease;
+  transition: background 0.2s ease, opacity 0.2s ease;
   padding: 12px;
 }
 
 .notification-item:hover {
   background: rgba(255, 255, 255, 0.05);
+}
+
+/* Style pour les notifications lues - opacité réduite et couleur grisée */
+.notification-item.read {
+  opacity: 0.6;
+  color: var(--muted);
+}
+
+.notification-item.read:hover {
+  opacity: 0.8;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.notification-item.read .notification-text p {
+  color: var(--muted);
 }
 
 .notification-content {

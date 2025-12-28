@@ -1,6 +1,7 @@
 // Module UI pour les abonnements
 // Gère le rendu et les interactions utilisateur pour les abonnements
 import * as Subscriptions from './subscriptions.js';
+import { createSubscriptionNotification, createUnsubscriptionNotification } from './subscriptionNotifications.js';
 
 let supabaseClient = null;
 let currentUserId = null;
@@ -157,31 +158,31 @@ export function setupRealtimeSubscriptions() {
           const delay = payload.eventType === 'DELETE' ? 100 : 0;
           
           setTimeout(async () => {
-            // Récupérer directement les valeurs depuis la base de données pour être sûr
-            const followersCount = await Subscriptions.getFollowersCount(supabaseClient, currentUserId);
-            const subscriptionsCount = await Subscriptions.getSubscriptionsCount(supabaseClient, currentUserId);
-            
-            console.log('📊 Compteurs récupérés depuis la base - abonnés:', followersCount, 'abonnements:', subscriptionsCount);
-            
-            // Vérifier que les éléments DOM existent
-            const followersEl = document.getElementById('profile-section-followers-count');
-            const subscriptionsEl = document.getElementById('profile-section-subscriptions-count');
-            
-            console.log('🔍 Éléments DOM - abonnés trouvé:', !!followersEl, 'abonnements trouvé:', !!subscriptionsEl);
-            
-            if (followersEl || subscriptionsEl) {
-              renderSubscriptionStats(followersCount, subscriptionsCount);
-              console.log('✅ Compteurs mis à jour dans le DOM');
-            } else {
-              console.warn('⚠️ Éléments DOM non trouvés, réessai dans 100ms...');
-              // Réessayer après un court délai au cas où les éléments ne seraient pas encore chargés
-              setTimeout(async () => {
-                const retryFollowersCount = await Subscriptions.getFollowersCount(supabaseClient, currentUserId);
-                const retrySubscriptionsCount = await Subscriptions.getSubscriptionsCount(supabaseClient, currentUserId);
-                renderSubscriptionStats(retryFollowersCount, retrySubscriptionsCount);
-                console.log('✅ Compteurs mis à jour après réessai');
-              }, 100);
-            }
+          // Récupérer directement les valeurs depuis la base de données pour être sûr
+          const followersCount = await Subscriptions.getFollowersCount(supabaseClient, currentUserId);
+          const subscriptionsCount = await Subscriptions.getSubscriptionsCount(supabaseClient, currentUserId);
+          
+          console.log('📊 Compteurs récupérés depuis la base - abonnés:', followersCount, 'abonnements:', subscriptionsCount);
+          
+          // Vérifier que les éléments DOM existent
+          const followersEl = document.getElementById('profile-section-followers-count');
+          const subscriptionsEl = document.getElementById('profile-section-subscriptions-count');
+          
+          console.log('🔍 Éléments DOM - abonnés trouvé:', !!followersEl, 'abonnements trouvé:', !!subscriptionsEl);
+          
+          if (followersEl || subscriptionsEl) {
+            renderSubscriptionStats(followersCount, subscriptionsCount);
+            console.log('✅ Compteurs mis à jour dans le DOM');
+          } else {
+            console.warn('⚠️ Éléments DOM non trouvés, réessai dans 100ms...');
+            // Réessayer après un court délai au cas où les éléments ne seraient pas encore chargés
+            setTimeout(async () => {
+              const retryFollowersCount = await Subscriptions.getFollowersCount(supabaseClient, currentUserId);
+              const retrySubscriptionsCount = await Subscriptions.getSubscriptionsCount(supabaseClient, currentUserId);
+              renderSubscriptionStats(retryFollowersCount, retrySubscriptionsCount);
+              console.log('✅ Compteurs mis à jour après réessai');
+            }, 100);
+          }
           }, delay);
         } else {
           console.log('⚠️ Événement ne nous concerne pas, ignoré');
@@ -279,13 +280,17 @@ async function handleSubscribeClick(profileId, currentlySubscribed) {
   let result;
   if (currentlySubscribed) {
     result = await Subscriptions.unsubscribeFromUser(supabaseClient, currentUserId, profileId);
+    
+    // Créer la notification de désabonnement (discrète, pas de pastille)
+    if (result.success) {
+      await createUnsubscriptionNotification(supabaseClient, profileId, currentUserId);
+    }
   } else {
     result = await Subscriptions.subscribeToUser(supabaseClient, currentUserId, profileId);
     
-    // Créer la notification pour l'utilisateur suivi
+    // Créer la notification d'abonnement pour l'utilisateur suivi
     if (result.success) {
-      const { createNotification } = await import('./subscriptionNotifications.js');
-      await createNotification(supabaseClient, profileId, currentUserId);
+      await createSubscriptionNotification(supabaseClient, profileId, currentUserId);
     }
   }
   

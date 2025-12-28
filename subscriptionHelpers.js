@@ -37,28 +37,9 @@ export function getNotificationUsers(notification) {
 }
 
 /**
- * Détermine si des notifications doivent être groupées
- * @param {Array} notifications - Liste des notifications
- * @param {number} hoursThreshold - Nombre d'heures pour considérer comme "récent" (défaut: 2)
- * @returns {boolean} - true si les notifications doivent être groupées
- */
-export function shouldGroupNotifications(notifications, hoursThreshold = 2) {
-  if (!notifications || notifications.length < 2) return false;
-  
-  const now = new Date();
-  const threshold = new Date(now.getTime() - hoursThreshold * 60 * 60 * 1000);
-  
-  // Vérifier si toutes les notifications sont dans le seuil de temps
-  const recentNotifications = notifications.filter(notif => {
-    const createdAt = new Date(notif.created_at);
-    return createdAt >= threshold;
-  });
-  
-  return recentNotifications.length >= 2;
-}
-
-/**
  * Groupe les notifications récentes par type
+ * Ne groupe QUE les notifications de DIFFÉRENTS utilisateurs
+ * Si plusieurs notifications viennent du même utilisateur, elles restent séparées
  * @param {Array} notifications - Liste des notifications non groupées
  * @param {number} hoursThreshold - Nombre d'heures pour considérer comme "récent" (défaut: 2)
  * @returns {Array} - Liste des notifications groupées
@@ -82,26 +63,61 @@ export function groupRecentNotifications(notifications, hoursThreshold = 2) {
     }
   });
   
-  // Grouper les notifications récentes
-  if (recent.length >= 2) {
-    // Créer une notification groupée
+  // Séparer les notifications par utilisateur
+  // Compter combien de fois chaque utilisateur apparaît
+  const followerCounts = new Map();
+  recent.forEach(notif => {
+    const count = followerCounts.get(notif.follower_id) || 0;
+    followerCounts.set(notif.follower_id, count + 1);
+  });
+  
+  // Notifications à grouper : celles d'utilisateurs qui n'apparaissent qu'une seule fois
+  const singleNotifications = recent.filter(n => followerCounts.get(n.follower_id) === 1);
+  
+  // Notifications à garder séparées : celles d'utilisateurs qui apparaissent plusieurs fois
+  const multipleNotifications = recent.filter(n => followerCounts.get(n.follower_id) > 1);
+  
+  // Grouper les notifications d'utilisateurs uniques (si au moins 2)
+  if (singleNotifications.length >= 2) {
     const grouped = {
       id: `grouped-${Date.now()}`,
-      user_id: recent[0].user_id,
-      followers: recent.map(n => ({
+      user_id: singleNotifications[0].user_id,
+      followers: singleNotifications.map(n => ({
         id: n.follower_id,
         username: n.follower_username || 'Utilisateur',
         avatar_url: n.follower_avatar_url || null
       })),
-      created_at: recent[0].created_at,
+      created_at: singleNotifications[0].created_at,
       is_grouped: true
     };
     
-    return [grouped, ...old];
+    // Transformer les notifications multiples (même utilisateur) pour qu'elles restent séparées
+    const formattedMultiple = multipleNotifications.map(notif => ({
+      ...notif,
+      follower: {
+        id: notif.follower_id,
+        username: notif.follower_username || 'Utilisateur',
+        avatar_url: notif.follower_avatar_url || null
+      },
+      is_grouped: false
+    }));
+    
+    // Transformer les anciennes notifications
+    const formattedOld = old.map(notif => ({
+      ...notif,
+      follower: {
+        id: notif.follower_id,
+        username: notif.follower_username || 'Utilisateur',
+        avatar_url: notif.follower_avatar_url || null
+      },
+      is_grouped: false
+    }));
+    
+    return [grouped, ...formattedMultiple, ...formattedOld];
   }
   
-  // Si pas assez de notifications récentes, retourner telles quelles
-  return notifications.map(notif => ({
+  // Si pas assez de notifications uniques à grouper, retourner toutes les notifications séparées
+  const allFormatted = [...recent, ...old].map(notif => ({
     ...notif,
     follower: {
       id: notif.follower_id,
@@ -110,5 +126,7 @@ export function groupRecentNotifications(notifications, hoursThreshold = 2) {
     },
     is_grouped: false
   }));
+  
+  return allFormatted;
 }
 

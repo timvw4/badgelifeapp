@@ -7,6 +7,7 @@ import { parseBadgeAnswer, parseConfig, safeSupabaseSelect, pseudoToEmail, isAdm
 import * as Subscriptions from './subscriptions.js';
 import * as SubscriptionUI from './subscriptionUI.js';
 import * as NotificationUI from './notificationUI.js';
+import { createDailyTokensNotification, createSundayBonusNotification } from './subscriptionNotifications.js';
 import * as BadgeSuspicions from './badgeSuspicions.js';
 
 // Nom du bucket d'avatars dans Supabase Storage
@@ -6714,6 +6715,11 @@ async function claimDailyTokens(dayStr) {
       // Afficher une notification
       showTokenRewardNotification(2);
       
+      // Créer une notification dans le système unifié
+      if (state.user) {
+        await createDailyTokensNotification(supabase, state.user.id, dayStr, 2);
+      }
+      
       // Ne PAS recharger fetchProfile() ici car :
       // 1. Le state local est déjà correct et à jour
       // 2. La sauvegarde Supabase vient d'être faite avec succès
@@ -6864,6 +6870,11 @@ async function handleClaimBonus() {
       
       // Afficher une notification
       showTokenRewardNotification(3, 'bonus');
+      
+      // Créer une notification dans le système unifié
+      if (state.user && sundayStr) {
+        await createSundayBonusNotification(supabase, state.user.id, sundayStr);
+      }
     }
   } finally {
     // DÉSACTIVER LE VERROU : toujours libérer le verrou, même en cas d'erreur

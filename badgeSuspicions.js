@@ -1,6 +1,7 @@
 // Module de gestion des soupçons de badges
 // Logique métier pure (pas de UI)
 import * as Subscriptions from './subscriptions.js';
+import { createSuspicionNotification, createBlockedBadgeNotification } from './subscriptionNotifications.js';
 
 /**
  * Soupçonner un badge d'un utilisateur
@@ -55,8 +56,7 @@ export async function suspectBadge(supabase, suspiciousUserId, userId, badgeId) 
     }
     
     // Créer une notification pour informer le propriétaire du badge qu'il a été soupçonné
-    const { createIndividualSuspicionNotification } = await import('./subscriptionNotifications.js');
-    await createIndividualSuspicionNotification(supabase, userId, badgeId, suspiciousUserId);
+    await createSuspicionNotification(supabase, userId, badgeId, suspiciousUserId);
     
     // Compter les soupçons et vérifier si le badge doit être bloqué
     const result = await checkAndBlockBadge(supabase, userId, badgeId);
@@ -223,9 +223,13 @@ export async function checkAndBlockBadge(supabase, userId, badgeId) {
         // Récupérer tous les soupçonneurs pour créer les notifications
         const suspiciousUserIds = await getSuspiciousUsers(supabase, userId, badgeId);
         
-        // Créer les notifications (propriétaire + soupçonneurs)
-        const { createSuspicionNotifications } = await import('./subscriptionNotifications.js');
-        await createSuspicionNotifications(supabase, userId, badgeId, suspicionCount, suspiciousUserIds);
+        // Créer une notification pour le propriétaire du badge
+        await createBlockedBadgeNotification(supabase, userId, badgeId, suspicionCount);
+        
+        // Créer une notification pour chaque soupçonneur
+        for (const suspiciousUserId of suspiciousUserIds) {
+          await createBlockedBadgeNotification(supabase, suspiciousUserId, badgeId, suspicionCount, userId);
+        }
         
         return { blocked: true, suspicionCount };
       }

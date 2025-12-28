@@ -1,7 +1,6 @@
-// Module UI pour les notifications d'abonnement
-// Gère le rendu et les interactions utilisateur pour les notifications
-import * as SubscriptionNotifications from './subscriptionNotifications.js';
-import { formatNotificationText, getNotificationUsers } from './subscriptionHelpers.js';
+// Module UI pour les notifications unifiées
+// Gère le rendu et les interactions utilisateur pour tous les types de notifications
+import * as NotificationService from './subscriptionNotifications.js';
 
 let supabaseClient = null;
 let currentUserId = null;
@@ -19,7 +18,6 @@ export function initNotificationUI(supabase, userId) {
   const notificationsBtn = document.getElementById('notifications-btn');
   if (notificationsBtn) {
     notificationsBtn.addEventListener('click', async () => {
-      // Ouvrir le modal - les notifications seront marquées comme lues à la fermeture
       await showNotificationsModal();
     });
   }
@@ -33,8 +31,9 @@ export function initNotificationUI(supabase, userId) {
     if (notificationsModal) {
       notificationsModal.classList.add('hidden');
     }
-    // Marquer toutes les notifications comme lues quand on ferme le modal
+    // Marquer toutes les notifications non lues comme lues quand on ferme le modal
     await markAllNotificationsAsRead();
+    await refreshNotificationBadge();
   };
   
   if (notificationsModalClose) {
@@ -53,7 +52,7 @@ export function initNotificationUI(supabase, userId) {
 
 /**
  * Affiche la pastille de notification selon le nombre de notifications non lues
- * @param {number} count - Nombre de notifications non lues
+ * @param {number} count - Nombre de notifications non lues (avec show_badge = true)
  */
 export function renderNotificationBadge(count) {
   const indicator = document.getElementById('notification-indicator');
@@ -83,7 +82,7 @@ export async function showNotificationsModal() {
   list.innerHTML = '<p class="muted">Chargement...</p>';
   
   try {
-    const notifications = await SubscriptionNotifications.getNotifications(supabaseClient, currentUserId);
+    const notifications = await NotificationService.getNotifications(supabaseClient, currentUserId);
     
     if (notifications.length === 0) {
       list.innerHTML = '<p class="muted">Aucune notification pour le moment.</p>';
@@ -96,9 +95,48 @@ export async function showNotificationsModal() {
       const item = renderNotificationItem(notification);
       list.appendChild(item);
     });
+    
+    // Rafraîchir le badge après avoir chargé les notifications
+    await refreshNotificationBadge();
   } catch (err) {
     console.error('Erreur lors du chargement des notifications:', err);
     list.innerHTML = '<p class="muted error">Erreur lors du chargement.</p>';
+  }
+}
+
+/**
+ * Formate le texte d'une notification selon son type
+ * @param {Object} notification - Notification à formater
+ * @returns {string} - Texte formaté
+ */
+function formatNotificationText(notification) {
+  switch (notification.type) {
+    case 'subscription':
+      return `${notification.follower_username || 'Quelqu\'un'} s'est abonné à toi`;
+    
+    case 'unsubscription':
+      return `${notification.follower_username || 'Quelqu\'un'} s'est désabonné de toi`;
+    
+    case 'suspicion_individual':
+      return `${notification.suspicious_username || 'Un utilisateur'} a soupçonné ton badge "${notification.badge_name || 'ce badge'}".`;
+    
+    case 'suspicion_blocked':
+      if (notification.badge_owner_id && notification.badge_owner_id !== notification.user_id) {
+        // Notification pour un soupçonneur
+        return `Le badge "${notification.badge_name || 'ce badge'}" de ${notification.owner_username || 'un utilisateur'} a été bloqué suite à vos soupçons.`;
+      } else {
+        // Notification pour le propriétaire
+        return `Trop d'amis te soupçonnent de mentir pour le badge "${notification.badge_name || 'ce badge'}".`;
+      }
+    
+    case 'daily_tokens':
+      return `🪙 Tu as obtenu ${notification.token_amount || 2} jeton${(notification.token_amount || 2) > 1 ? 's' : ''} d'expérience !`;
+    
+    case 'sunday_bonus':
+      return `🪙 Tu as obtenu ${notification.token_amount || 3} jetons bonus pour ta semaine complète !`;
+    
+    default:
+      return 'Nouvelle notification';
   }
 }
 
@@ -109,54 +147,25 @@ export async function showNotificationsModal() {
  */
 function renderNotificationItem(notification) {
   const item = document.createElement('div');
-  item.className = 'list-item clickable notification-item';
-  
-  // Gérer les notifications de soupçon différemment
-  if (notification.type === 'suspicion') {
-    // Si badge_owner_id existe et est différent de user_id, c'est une notification pour un soupçonneur
-    // Sinon, c'est une notification pour le propriétaire du badge
-    let text;
-    if (notification.badge_owner_id && notification.badge_owner_id !== notification.user_id) {
-      const ownerUsername = notification.profiles?.username || 'un utilisateur';
-      text = `Le badge "${notification.badge_name}" de ${ownerUsername} a été bloqué suite à vos soupçons.`;
-    } else if (notification.suspicious_user_id && notification.suspicious_username) {
-      // Notification individuelle : quelqu'un a soupçonné ton badge
-      const suspiciousUsername = notification.suspicious_username || 'Un utilisateur';
-      text = `${suspiciousUsername} a soupçonné ton badge "${notification.badge_name}".`;
-    } else {
-      // Notification de blocage (≥3 soupçons)
-      text = `Trop d'amis te soupçonnent de mentir pour le badge "${notification.badge_name}".`;
-    }
-    
-    item.innerHTML = `
-      <div class="notification-content">
-        <div class="notification-text">
-          <p style="margin: 0; font-size: 14px;">${text}</p>
-        </div>
-      </div>
-    `;
-    
-    item.addEventListener('click', () => {
-      handleSuspicionNotificationClick(notification);
-    });
-    
-    return item;
-  }
+  const isRead = notification.is_read || false;
+  item.className = `list-item clickable notification-item${isRead ? ' read' : ''}`;
+  item.setAttribute('data-notification-id', notification.id || '');
   
   const text = formatNotificationText(notification);
   
-  // Si c'est une notification groupée, afficher plusieurs avatars
-  const users = getNotificationUsers(notification);
-  const avatarsHtml = users.slice(0, 3).map(user => {
-    const avatarUrl = user.avatar_url || './icons/logobl.png';
-    return `<img src="${avatarUrl}" alt="Avatar" class="logo tiny avatar" style="margin-left: -8px; border: 2px solid var(--bg);">`;
-  }).join('');
+  // Pour les notifications d'abonnement/désabonnement, afficher l'avatar
+  let avatarHtml = '';
+  if ((notification.type === 'subscription' || notification.type === 'unsubscription') && notification.follower_avatar_url) {
+    avatarHtml = `
+      <div class="notification-avatars" style="display: flex; align-items: center; margin-right: 12px;">
+        <img src="${notification.follower_avatar_url || './icons/logobl.png'}" alt="Avatar" class="logo tiny avatar" style="border: 2px solid var(--bg);">
+      </div>
+    `;
+  }
   
   item.innerHTML = `
     <div class="notification-content">
-      <div class="notification-avatars" style="display: flex; align-items: center; margin-right: 12px;">
-        ${avatarsHtml}
-      </div>
+      ${avatarHtml}
       <div class="notification-text">
         <p style="margin: 0; font-size: 14px;">${text}</p>
       </div>
@@ -171,47 +180,18 @@ function renderNotificationItem(notification) {
 }
 
 /**
- * Gère le clic sur une notification de soupçon
- * @param {Object} notification - Notification de soupçon cliquée
- */
-async function handleSuspicionNotificationClick(notification) {
-  // Marquer la notification comme lue
-  if (notification.id) {
-    await SubscriptionNotifications.markNotificationAsRead(supabaseClient, notification.id);
-  }
-  
-  // Fermer le modal de notifications
-  const modal = document.getElementById('notifications-modal');
-  if (modal) {
-    modal.classList.add('hidden');
-  }
-  
-  // Mettre à jour le badge de notification
-  await refreshNotificationBadge();
-  
-  // L'utilisateur peut modifier sa réponse depuis son propre profil
-  // On ne fait rien de spécial ici, l'utilisateur devra aller dans son profil
-}
-
-/**
- * Gère le clic sur une notification
+ * Gère le clic sur une notification selon son type
  * @param {Object} notification - Notification cliquée
  */
 async function handleNotificationClick(notification) {
-  const users = getNotificationUsers(notification);
-  
-  // Si c'est une notification groupée, ouvrir le profil du premier utilisateur
-  // Sinon, ouvrir le profil de l'utilisateur unique
-  const user = users[0];
-  
-  if (!user || !user.id) return;
-  
-  // Marquer la notification comme lue
-  if (notification.id && !notification.is_grouped) {
-    await SubscriptionNotifications.markNotificationAsRead(supabaseClient, notification.id);
-  } else if (notification.is_grouped) {
-    // Pour les notifications groupées, on ne les supprime pas individuellement
-    // On les supprimera toutes quand l'utilisateur marquera tout comme lu
+  // Marquer la notification comme lue si elle ne l'est pas déjà
+  if (notification.id && !notification.is_read) {
+    await NotificationService.markNotificationAsRead(supabaseClient, notification.id);
+    const item = document.querySelector(`[data-notification-id="${notification.id}"]`);
+    if (item) {
+      item.classList.add('read');
+      notification.is_read = true;
+    }
   }
   
   // Fermer le modal de notifications
@@ -220,36 +200,91 @@ async function handleNotificationClick(notification) {
     modal.classList.add('hidden');
   }
   
-  // Ouvrir le profil de l'utilisateur
-  if (window.showCommunityProfile) {
-    // Récupérer les infos complètes du profil
-    try {
-      const { data: profile } = await supabaseClient
-        .from('profiles')
-        .select('id, username, avatar_url, skill_points, is_private')
-        .eq('id', user.id)
-        .single();
-      
-      if (profile) {
-        const rankMeta = window.getRankMeta ? window.getRankMeta(profile.skill_points || 0) : { name: '—' };
-        
-        window.showCommunityProfile({
-          userId: profile.id,
-          username: profile.username,
-          avatar: profile.avatar_url,
-          rank: rankMeta.name,
-          badges: 0,
-          skills: profile.skill_points || 0,
-          isPrivate: profile.is_private || false
-        });
+  // Actions spécifiques selon le type
+  switch (notification.type) {
+    case 'subscription':
+    case 'unsubscription':
+      // Ouvrir le profil de l'utilisateur
+      if (notification.follower_id && window.showCommunityProfile) {
+        await openUserProfile(notification.follower_id);
       }
-    } catch (err) {
-      console.error('Erreur lors de la récupération du profil:', err);
-    }
+      break;
+    
+    case 'suspicion_individual':
+    case 'suspicion_blocked':
+      // Ouvrir le profil et afficher le badge soupçonné
+      let targetUserId = notification.user_id;
+      if (notification.badge_owner_id && notification.badge_owner_id !== notification.user_id) {
+        targetUserId = notification.badge_owner_id;
+      }
+      if (targetUserId && notification.badge_id && window.showCommunityProfile) {
+        await openUserProfileWithBadge(targetUserId, notification.badge_id);
+      }
+      break;
+    
+    case 'daily_tokens':
+    case 'sunday_bonus':
+      // Pour les notifications de connexion, ne rien faire (juste fermer le modal)
+      break;
   }
   
   // Mettre à jour le badge de notification
   await refreshNotificationBadge();
+}
+
+/**
+ * Ouvre le profil d'un utilisateur
+ * @param {string} userId - ID de l'utilisateur
+ */
+async function openUserProfile(userId) {
+  if (!window.showCommunityProfile) return;
+  
+  try {
+    const { data: profile } = await supabaseClient
+      .from('profiles')
+      .select('id, username, avatar_url, skill_points, is_private')
+      .eq('id', userId)
+      .single();
+    
+    if (profile) {
+      const rankMeta = window.getRankMeta ? window.getRankMeta(profile.skill_points || 0) : { name: '—' };
+      
+      window.showCommunityProfile({
+        userId: profile.id,
+        username: profile.username,
+        avatar: profile.avatar_url,
+        rank: rankMeta.name,
+        badges: 0,
+        skills: profile.skill_points || 0,
+        isPrivate: profile.is_private || false
+      });
+    }
+  } catch (err) {
+    console.error('Erreur lors de la récupération du profil:', err);
+  }
+}
+
+/**
+ * Ouvre le profil d'un utilisateur et met en évidence un badge spécifique
+ * @param {string} userId - ID de l'utilisateur
+ * @param {string} badgeId - ID du badge à mettre en évidence
+ */
+async function openUserProfileWithBadge(userId, badgeId) {
+  await openUserProfile(userId);
+  
+  // Attendre que le profil soit chargé, puis scroller vers le badge
+  setTimeout(() => {
+    const badgeElement = document.querySelector(`[data-badge-id="${badgeId}"]`);
+    if (badgeElement) {
+      badgeElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      // Ajouter un effet visuel pour mettre en évidence le badge
+      badgeElement.style.transition = 'box-shadow 0.3s ease';
+      badgeElement.style.boxShadow = '0 0 20px rgba(99, 102, 241, 0.5)';
+      setTimeout(() => {
+        badgeElement.style.boxShadow = '';
+      }, 2000);
+    }
+  }, 500);
 }
 
 /**
@@ -259,11 +294,14 @@ async function markAllNotificationsAsRead() {
   if (!supabaseClient || !currentUserId) return;
   
   try {
-    const result = await SubscriptionNotifications.markAllNotificationsAsRead(supabaseClient, currentUserId);
+    const result = await NotificationService.markAllNotificationsAsRead(supabaseClient, currentUserId);
     
     if (result.success) {
-      // Mettre à jour le badge pour qu'il disparaisse
-      await refreshNotificationBadge();
+      // Si le modal est ouvert, rafraîchir l'affichage pour mettre à jour les styles visuels
+      const modal = document.getElementById('notifications-modal');
+      if (modal && !modal.classList.contains('hidden')) {
+        await showNotificationsModal();
+      }
     } else {
       console.error('Erreur lors du marquage des notifications comme lues:', result.error);
     }
@@ -278,7 +316,7 @@ async function markAllNotificationsAsRead() {
 export async function refreshNotificationBadge() {
   if (!supabaseClient || !currentUserId) return;
   
-  const count = await SubscriptionNotifications.getUnreadNotificationsCount(supabaseClient, currentUserId);
+  const count = await NotificationService.getUnreadNotificationsCount(supabaseClient, currentUserId);
   renderNotificationBadge(count);
 }
 
@@ -289,13 +327,18 @@ export async function refreshNotificationBadge() {
 export function setupRealtimeNotificationListener() {
   if (!supabaseClient || !currentUserId) return () => {};
   
-  return SubscriptionNotifications.setupRealtimeNotifications(
+  return NotificationService.setupRealtimeNotifications(
     supabaseClient,
     currentUserId,
     async (payload) => {
-      // Rafraîchir le badge quand une notification change (INSERT ou DELETE)
-      // Cela permet de mettre à jour la pastille en temps réel
+      // Rafraîchir le badge quand une notification change
       await refreshNotificationBadge();
+      
+      // Si le modal est ouvert, rafraîchir la liste
+      const modal = document.getElementById('notifications-modal');
+      if (modal && !modal.classList.contains('hidden')) {
+        await showNotificationsModal();
+      }
     }
   );
 }
@@ -308,4 +351,3 @@ export const NotificationUI = {
   refreshNotificationBadge,
   setupRealtimeNotificationListener
 };
-
