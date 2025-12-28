@@ -5,6 +5,7 @@ import { formatNotificationText, getNotificationUsers } from './subscriptionHelp
 
 let supabaseClient = null;
 let currentUserId = null;
+let realtimeUnsubscribe = null; // Fonction pour arrêter l'écoute Realtime
 
 /**
  * Initialise le module avec les dépendances nécessaires
@@ -15,11 +16,19 @@ export function initNotificationUI(supabase, userId) {
   supabaseClient = supabase;
   currentUserId = userId;
   
-  // Attacher l'écouteur pour le badge de notification
-  const notificationBadge = document.getElementById('notification-badge');
-  if (notificationBadge) {
-    notificationBadge.addEventListener('click', () => {
-      showNotificationsModal();
+  // Arrêter l'écoute précédente si elle existe
+  if (realtimeUnsubscribe) {
+    realtimeUnsubscribe();
+    realtimeUnsubscribe = null;
+  }
+  
+  // Attacher l'écouteur pour le bouton de notifications
+  const notificationsBtn = document.getElementById('notifications-btn');
+  if (notificationsBtn) {
+    notificationsBtn.addEventListener('click', async () => {
+      await showNotificationsModal();
+      // Marquer toutes les notifications comme lues et enlever la pastille
+      await markAllNotificationsAsRead();
     });
   }
   
@@ -27,46 +36,47 @@ export function initNotificationUI(supabase, userId) {
   const notificationsModalClose = document.getElementById('notifications-modal-close');
   const notificationsModal = document.getElementById('notifications-modal');
   
-  // Fonction pour fermer le modal et marquer toutes les notifications comme lues
-  const closeModalAndMarkAsRead = async () => {
+  // Fonction pour fermer le modal (sans marquer comme lues car c'est déjà fait au clic sur le bouton)
+  const closeModal = () => {
     if (notificationsModal) {
       notificationsModal.classList.add('hidden');
     }
-    // Marquer toutes les notifications comme lues quand on ferme le modal
-    await markAllNotificationsAsRead();
   };
   
   if (notificationsModalClose) {
-    notificationsModalClose.addEventListener('click', closeModalAndMarkAsRead);
+    notificationsModalClose.addEventListener('click', closeModal);
   }
   
   // Fermer le modal en cliquant en dehors
   if (notificationsModal) {
-    notificationsModal.addEventListener('click', async (e) => {
+    notificationsModal.addEventListener('click', (e) => {
       if (e.target === notificationsModal) {
-        await closeModalAndMarkAsRead();
+        closeModal();
       }
     });
   }
 }
 
 /**
- * Affiche le badge de notification avec le nombre de notifications non lues
+ * Affiche la pastille rouge sur le bouton de notifications
  * @param {number} count - Nombre de notifications non lues
  */
 export function renderNotificationBadge(count) {
-  const badge = document.getElementById('notification-badge');
-  const countEl = document.getElementById('notification-count');
+  const notificationsDot = document.getElementById('notifications-dot');
   
-  if (!badge) return;
+  if (!notificationsDot) {
+    console.warn('⚠️ notifications-dot introuvable dans le DOM');
+    return;
+  }
+  
+  console.log('🔔 Mise à jour de la pastille de notification, count:', count);
   
   if (count > 0) {
-    badge.classList.remove('hidden');
-    if (countEl) {
-      countEl.textContent = count > 99 ? '99+' : count;
-    }
+    notificationsDot.classList.remove('hidden');
+    console.log('✅ Pastille rouge affichée');
   } else {
-    badge.classList.add('hidden');
+    notificationsDot.classList.add('hidden');
+    console.log('✅ Pastille rouge masquée');
   }
 }
 
@@ -278,9 +288,14 @@ async function markAllNotificationsAsRead() {
  * Rafraîchit le badge de notification
  */
 export async function refreshNotificationBadge() {
-  if (!supabaseClient || !currentUserId) return;
+  if (!supabaseClient || !currentUserId) {
+    console.warn('⚠️ refreshNotificationBadge: supabaseClient ou currentUserId manquant');
+    return;
+  }
   
+  console.log('🔄 Rafraîchissement du badge de notification...');
   const count = await SubscriptionNotifications.getUnreadNotificationsCount(supabaseClient, currentUserId);
+  console.log('📊 Nombre de notifications non lues:', count);
   renderNotificationBadge(count);
 }
 
@@ -289,16 +304,33 @@ export async function refreshNotificationBadge() {
  * @returns {Function} - Fonction pour arrêter l'écoute
  */
 export function setupRealtimeNotificationListener() {
-  if (!supabaseClient || !currentUserId) return () => {};
+  if (!supabaseClient || !currentUserId) {
+    console.warn('⚠️ setupRealtimeNotificationListener: supabaseClient ou currentUserId manquant');
+    return () => {};
+  }
   
-  return SubscriptionNotifications.setupRealtimeNotifications(
+  // Arrêter l'écoute précédente si elle existe
+  if (realtimeUnsubscribe) {
+    console.log('🔕 Arrêt de l\'ancienne écoute Realtime');
+    realtimeUnsubscribe();
+  }
+  
+  console.log('🔔 Démarrage de l\'écoute Realtime pour les notifications, userId:', currentUserId);
+  
+  // Démarrer la nouvelle écoute
+  realtimeUnsubscribe = SubscriptionNotifications.setupRealtimeNotifications(
     supabaseClient,
     currentUserId,
     async (newNotification) => {
+      console.log('🔔 Notification reçue en temps réel!', newNotification);
+      console.log('🔄 Déclenchement du rafraîchissement du badge...');
       // Rafraîchir le badge quand une nouvelle notification arrive
       await refreshNotificationBadge();
+      console.log('✅ Badge rafraîchi après notification en temps réel');
     }
   );
+  
+  return realtimeUnsubscribe;
 }
 
 // Export de toutes les fonctions sous un objet

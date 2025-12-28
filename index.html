@@ -107,16 +107,25 @@
 
 
       <section id="my-badges" class="tab-content">
-        <h2 class="section-title">Profil</h2>
+        <div class="section-title-with-settings">
+          <h2 class="section-title">Profil</h2>
+          <div class="settings-wrapper">
+            <button id="notifications-btn" class="ghost icon-btn notifications-btn" aria-label="Notifications" style="position: relative;">
+              🔔
+              <span id="notifications-dot" class="notifications-dot hidden"></span>
+            </button>
+            <button id="profile-settings-toggle" class="ghost icon-btn profile-settings-btn" aria-label="Réglages">⚙️</button>
+            <div id="profile-settings-menu" class="settings-menu hidden">
+              <a id="profile-admin-link" class="ghost full-width hidden" href="./admin.html">Admin</a>
+              <button id="profile-logout-btn" class="ghost full-width">Se déconnecter</button>
+            </div>
+          </div>
+        </div>
         <!-- Header profil dans la section -->
         <div class="profile-section-header">
           <div class="profile-section-main">
             <div style="position: relative;">
               <img id="profile-section-avatar" src="./icons/logobl.png" alt="Avatar" class="logo medium">
-              <!-- Badge de notification -->
-              <div id="notification-badge" class="notification-badge hidden" title="Notifications">
-                <span id="notification-count">0</span>
-              </div>
             </div>
             <div class="profile-section-info">
               <h2 id="profile-section-username">Utilisateur</h2>
@@ -137,13 +146,12 @@
               <small>abonnements</small>
             </div>
           </div>
-          <!-- Bouton réglages en haut à droite -->
-          <button id="settings-toggle" class="ghost icon-btn profile-settings-btn" aria-label="Réglages" style="position: absolute; top: 20px; right: 20px;">⚙️</button>
         </div>
         <div class="profile-actions-buttons">
           <button id="edit-profile-btn-main" class="ghost">Modifier</button>
           <button id="share-profile-btn" class="ghost">Partager mon profil</button>
         </div>
+        <h3 style="margin-bottom: 16px; padding: 0 18px;">Statistiques</h3>
         <div class="profile-badge-skill-stats">
           <div class="profile-stat">
             <span id="profile-section-badge-count">0<span class="badge-total">/ 0</span></span>
@@ -152,6 +160,10 @@
           <div class="profile-stat">
             <span id="profile-section-skill-count">0</span>
             <small> points de skills</small>
+          </div>
+          <div class="profile-stat">
+            <span id="profile-section-completion">0%</span>
+            <small>complétion</small>
           </div>
         </div>
         
@@ -183,7 +195,7 @@
         <div class="section-header-with-actions">
           <div>
             <h2 class="section-title">Badges à débloquer</h2>
-            <p class="muted section-description" style="margin-bottom: 40px;">Choisis un thème pour répondre à une question d'un badge aléatoire et débloque le pour compléter ta collection et augmenter tes skills !</p>
+            <p class="muted section-description" style="margin-bottom: 40px;">Répond à des questions et tente de débloquer des badges pour compléter ta collection et augmenter tes skills !</p>
           </div>
           <!-- Bouton calendrier et compteur de jetons en haut à droite -->
           <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 12px;">
@@ -210,7 +222,7 @@
 
         <!-- Slider de thèmes -->
         <div id="themes-section" class="all-badges-section themes-slider-container">
-          <p class="themes-section-description muted">Sélectionne un thème pour répondre à une question d'un badge aléatoire. Chaque thème coûte 1 jeton. Fais défiler horizontalement pour voir tous les thèmes disponibles.</p>
+          <p class="themes-section-description muted">Sélectionne un thème pour répondre à une question aléatoire. Chaque thème coûte 1 jeton. Fais défiler horizontalement pour voir tous les thèmes disponibles.</p>
           <div class="themes-stats">
             <span class="themes-completed-label">Thèmes complétés: </span>
             <span id="themes-completed-count" class="themes-completed-count">0/0</span>

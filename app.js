@@ -434,6 +434,7 @@ function cacheElements() {
   els.profileSectionUsername = document.getElementById('profile-section-username');
   els.profileSectionBadgeCount = document.getElementById('profile-section-badge-count');
   els.profileSectionSkillCount = document.getElementById('profile-section-skill-count');
+  els.profileSectionCompletion = document.getElementById('profile-section-completion');
   els.profileSectionRank = document.getElementById('profile-section-rank');
   els.myBadgesList = document.getElementById('my-badges-list');
   els.allBadgesList = document.getElementById('all-badges-list');
@@ -765,16 +766,47 @@ function showTab(tab) {
 }
 
 function attachSettingsMenuListeners() {
-  if (!els.settingsToggle || !els.settingsMenu) return;
-  els.settingsToggle.addEventListener('click', (e) => {
-    e.stopPropagation();
-    els.settingsMenu.classList.toggle('hidden');
-  });
-  document.addEventListener('click', (e) => {
-    if (els.settingsMenu.classList.contains('hidden')) return;
-    if (els.settingsMenu.contains(e.target) || els.settingsToggle.contains(e.target)) return;
-    els.settingsMenu.classList.add('hidden');
-  });
+  // Menu de réglages du header
+  if (els.settingsToggle && els.settingsMenu) {
+    els.settingsToggle.addEventListener('click', (e) => {
+      e.stopPropagation();
+      els.settingsMenu.classList.toggle('hidden');
+    });
+    document.addEventListener('click', (e) => {
+      if (els.settingsMenu.classList.contains('hidden')) return;
+      if (els.settingsMenu.contains(e.target) || els.settingsToggle.contains(e.target)) return;
+      els.settingsMenu.classList.add('hidden');
+    });
+  }
+  
+  // Menu de réglages du profil
+  const profileSettingsToggle = document.getElementById('profile-settings-toggle');
+  const profileSettingsMenu = document.getElementById('profile-settings-menu');
+  const profileLogoutBtn = document.getElementById('profile-logout-btn');
+  const profileAdminLink = document.getElementById('profile-admin-link');
+  
+  if (profileSettingsToggle && profileSettingsMenu) {
+    profileSettingsToggle.addEventListener('click', (e) => {
+      e.stopPropagation();
+      profileSettingsMenu.classList.toggle('hidden');
+    });
+    document.addEventListener('click', (e) => {
+      if (profileSettingsMenu.classList.contains('hidden')) return;
+      if (profileSettingsMenu.contains(e.target) || profileSettingsToggle.contains(e.target)) return;
+      profileSettingsMenu.classList.add('hidden');
+    });
+    
+    // Gérer le bouton de déconnexion du profil
+    if (profileLogoutBtn) {
+      profileLogoutBtn.addEventListener('click', async () => {
+        await supabase.auth.signOut();
+        resetState();
+        toggleAdminLink(false);
+        toggleViews(false);
+      });
+    }
+    
+  }
   
   // Bouton de confidentialité du profil
   if (els.profilePrivacyBtn) {
@@ -3651,7 +3683,7 @@ function renderMyBadges() {
         </div>
         <div class="badge-compact">
           <div class="badge-emoji">${safeEmoji}</div>
-          <div class="badge-title">${safeTitle}</div>
+          <div class="badge-title ${isExpert ? 'expert-badge-title' : ''}">${safeTitle}</div>
         </div>
         <div class="all-badge-details hidden">
           <p class="muted">${displayText || ''}</p>
@@ -3866,7 +3898,7 @@ function renderAllBadgesInProfile() {
         </div>` : ''}
         <div class="badge-compact">
           <div class="badge-emoji">${safeEmoji}</div>
-          <div class="badge-title">${safeTitle}</div>
+          <div class="badge-title ${isExpert && unlocked ? 'expert-badge-title' : ''}">${safeTitle}</div>
         </div>
         <div class="all-badge-details hidden">
           <p class="muted">${displayText || ''}</p>
@@ -4862,12 +4894,13 @@ function attachProfileBadgesSlideListeners() {
   // Fonction pour mettre à jour les indicateurs selon la position de scroll
   function updateIndicators() {
     const scrollLeft = container.scrollLeft;
-    const scrollWidth = container.scrollWidth;
     const containerWidth = container.clientWidth;
     
-    // Déterminer quelle section est visible (première moitié = collection, deuxième moitié = tous)
-    const scrollPercentage = scrollLeft / (scrollWidth - containerWidth);
-    const isOnCollection = scrollPercentage < 0.5;
+    // Chaque section fait 100% de la largeur du conteneur
+    // Si scrollLeft est proche de 0, on est sur la première section (Ma collection)
+    // Si scrollLeft est proche de containerWidth, on est sur la deuxième section (Tous les badges)
+    const threshold = containerWidth * 0.5; // Seuil à 50% de la largeur
+    const isOnCollection = scrollLeft < threshold;
     
     indicators.forEach((indicator, index) => {
       if (index === 0) {
@@ -4880,16 +4913,30 @@ function attachProfileBadgesSlideListeners() {
     });
   }
   
+  // S'assurer que le conteneur est à la position initiale (première section)
+  container.scrollLeft = 0;
+  
+  // Initialiser les indicateurs correctement (premier actif)
+  indicators.forEach((indicator, index) => {
+    if (index === 0) {
+      indicator.classList.add('active');
+    } else {
+      indicator.classList.remove('active');
+    }
+  });
+  
   // Écouter le scroll
   container.addEventListener('scroll', updateIndicators);
   
-  // Mettre à jour au chargement initial
-  updateIndicators();
+  // Mettre à jour après un court délai pour s'assurer que le DOM est prêt
+  setTimeout(() => {
+    updateIndicators();
+  }, 100);
   
   // Permettre de cliquer sur les indicateurs pour naviguer
   indicators.forEach((indicator, index) => {
     indicator.addEventListener('click', () => {
-      const sectionWidth = container.scrollWidth / 2;
+      const sectionWidth = container.clientWidth;
       container.scrollTo({
         left: index * sectionWidth,
         behavior: 'smooth'
@@ -5454,7 +5501,7 @@ async function renderCommunityProfileBadges(unlockedBadges, isPrivate = false) {
         </div>
         <div class="badge-compact">
           <div class="badge-emoji">${safeEmoji}</div>
-          <div class="badge-title">${safeTitle}</div>
+          <div class="badge-title ${isExpert ? 'expert-badge-title' : ''}">${safeTitle}</div>
         </div>
         <div class="all-badge-details hidden">
           <p class="muted">${displayText || ''}</p>
@@ -5538,11 +5585,21 @@ function toggleViews(authenticated) {
 }
 
 function toggleAdminLink(show) {
-  if (!els.adminLink) return;
-  if (show) {
-    els.adminLink.classList.remove('hidden');
-  } else {
-    els.adminLink.classList.add('hidden');
+  if (els.adminLink) {
+    if (show) {
+      els.adminLink.classList.remove('hidden');
+    } else {
+      els.adminLink.classList.add('hidden');
+    }
+  }
+  // Mettre à jour aussi le lien admin du profil
+  const profileAdminLink = document.getElementById('profile-admin-link');
+  if (profileAdminLink) {
+    if (show) {
+      profileAdminLink.classList.remove('hidden');
+    } else {
+      profileAdminLink.classList.add('hidden');
+    }
   }
 }
 
@@ -5684,6 +5741,19 @@ async function updateCounters(syncProfile = false) {
   }
   if (els.profileSectionSkillCount) {
     els.profileSectionSkillCount.textContent = totalSkillPoints;
+  }
+  if (els.profileSectionCompletion) {
+    // Calculer le pourcentage de complétion
+    let totalBadgesForCompletion = 0;
+    const allBadges = state.badges || [];
+    allBadges.forEach(badge => {
+      if (!isGhostBadge(badge)) {
+        // Badge normal : toujours compté
+        totalBadgesForCompletion++;
+      }
+    });
+    const completionPercentage = totalBadgesForCompletion > 0 ? Math.round((badgeCount / totalBadgesForCompletion) * 100) : 0;
+    els.profileSectionCompletion.textContent = `${completionPercentage}%`;
   }
   if (els.profileSectionRank) {
     // S'assurer que le bouton est visible
