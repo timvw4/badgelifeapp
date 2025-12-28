@@ -57,13 +57,18 @@ export function initNotificationUI(supabase, userId) {
 export function renderNotificationBadge(count) {
   const indicator = document.getElementById('notification-indicator');
   
-  if (!indicator) return;
+  if (!indicator) {
+    console.warn('⚠️ Élément notification-indicator non trouvé dans le DOM');
+    return;
+  }
   
   // Afficher ou masquer la pastille rouge selon s'il y a des notifications
   if (count > 0) {
     indicator.classList.remove('hidden');
+    console.log('🔴 Pastille de notification affichée (', count, 'notification(s) non lue(s))');
   } else {
     indicator.classList.add('hidden');
+    console.log('⚪ Pastille de notification masquée (aucune notification non lue)');
   }
 }
 
@@ -82,24 +87,36 @@ export async function showNotificationsModal() {
   list.innerHTML = '<p class="muted">Chargement...</p>';
   
   try {
+    console.log('📋 Chargement des notifications pour user:', currentUserId);
     const notifications = await NotificationService.getNotifications(supabaseClient, currentUserId);
     
+    console.log('📋 Notifications récupérées:', notifications.length, notifications);
+    
     if (notifications.length === 0) {
+      console.log('📋 Aucune notification trouvée');
       list.innerHTML = '<p class="muted">Aucune notification pour le moment.</p>';
       return;
     }
     
     list.innerHTML = '';
     
-    notifications.forEach(notification => {
+    notifications.forEach((notification, index) => {
+      console.log(`📋 Rendu notification ${index + 1}/${notifications.length}:`, notification);
       const item = renderNotificationItem(notification);
-      list.appendChild(item);
+      if (item) {
+        list.appendChild(item);
+        console.log(`✅ Notification ${index + 1} ajoutée au DOM`);
+      } else {
+        console.error(`❌ Erreur: renderNotificationItem a retourné null pour la notification ${index + 1}`);
+      }
     });
+    
+    console.log('📋 Total d\'éléments dans la liste:', list.children.length);
     
     // Rafraîchir le badge après avoir chargé les notifications
     await refreshNotificationBadge();
   } catch (err) {
-    console.error('Erreur lors du chargement des notifications:', err);
+    console.error('❌ Erreur lors du chargement des notifications:', err);
     list.innerHTML = '<p class="muted error">Erreur lors du chargement.</p>';
   }
 }
@@ -146,37 +163,52 @@ function formatNotificationText(notification) {
  * @returns {HTMLElement} - Élément DOM de la notification
  */
 function renderNotificationItem(notification) {
-  const item = document.createElement('div');
-  const isRead = notification.is_read || false;
-  item.className = `list-item clickable notification-item${isRead ? ' read' : ''}`;
-  item.setAttribute('data-notification-id', notification.id || '');
-  
-  const text = formatNotificationText(notification);
-  
-  // Pour les notifications d'abonnement/désabonnement, afficher l'avatar
-  let avatarHtml = '';
-  if ((notification.type === 'subscription' || notification.type === 'unsubscription') && notification.follower_avatar_url) {
-    avatarHtml = `
-      <div class="notification-avatars" style="display: flex; align-items: center; margin-right: 12px;">
-        <img src="${notification.follower_avatar_url || './icons/logobl.png'}" alt="Avatar" class="logo tiny avatar" style="border: 2px solid var(--bg);">
+  try {
+    console.log('🎨 Rendu de la notification:', notification.type, notification);
+    
+    if (!notification || !notification.type) {
+      console.error('❌ Notification invalide:', notification);
+      return null;
+    }
+    
+    const item = document.createElement('div');
+    const isRead = notification.is_read || false;
+    item.className = `list-item clickable notification-item${isRead ? ' read' : ''}`;
+    item.setAttribute('data-notification-id', notification.id || '');
+    
+    const text = formatNotificationText(notification);
+    console.log('🎨 Texte formaté:', text);
+    
+    // Pour les notifications d'abonnement/désabonnement, afficher l'avatar
+    let avatarHtml = '';
+    if ((notification.type === 'subscription' || notification.type === 'unsubscription')) {
+      const avatarUrl = notification.follower_avatar_url || './icons/logobl.png';
+      avatarHtml = `
+        <div class="notification-avatars" style="display: flex; align-items: center; margin-right: 12px;">
+          <img src="${avatarUrl}" alt="Avatar" class="logo tiny avatar" style="border: 2px solid var(--bg);">
+        </div>
+      `;
+    }
+    
+    item.innerHTML = `
+      <div class="notification-content">
+        ${avatarHtml}
+        <div class="notification-text">
+          <p style="margin: 0; font-size: 14px;">${text}</p>
+        </div>
       </div>
     `;
+    
+    item.addEventListener('click', () => {
+      handleNotificationClick(notification);
+    });
+    
+    console.log('✅ Élément de notification créé:', item);
+    return item;
+  } catch (err) {
+    console.error('❌ Erreur lors du rendu de la notification:', err, notification);
+    return null;
   }
-  
-  item.innerHTML = `
-    <div class="notification-content">
-      ${avatarHtml}
-      <div class="notification-text">
-        <p style="margin: 0; font-size: 14px;">${text}</p>
-      </div>
-    </div>
-  `;
-  
-  item.addEventListener('click', () => {
-    handleNotificationClick(notification);
-  });
-  
-  return item;
 }
 
 /**
@@ -331,12 +363,18 @@ export function setupRealtimeNotificationListener() {
     supabaseClient,
     currentUserId,
     async (payload) => {
-      // Rafraîchir le badge quand une notification change
+      console.log('🔄 Événement Realtime reçu, mise à jour de la pastille...', payload.eventType);
+      
+      // Toujours rafraîchir le badge pour tous les types d'événements
+      // INSERT : nouvelle notification → pastille doit apparaître
+      // UPDATE : notification marquée comme lue → pastille doit disparaître si plus de notifications non lues
+      // DELETE : notification supprimée → pastille doit se mettre à jour
       await refreshNotificationBadge();
       
-      // Si le modal est ouvert, rafraîchir la liste
+      // Si le modal est ouvert, rafraîchir la liste pour afficher les changements
       const modal = document.getElementById('notifications-modal');
       if (modal && !modal.classList.contains('hidden')) {
+        console.log('📋 Modal ouvert, rafraîchissement de la liste...');
         await showNotificationsModal();
       }
     }

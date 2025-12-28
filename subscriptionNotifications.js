@@ -12,9 +12,12 @@
  */
 async function createNotification(supabase, userId, type, data = {}, showBadge = true) {
   try {
+    console.log(`📝 Création notification ${type}:`, { userId, type, data, showBadge });
+    
     // Vérifier les doublons selon le type
     const duplicateCheck = await checkDuplicateNotification(supabase, userId, type, data);
     if (duplicateCheck.exists) {
+      console.log(`⚠️ Notification ${type} déjà existante, doublon évité`);
       return { success: false, error: 'Notification déjà existante' };
     }
     
@@ -26,6 +29,8 @@ async function createNotification(supabase, userId, type, data = {}, showBadge =
       ...data
     };
     
+    console.log('📝 Données à insérer:', notificationData);
+    
     const { data: notification, error } = await supabase
       .from('notifications')
       .insert(notificationData)
@@ -33,13 +38,14 @@ async function createNotification(supabase, userId, type, data = {}, showBadge =
       .single();
     
     if (error) {
-      console.error(`Erreur lors de la création de la notification ${type}:`, error);
+      console.error(`❌ Erreur lors de la création de la notification ${type}:`, error);
       return { success: false, error: error.message };
     }
     
+    console.log(`✅ Notification ${type} créée avec succès:`, notification.id);
     return { success: true, notificationId: notification.id };
   } catch (err) {
-    console.error(`Erreur lors de la création de la notification ${type}:`, err);
+    console.error(`❌ Erreur lors de la création de la notification ${type}:`, err);
     return { success: false, error: err.message };
   }
 }
@@ -123,9 +129,28 @@ async function checkDuplicateNotification(supabase, userId, type, data) {
  * @returns {Promise<{success: boolean, error?: string}>}
  */
 export async function createSubscriptionNotification(supabase, userId, followerId) {
-  return await createNotification(supabase, userId, 'subscription', {
-    follower_id: followerId
-  }, true);
+  console.log('📝 [createSubscriptionNotification] Début - userId:', userId, 'followerId:', followerId);
+  
+  if (!supabase) {
+    console.error('❌ [createSubscriptionNotification] supabase est null/undefined');
+    return { success: false, error: 'Client Supabase manquant' };
+  }
+  
+  if (!userId || !followerId) {
+    console.error('❌ [createSubscriptionNotification] Paramètres manquants:', { userId, followerId });
+    return { success: false, error: 'Paramètres manquants' };
+  }
+  
+  try {
+    const result = await createNotification(supabase, userId, 'subscription', {
+      follower_id: followerId
+    }, true);
+    console.log('📝 [createSubscriptionNotification] Résultat:', result);
+    return result;
+  } catch (err) {
+    console.error('❌ [createSubscriptionNotification] Exception:', err);
+    return { success: false, error: err.message };
+  }
 }
 
 /**
@@ -210,6 +235,8 @@ export async function createSundayBonusNotification(supabase, userId, dayStr) {
  */
 export async function getNotifications(supabase, userId) {
   try {
+    console.log('🔍 Récupération des notifications pour user:', userId);
+    
     const { data, error } = await supabase
       .from('notifications')
       .select(`
@@ -244,33 +271,44 @@ export async function getNotifications(supabase, userId) {
       .limit(100);
     
     if (error) {
-      console.error('Erreur lors de la récupération des notifications:', error);
+      console.error('❌ Erreur lors de la récupération des notifications:', error);
       return [];
     }
     
+    console.log('🔍 Données brutes récupérées:', data?.length || 0, 'notifications', data);
+    
     // Transformer les notifications pour un format uniforme
-    return (data || []).map(notif => ({
-      id: notif.id,
-      type: notif.type,
-      is_read: notif.is_read || false,
-      show_badge: notif.show_badge !== false, // Par défaut true
-      created_at: notif.created_at,
-      // Données spécifiques selon le type
-      follower_id: notif.follower_id,
-      follower_username: notif.profiles?.username || null,
-      follower_avatar_url: notif.profiles?.avatar_url || null,
-      badge_id: notif.badge_id,
-      badge_name: notif.badges?.name || null,
-      suspicious_user_id: notif.suspicious_user_id,
-      suspicious_username: notif.suspicious_profiles?.username || null,
-      badge_owner_id: notif.badge_owner_id,
-      owner_username: notif.owner_profiles?.username || null,
-      suspicion_count: notif.suspicion_count,
-      day_str: notif.day_str,
-      token_amount: notif.token_amount
-    }));
+    const transformed = (data || []).map(notif => {
+      const transformedNotif = {
+        id: notif.id,
+        type: notif.type,
+        is_read: notif.is_read || false,
+        show_badge: notif.show_badge !== false, // Par défaut true
+        created_at: notif.created_at,
+        user_id: userId, // Ajouter user_id pour les notifications de soupçon
+        // Données spécifiques selon le type
+        follower_id: notif.follower_id,
+        follower_username: notif.profiles?.username || null,
+        follower_avatar_url: notif.profiles?.avatar_url || null,
+        badge_id: notif.badge_id,
+        badge_name: notif.badges?.name || null,
+        suspicious_user_id: notif.suspicious_user_id,
+        suspicious_username: notif.suspicious_profiles?.username || null,
+        badge_owner_id: notif.badge_owner_id,
+        owner_username: notif.owner_profiles?.username || null,
+        suspicion_count: notif.suspicion_count,
+        day_str: notif.day_str,
+        token_amount: notif.token_amount
+      };
+      
+      console.log('🔍 Notification transformée:', transformedNotif.type, transformedNotif);
+      return transformedNotif;
+    });
+    
+    console.log('🔍 Notifications transformées:', transformed.length, transformed);
+    return transformed;
   } catch (err) {
-    console.error('Erreur lors de la récupération des notifications:', err);
+    console.error('❌ Erreur lors de la récupération des notifications:', err);
     return [];
   }
 }
@@ -330,6 +368,8 @@ export async function markAllNotificationsAsRead(supabase, userId) {
  */
 export async function getUnreadNotificationsCount(supabase, userId) {
   try {
+    console.log('🔢 Comptage des notifications non lues pour user:', userId);
+    
     const { count, error } = await supabase
       .from('notifications')
       .select('*', { count: 'exact', head: true })
@@ -338,13 +378,18 @@ export async function getUnreadNotificationsCount(supabase, userId) {
       .eq('show_badge', true); // Seulement celles qui doivent afficher la pastille
     
     if (error) {
-      console.error('Erreur lors du comptage des notifications:', error);
+      console.error('❌ Erreur lors du comptage des notifications:', error);
+      // Si l'erreur est "relation does not exist", la table n'existe pas
+      if (error.message && error.message.includes('does not exist')) {
+        console.error('❌ La table notifications n\'existe pas ! Exécute create_unified_notifications_table.sql');
+      }
       return 0;
     }
     
+    console.log('🔢 Nombre de notifications non lues:', count || 0);
     return count || 0;
   } catch (err) {
-    console.error('Erreur lors du comptage des notifications:', err);
+    console.error('❌ Exception lors du comptage des notifications:', err);
     return 0;
   }
 }
@@ -357,6 +402,8 @@ export async function getUnreadNotificationsCount(supabase, userId) {
  * @returns {Function} - Fonction pour arrêter l'écoute
  */
 export function setupRealtimeNotifications(supabase, userId, callback) {
+  // Écouter tous les événements sur la table notifications et filtrer côté client
+  // Cela fonctionne mieux que les filtres côté serveur qui peuvent ne pas fonctionner avec RLS
   const channel = supabase
     .channel(`notifications:${userId}`)
     .on(
@@ -364,13 +411,26 @@ export function setupRealtimeNotifications(supabase, userId, callback) {
       {
         event: '*', // INSERT, UPDATE, DELETE
         schema: 'public',
-        table: 'notifications',
-        filter: `user_id=eq.${userId}`
+        table: 'notifications'
+        // Pas de filtre côté serveur - on filtre côté client pour éviter les problèmes avec RLS
       },
       (payload) => {
-        console.log('🔔 Notification Realtime détectée:', payload.eventType, payload);
-        if (callback) {
-          callback(payload);
+        // Filtrer côté client : seulement les notifications de cet utilisateur
+        const notificationUserId = payload.new?.user_id || payload.old?.user_id;
+        if (notificationUserId === userId) {
+          console.log('🔔 Notification Realtime détectée:', payload.eventType, {
+            type: payload.new?.type || payload.old?.type,
+            show_badge: payload.new?.show_badge !== false,
+            is_read: payload.new?.is_read
+          });
+          
+          // Appeler le callback pour mettre à jour la pastille et le modal
+          if (callback) {
+            callback(payload);
+          }
+        } else {
+          // Ignorer les notifications qui ne nous concernent pas
+          console.log('🔕 Notification ignorée (pas pour cet utilisateur):', notificationUserId);
         }
       }
     )

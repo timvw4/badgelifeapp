@@ -3,6 +3,11 @@
 import * as Subscriptions from './subscriptions.js';
 import { createSubscriptionNotification, createUnsubscriptionNotification } from './subscriptionNotifications.js';
 
+console.log('✅ Module subscriptionUI chargé, fonctions de notifications disponibles:', {
+  hasCreateSubscription: typeof createSubscriptionNotification === 'function',
+  hasCreateUnsubscription: typeof createUnsubscriptionNotification === 'function'
+});
+
 let supabaseClient = null;
 let currentUserId = null;
 
@@ -280,17 +285,37 @@ async function handleSubscribeClick(profileId, currentlySubscribed) {
   let result;
   if (currentlySubscribed) {
     result = await Subscriptions.unsubscribeFromUser(supabaseClient, currentUserId, profileId);
+    console.log('📝 Résultat désabonnement:', result);
     
     // Créer la notification de désabonnement (discrète, pas de pastille)
     if (result.success) {
-      await createUnsubscriptionNotification(supabaseClient, profileId, currentUserId);
+      console.log('📝 Tentative de création de notification de désabonnement pour:', profileId);
+      const notifResult = await createUnsubscriptionNotification(supabaseClient, profileId, currentUserId);
+      console.log('📝 Résultat création notification désabonnement:', notifResult);
+      if (!notifResult.success) {
+        console.error('❌ Échec création notification désabonnement:', notifResult.error);
+      }
+    } else {
+      console.warn('⚠️ Désabonnement échoué, pas de notification créée');
     }
   } else {
     result = await Subscriptions.subscribeToUser(supabaseClient, currentUserId, profileId);
+    console.log('📝 Résultat abonnement:', result);
     
     // Créer la notification d'abonnement pour l'utilisateur suivi
-    if (result.success) {
-      await createSubscriptionNotification(supabaseClient, profileId, currentUserId);
+    if (result && result.success) {
+      console.log('📝 Tentative de création de notification d\'abonnement pour:', profileId, 'depuis:', currentUserId);
+      try {
+        const notifResult = await createSubscriptionNotification(supabaseClient, profileId, currentUserId);
+        console.log('📝 Résultat création notification:', notifResult);
+        if (!notifResult || !notifResult.success) {
+          console.error('❌ Échec création notification:', notifResult?.error || 'Résultat inattendu');
+        }
+      } catch (err) {
+        console.error('❌ Exception lors de la création de notification:', err);
+      }
+    } else {
+      console.warn('⚠️ Abonnement échoué ou result.success = false, pas de notification créée. Result:', result);
     }
   }
   
