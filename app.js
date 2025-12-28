@@ -683,11 +683,10 @@ function attachFormListeners() {
     if (error) return setMessage(error.message, true);
     const userId = data.user?.id;
     if (userId) {
-      // Donner 3 jetons aux nouveaux utilisateurs
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
+      // Donner 3 jetons aux nouveaux utilisateurs (heure de Paris)
+      const today = getDateInParis();
       const currentWeekStart = getWeekStartDate(today);
-      const currentWeekStartStr = currentWeekStart.toISOString().split('T')[0];
+      const currentWeekStartStr = formatDateYYYYMMDD(currentWeekStart);
       
       await supabase.from('profiles').upsert({ 
         id: userId, 
@@ -1169,10 +1168,9 @@ async function fetchProfile() {
   }
   if (!data) {
     // Essayer d'insérer avec toutes les colonnes, sinon sans
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const today = getDateInParis();
     const currentWeekStart = getWeekStartDate(today);
-    const currentWeekStartStr = currentWeekStart.toISOString().split('T')[0];
+    const currentWeekStartStr = formatDateYYYYMMDD(currentWeekStart);
     
     const insertData = { id: state.user.id, username: 'Invité', badge_count: 0, avatar_url: null, skill_points: 0, rank: 'Minimaliste', tokens: 3 };
     try {
@@ -5435,26 +5433,86 @@ async function updateCounters(syncProfile = false) {
 
 // ========== SYSTÈME DE FIDÉLITÉ / CALENDRIER ==========
 
+// Fonction utilitaire pour obtenir la date d'aujourd'hui en heure de Paris (Europe/Paris)
+// Retourne la date au format YYYY-MM-DD
+function getTodayInParis() {
+  const now = new Date();
+  // Convertir en heure de Paris (UTC+1 en hiver, UTC+2 en été)
+  // Utiliser toLocaleString avec le fuseau horaire Europe/Paris
+  const parisDate = new Date(now.toLocaleString('en-US', { timeZone: 'Europe/Paris' }));
+  const year = parisDate.getFullYear();
+  const month = String(parisDate.getMonth() + 1).padStart(2, '0');
+  const day = String(parisDate.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+// Fonction utilitaire pour obtenir un objet Date en heure de Paris
+// Retourne une date à minuit (00:00:00) en heure de Paris
+function getDateInParis() {
+  const now = new Date();
+  
+  // Utiliser Intl.DateTimeFormat pour obtenir les composants de date en heure de Paris
+  const parts = new Intl.DateTimeFormat('en', {
+    timeZone: 'Europe/Paris',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).formatToParts(now);
+  
+  const yearParis = parseInt(parts.find(p => p.type === 'year').value);
+  const monthParis = parseInt(parts.find(p => p.type === 'month').value) - 1; // Mois 0-indexé
+  const dayParis = parseInt(parts.find(p => p.type === 'day').value);
+  
+  // Créer une date locale avec les composants de Paris (sera interprétée comme locale)
+  // Cela évite les problèmes de conversion UTC
+  const parisDateLocal = new Date(yearParis, monthParis, dayParis, 0, 0, 0, 0);
+  
+  return parisDateLocal;
+}
+
+// Fonction utilitaire pour formater une date au format YYYY-MM-DD
+function formatDateYYYYMMDD(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 // Retourne le lundi de la semaine pour une date donnée
+// Corrigé pour éviter les problèmes de changement de mois
 function getWeekStartDate(date) {
   const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
   const day = d.getDay(); // 0 = dimanche, 1 = lundi, etc.
-  const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Ajuster pour que lundi = 1
-  const monday = new Date(d.setDate(diff));
-  monday.setHours(0, 0, 0, 0);
+  
+  // Calculer le nombre de jours à soustraire pour arriver au lundi
+  // Si c'est dimanche (0), on recule de 6 jours, sinon on recule de (day - 1) jours
+  const daysToSubtract = day === 0 ? 6 : day - 1;
+  
+  // Créer une nouvelle date pour éviter de modifier l'originale
+  const monday = new Date(d);
+  monday.setDate(d.getDate() - daysToSubtract);
+  
   return monday;
 }
 
 // Fonction utilitaire pour filtrer les dates d'un tableau pour ne garder que celles de la semaine actuelle
 // Évite la duplication de code dans plusieurs fonctions
+// Optimisée pour éviter de recalculer le début de semaine pour chaque date
 function filterDatesByCurrentWeek(dateArray, currentWeekStartStr) {
-  if (!Array.isArray(dateArray)) return [];
+  if (!Array.isArray(dateArray) || dateArray.length === 0) return [];
+  
+  // Calculer les limites de la semaine actuelle une seule fois
+  const currentWeekStart = new Date(currentWeekStartStr + 'T00:00:00');
+  const currentWeekEnd = new Date(currentWeekStart);
+  currentWeekEnd.setDate(currentWeekStart.getDate() + 6); // Dimanche de la semaine
+  
+  // Filtrer en comparant directement les dates (plus rapide que recalculer le début de semaine)
   return dateArray.filter(dateStr => {
     try {
       const date = new Date(dateStr + 'T00:00:00');
-      const dateWeekStart = getWeekStartDate(date);
-      const dateWeekStartStr = dateWeekStart.toISOString().split('T')[0];
-      return dateWeekStartStr === currentWeekStartStr;
+      // Vérifier si la date est entre le lundi et le dimanche de la semaine actuelle
+      return date >= currentWeekStart && date <= currentWeekEnd;
     } catch (e) {
       return false;
     }
@@ -5484,6 +5542,30 @@ function isDayClaimed(dayStr, currentWeekStartStr) {
   ).includes(dayStr);
   
   return claimedInState || claimedInProfile;
+}
+
+// Fonction utilitaire pour vérifier si une date est un dimanche
+// Utilisée partout pour éviter les incohérences
+function isSundayDate(dateStr) {
+  try {
+    const date = new Date(dateStr + 'T00:00:00');
+    return date.getDay() === 0; // 0 = dimanche en JavaScript
+  } catch (e) {
+    return false;
+  }
+}
+
+// Fonction utilitaire pour obtenir la date du dimanche d'une semaine donnée
+// Prend le lundi de la semaine (currentWeekStartStr) et retourne le dimanche
+function getSundayDateOfWeek(currentWeekStartStr) {
+  try {
+    const monday = new Date(currentWeekStartStr + 'T00:00:00');
+    const sunday = new Date(monday);
+    sunday.setDate(monday.getDate() + 6); // Dimanche est 6 jours après le lundi
+    return formatDateYYYYMMDD(sunday);
+  } catch (e) {
+    return null;
+  }
 }
 
 // Réinitialise les données de la semaine (appelée lors d'un changement de semaine)
@@ -5520,10 +5602,10 @@ async function loadConnectionDays() {
     return;
   }
   
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  // Utiliser l'heure de Paris pour tous les calculs de date
+  const today = getDateInParis();
   const currentWeekStart = getWeekStartDate(today);
-  const currentWeekStartStr = currentWeekStart.toISOString().split('T')[0];
+  const currentWeekStartStr = formatDateYYYYMMDD(currentWeekStart);
   
   // DEBUG : Vérifier les données AVANT le traitement
   console.log('=== loadConnectionDays - AVANT traitement ===');
@@ -5534,59 +5616,100 @@ async function loadConnectionDays() {
   
   // Si on a une semaine enregistrée et que c'est une nouvelle semaine, réinitialiser
   if (state.profile.week_start_date) {
-    const savedWeekStart = new Date(state.profile.week_start_date + 'T00:00:00');
-    const savedWeekStartStr = savedWeekStart.toISOString().split('T')[0];
+    // Convertir la date sauvegardée (qui est déjà en format YYYY-MM-DD)
+    const savedWeekStartStr = state.profile.week_start_date;
     
-    console.log('savedWeekStartStr:', savedWeekStartStr);
-    console.log('currentWeekStartStr:', currentWeekStartStr);
+    console.log('savedWeekStartStr (depuis Supabase):', savedWeekStartStr);
+    console.log('currentWeekStartStr (calculé aujourd\'hui):', currentWeekStartStr);
+    const todayStrForDisplay = formatDateYYYYMMDD(today);
+    console.log('Date d\'aujourd\'hui (Paris):', todayStrForDisplay);
+    console.log('Jour de la semaine (0=dimanche, 1=lundi...):', today.getDay());
     console.log('Nouvelle semaine?', savedWeekStartStr !== currentWeekStartStr);
     
     if (savedWeekStartStr !== currentWeekStartStr) {
       // Nouvelle semaine : réinitialiser les jours de connexion ET les jetons récupérés
       console.log('⚠️ NOUVELLE SEMAINE DÉTECTÉE - Réinitialisation');
-      // IMPORTANT : Ne PAS appeler resetWeekData() ici car il efface les données dans Supabase
-      // Au lieu de cela, réinitialiser seulement localement et mettre à jour week_start_date
-      // NE PAS écraser state.profile.claimed_daily_tokens car il contient les données de Supabase
-      // qui seront filtrées plus tard pour ne garder que celles de la semaine actuelle
-      state.connectionDays = [];
-      state.claimedDailyTokens = []; // Vide localement, sera rempli par le filtrage plus bas
+      
+      // Filtrer les données existantes pour ne garder que celles de la semaine actuelle
+      // (normalement, il ne devrait y en avoir aucune, mais on filtre par sécurité)
+      const connectionDaysFromProfile = Array.isArray(state.profile.connection_days) ? state.profile.connection_days : [];
+      const connectionDaysThisWeek = filterDatesByCurrentWeek(
+        connectionDaysFromProfile,
+        currentWeekStartStr
+      );
+      const claimedTokensThisWeek = filterDatesByCurrentWeek(
+        Array.isArray(state.profile.claimed_daily_tokens) ? state.profile.claimed_daily_tokens : [],
+        currentWeekStartStr
+      );
+      
+      // DEBUG : Afficher ce qui est filtré
+      console.log('🔍 Données avant filtrage:', connectionDaysFromProfile);
+      console.log('🔍 Données après filtrage:', connectionDaysThisWeek);
+      console.log('🔍 Semaine actuelle (lundi):', currentWeekStartStr);
+      
+      // Réinitialiser localement (les données filtrées devraient être vides pour une nouvelle semaine)
+      state.connectionDays = connectionDaysThisWeek;
+      state.claimedDailyTokens = claimedTokensThisWeek;
       state.weekBonusClaimed = false;
       state.weekStartDate = currentWeekStartStr;
       
-      // Mettre à jour le profil local (mais NE PAS écraser claimed_daily_tokens)
+      // Mettre à jour le profil local avec les données filtrées
       if (state.profile) {
-        state.profile.connection_days = []; // Réinitialiser localement seulement
-        // NE PAS écraser state.profile.claimed_daily_tokens ici !
-        // Il contient les données de Supabase qui seront filtrées plus bas
+        state.profile.connection_days = connectionDaysThisWeek;
+        state.profile.claimed_daily_tokens = claimedTokensThisWeek;
         state.profile.week_bonus_claimed = false;
         state.profile.week_start_date = currentWeekStartStr;
         state.profile.week_bonus_available = false;
       }
       
-      // Sauvegarder dans Supabase SEULEMENT la nouvelle semaine, sans effacer les anciennes données
-      // (les anciennes données seront automatiquement filtrées par loadConnectionDays)
+      // Sauvegarder dans Supabase les données filtrées (nettoyer les anciennes semaines)
+      // Cela garantit que la base de données ne contient que les données de la semaine actuelle
       try {
-        await supabase
+        const { error } = await supabase
           .from('profiles')
           .update({ 
             week_start_date: currentWeekStartStr,
             week_bonus_available: false,
-            week_bonus_claimed: false
-            // NE PAS mettre à jour connection_days et claimed_daily_tokens ici
-            // car ils seront mis à jour par checkAndUpdateConnectionDay() et claimDailyTokens()
+            week_bonus_claimed: false,
+            connection_days: connectionDaysThisWeek,
+            claimed_daily_tokens: claimedTokensThisWeek
           })
           .eq('id', state.user.id);
+        
+        if (error) {
+          console.error('Erreur lors de la mise à jour de la semaine:', error);
+        } else {
+          console.log('✅ Semaine réinitialisée dans Supabase');
+        }
       } catch (error) {
         console.error('Erreur lors de la mise à jour de la semaine:', error);
       }
     } else {
-      // Même semaine : charger les jours existants
+      // Même semaine : charger les jours existants et les filtrer pour la semaine actuelle
       console.log('✅ MÊME SEMAINE - Chargement des données existantes');
-      state.connectionDays = Array.isArray(state.profile.connection_days) 
-        ? state.profile.connection_days 
-        : [];
+      
+      // Filtrer les données pour ne garder que celles de la semaine actuelle
+      const connectionDaysFiltered = filterDatesByCurrentWeek(
+        Array.isArray(state.profile.connection_days) ? state.profile.connection_days : [],
+        currentWeekStartStr
+      );
+      const claimedTokensFiltered = filterDatesByCurrentWeek(
+        Array.isArray(state.profile.claimed_daily_tokens) ? state.profile.claimed_daily_tokens : [],
+        currentWeekStartStr
+      );
+      
+      state.connectionDays = connectionDaysFiltered;
+      state.claimedDailyTokens = claimedTokensFiltered;
       state.weekStartDate = state.profile.week_start_date || currentWeekStartStr;
-      console.log('connectionDays chargés:', state.connectionDays);
+      
+      // Mettre à jour le profil local avec les données filtrées
+      if (state.profile) {
+        state.profile.connection_days = connectionDaysFiltered;
+        state.profile.claimed_daily_tokens = claimedTokensFiltered;
+      }
+      
+      console.log('connectionDays chargés (filtrés):', state.connectionDays);
+      console.log('claimedDailyTokens chargés (filtrés):', state.claimedDailyTokens);
     }
   } else {
     // Pas de semaine enregistrée : initialiser
@@ -5604,9 +5727,24 @@ async function loadConnectionDays() {
     state.weekStartDate = currentWeekStartStr;
   }
   
+  // Recalculer la date d'aujourd'hui pour être cohérent (heure de Paris)
+  const todayForLog = getDateInParis();
+  const todayStrForLog = formatDateYYYYMMDD(todayForLog);
+  
   console.log('=== APRÈS traitement semaine ===');
   console.log('state.connectionDays:', state.connectionDays);
   console.log('state.weekStartDate:', state.weekStartDate);
+  console.log('Date d\'aujourd\'hui:', todayStrForLog);
+  console.log('Jour de la semaine (0=dimanche):', todayForLog.getDay());
+  console.log('Début de semaine actuelle:', currentWeekStartStr);
+  if (state.connectionDays && state.connectionDays.length > 0) {
+    console.log('⚠️ ATTENTION: connectionDays contient des éléments après réinitialisation:', state.connectionDays);
+    console.log('Ces dates sont-elles dans la semaine actuelle?');
+    state.connectionDays.forEach(dateStr => {
+      const isInWeek = isDateInCurrentWeek(dateStr, currentWeekStartStr);
+      console.log(`  - ${dateStr}: ${isInWeek ? '✅ Dans la semaine' : '❌ Pas dans la semaine'}`);
+    });
+  }
   console.log('==================================');
   
   // S'assurer que state.weekStartDate est toujours défini
@@ -5614,115 +5752,55 @@ async function loadConnectionDays() {
     state.weekStartDate = currentWeekStartStr;
   }
   
-  // Charger les jetons réclamés depuis le profil
-  // IMPORTANT : Toujours charger depuis state.profile.claimed_daily_tokens qui vient de Supabase
-  // Ne pas utiliser state.claimedDailyTokens qui pourrait être vide après resetWeekData()
-  
-  // DEBUG : Vérifier ce qui est dans state.profile AVANT le traitement
-  console.log('=== loadConnectionDays - Chargement claimed_daily_tokens ===');
-  console.log('state.profile.claimed_daily_tokens (brut depuis Supabase):', state.profile.claimed_daily_tokens);
-  console.log('state.profile.connection_days (brut depuis Supabase):', state.profile.connection_days);
-  console.log('currentWeekStartStr:', currentWeekStartStr);
-  
-  if (!state.profile.claimed_daily_tokens) {
-    state.profile.claimed_daily_tokens = [];
+  // Les données sont déjà filtrées dans la section précédente (nouvelle semaine ou même semaine)
+  // On s'assure juste que state.claimedDailyTokens est bien initialisé
+  if (!state.claimedDailyTokens) {
+    state.claimedDailyTokens = [];
   }
   
-  // Filtrer les dates réclamées pour ne garder que celles de la semaine actuelle
-  // Cela garantit qu'un jour ne peut être réclamé qu'une seule fois par semaine
-  const allClaimedTokens = Array.isArray(state.profile.claimed_daily_tokens)
-    ? state.profile.claimed_daily_tokens
-    : [];
-  
-  console.log('allClaimedTokens (après extraction):', allClaimedTokens);
-  
-  // Filtrer pour ne garder que les dates de la semaine actuelle (utilise la fonction utilitaire)
-  state.claimedDailyTokens = filterDatesByCurrentWeek(allClaimedTokens, currentWeekStartStr);
-  
-  console.log('state.claimedDailyTokens (après filtrage):', state.claimedDailyTokens);
-  console.log('============================================================');
-  
-  // IMPORTANT : Si on vient de détecter une nouvelle semaine, state.claimedDailyTokens pourrait être vide
-  // mais state.profile.claimed_daily_tokens contient encore les données de Supabase
-  // On doit donc s'assurer que state.claimedDailyTokens utilise les données filtrées du profil
-  if (state.claimedDailyTokens.length === 0 && allClaimedTokens.length > 0) {
-    // Les données existent dans Supabase mais ne sont pas de la semaine actuelle (normal)
-    console.log('Les données de Supabase sont d\'une autre semaine, c\'est normal');
-  }
-  
-  // DEBUG : Afficher les données chargées avec plus de détails
+  // DEBUG : Afficher les données chargées
   console.log('=== loadConnectionDays - Données chargées ===');
   console.log('connectionDays:', state.connectionDays);
   console.log('claimedDailyTokens:', state.claimedDailyTokens);
   console.log('profile.claimed_daily_tokens:', state.profile.claimed_daily_tokens);
   console.log('weekStartDate:', state.weekStartDate);
   console.log('currentWeekStartStr:', currentWeekStartStr);
-  console.log('allClaimedTokens (avant filtrage):', allClaimedTokens);
-  console.log('claimedDailyTokens.length:', state.claimedDailyTokens.length);
-  console.log('allClaimedTokens.length:', allClaimedTokens.length);
   console.log('===========================================');
   
-  // Si les dates filtrées sont différentes de celles du profil, mettre à jour le profil
-  if (state.claimedDailyTokens.length !== allClaimedTokens.length) {
-    state.profile.claimed_daily_tokens = state.claimedDailyTokens;
-    // Sauvegarder dans Supabase pour nettoyer les anciennes dates
+  // IMPORTANT : Synchroniser localStorage avec Supabase
+  // Si les données de Supabase existent, elles ont priorité
+  // localStorage est seulement un backup si la colonne n'existe pas dans Supabase
+  
+  // Vérifier si les données de Supabase existent (même après filtrage)
+  const hasClaimedTokensInSupabase = state.profile.claimed_daily_tokens && 
+                                     Array.isArray(state.profile.claimed_daily_tokens);
+  
+  // Si on a des données dans Supabase, synchroniser localStorage avec Supabase
+  if (hasClaimedTokensInSupabase && state.user) {
     try {
-      const { error } = await supabase
-        .from('profiles')
-        .update({ claimed_daily_tokens: state.claimedDailyTokens })
-        .eq('id', state.user.id);
-      if (error) {
-        console.error('Erreur lors de la sauvegarde des claimed_daily_tokens:', error);
-        // En cas d'erreur, sauvegarder dans localStorage comme backup
-        if (state.user) {
-          try {
-            localStorage.setItem(`claimed_tokens_${state.user.id}`, JSON.stringify(state.claimedDailyTokens));
-          } catch (e) {
-            console.warn('Impossible de sauvegarder dans localStorage:', e);
-          }
-        }
-      }
-    } catch (error) {
-      console.error('Erreur lors de la sauvegarde des claimed_daily_tokens:', error);
-      // En cas d'erreur, sauvegarder dans localStorage comme backup
-      if (state.user) {
-        try {
-          localStorage.setItem(`claimed_tokens_${state.user.id}`, JSON.stringify(state.claimedDailyTokens));
-        } catch (e) {
-          console.warn('Impossible de sauvegarder dans localStorage:', e);
-        }
-      }
+      // Sauvegarder les données filtrées dans localStorage pour backup
+      localStorage.setItem(`claimed_tokens_${state.user.id}`, JSON.stringify(state.claimedDailyTokens));
+      console.log('localStorage synchronisé avec Supabase');
+    } catch (e) {
+      console.warn('Impossible de synchroniser localStorage:', e);
     }
   }
   
-  // IMPORTANT : Ne charger depuis localStorage QUE si les données ne sont pas dans Supabase
-  // Si state.profile.claimed_daily_tokens existe mais est vide après filtrage, c'est normal (autre semaine)
-  // Ne pas charger depuis localStorage dans ce cas car cela écraserait les données de Supabase
-  // localStorage est seulement un backup si la colonne n'existe pas dans Supabase
-  const hasClaimedTokensInProfile = state.profile.claimed_daily_tokens && 
-                                     Array.isArray(state.profile.claimed_daily_tokens) && 
-                                     state.profile.claimed_daily_tokens.length > 0;
-  
   // Charger depuis localStorage UNIQUEMENT si :
   // 1. state.claimedDailyTokens est vide (après filtrage)
-  // 2. ET state.profile.claimed_daily_tokens n'existe pas ou est vide (colonne absente dans Supabase)
+  // 2. ET state.profile.claimed_daily_tokens n'existe pas ou n'est pas un tableau (colonne absente dans Supabase)
   // 3. ET localStorage contient des données
-  if (state.claimedDailyTokens.length === 0 && !hasClaimedTokensInProfile && state.user) {
+  if (state.claimedDailyTokens.length === 0 && !hasClaimedTokensInSupabase && state.user) {
     try {
       const stored = localStorage.getItem(`claimed_tokens_${state.user.id}`);
       if (stored) {
         const parsed = JSON.parse(stored);
         if (Array.isArray(parsed)) {
           // Filtrer aussi les dates du localStorage pour ne garder que celles de la semaine actuelle
-          if (typeof currentWeekStartStr !== 'undefined') {
-            const filteredParsed = filterDatesByCurrentWeek(parsed, currentWeekStartStr);
-            state.claimedDailyTokens = filteredParsed;
-            state.profile.claimed_daily_tokens = filteredParsed;
-          } else {
-            console.warn('currentWeekStartStr non défini, utilisation des dates sans filtre');
-            state.claimedDailyTokens = parsed;
-            state.profile.claimed_daily_tokens = parsed;
-          }
+          const filteredParsed = filterDatesByCurrentWeek(parsed, currentWeekStartStr);
+          state.claimedDailyTokens = filteredParsed;
+          state.profile.claimed_daily_tokens = filteredParsed;
+          console.log('Données chargées depuis localStorage (backup)');
         }
       }
     } catch (e) {
@@ -5732,8 +5810,14 @@ async function loadConnectionDays() {
   
   state.weekBonusClaimed = Boolean(state.profile.week_bonus_claimed);
   
-  // Vérifier si le bonus est disponible (non réclamé)
-  state.canClaimBonus = state.connectionDays.length === 7 && !state.weekBonusClaimed;
+  // Filtrer les jours de connexion pour ne garder que ceux de la semaine actuelle
+  const connectionDaysThisWeek = filterDatesByCurrentWeek(
+    state.connectionDays || [],
+    currentWeekStartStr
+  );
+  
+  // Vérifier si le bonus est disponible (tous les jours de la semaine actuelle connectés et non réclamé)
+  state.canClaimBonus = connectionDaysThisWeek.length === 7 && !state.weekBonusClaimed;
   
   // État chargé depuis localStorage ou initialisé
   
@@ -5748,11 +5832,11 @@ async function loadConnectionDays() {
 async function checkAndUpdateConnectionDay() {
   if (!state.user || !state.profile) return;
   
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const todayStr = today.toISOString().split('T')[0];
+  // Utiliser l'heure de Paris pour tous les calculs de date
+  const today = getDateInParis();
+  const todayStr = formatDateYYYYMMDD(today);
   const currentWeekStart = getWeekStartDate(today);
-  const currentWeekStartStr = currentWeekStart.toISOString().split('T')[0];
+  const currentWeekStartStr = formatDateYYYYMMDD(currentWeekStart);
   
   // S'assurer que connectionDays est initialisé (chargé par loadConnectionDays())
   if (!state.connectionDays) {
@@ -5840,8 +5924,9 @@ async function checkAndUpdateConnectionDay() {
   }
   
   // Rendre le calendrier seulement si nécessaire (pas de double rendu)
-  // Le calendrier est déjà rendu par loadConnectionDays(), donc on ne le rend que si on a modifié quelque chose
-  if (state.connectionDays && state.connectionDays.length > 0) {
+  // Le calendrier sera rendu par loadConnectionDays() ou lors de l'ouverture du drawer
+  // On ne le rend ici que si on a modifié quelque chose ET que le calendrier est ouvert
+  if (hasChanged && els.calendarDrawer && !els.calendarDrawer.classList.contains('hidden')) {
     renderCalendar();
   }
   updateCalendarBadge();
@@ -5863,11 +5948,11 @@ function renderCalendar() {
   // Cette fonction vérifie à la fois dans state.claimedDailyTokens ET dans state.profile.claimed_daily_tokens
   // Cela garantit la synchronisation même si renderCalendar() est appelé plusieurs fois
   
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const todayStr = today.toISOString().split('T')[0];
+  // Utiliser l'heure de Paris pour tous les calculs de date
+  const today = getDateInParis();
+  const todayStr = formatDateYYYYMMDD(today);
   const currentWeekStart = getWeekStartDate(today);
-  const currentWeekStartStr = currentWeekStart.toISOString().split('T')[0];
+  const currentWeekStartStr = formatDateYYYYMMDD(currentWeekStart);
   
   // DEBUG : Afficher les données utilisées pour le rendu
   console.log('=== renderCalendar - Données utilisées ===');
@@ -5881,16 +5966,21 @@ function renderCalendar() {
   const dayNames = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
   const days = [];
   
-  // Vérifier si tous les jours sont connectés pour le bonus hebdomadaire
-  const allDaysConnected = state.connectionDays.length === 7;
-  const isSunday = (dayIndex) => dayIndex === 6; // Dimanche est le 7ème jour (index 6)
+  // Filtrer les jours de connexion pour ne garder que ceux de la semaine actuelle
+  const connectionDaysThisWeek = filterDatesByCurrentWeek(
+    state.connectionDays || [],
+    currentWeekStartStr
+  );
+  
+  // Vérifier si tous les jours de la semaine actuelle sont connectés pour le bonus hebdomadaire
+  const allDaysConnected = connectionDaysThisWeek.length === 7;
   
   // Générer les 7 jours de la semaine (lundi à dimanche)
   for (let i = 0; i < 7; i++) {
     const day = new Date(currentWeekStart);
     day.setDate(currentWeekStart.getDate() + i);
-    const dayStr = day.toISOString().split('T')[0];
-    const isConnected = state.connectionDays && state.connectionDays.includes(dayStr);
+    const dayStr = formatDateYYYYMMDD(day);
+    const isConnected = connectionDaysThisWeek.includes(dayStr);
     // Vérifier que le jour est dans la semaine actuelle avant de vérifier s'il est réclamé
     const isInCurrentWeek = isDateInCurrentWeek(dayStr, currentWeekStartStr);
     
@@ -5898,12 +5988,27 @@ function renderCalendar() {
     const isClaimed = isInCurrentWeek && isDayClaimed(dayStr, currentWeekStartStr);
     const isToday = dayStr === todayStr;
     
+    // Vérifier si c'est le dimanche en utilisant la fonction utilitaire
+    const isSunday = isSundayDate(dayStr);
+    
     // Déterminer l'état du jour
     let dayState = 'not-available'; // Par défaut : non disponible
     let clickable = false;
     let tokenInfo = '';
     
-    if (isConnected) {
+    // Pour le dimanche : vérifier le bonus hebdomadaire (priorité sur les jetons journaliers)
+    if (isSunday && allDaysConnected) {
+      if (state.weekBonusClaimed) {
+        dayState = 'bonus-claimed';
+        clickable = false;
+        tokenInfo = '✓ Bonus récupéré';
+      } else {
+        // Bonus disponible (remplace les jetons journaliers du dimanche)
+        dayState = 'bonus-available';
+        clickable = true;
+        tokenInfo = '🪙 +3 bonus';
+      }
+    } else if (isConnected) {
       if (isClaimed) {
         dayState = 'claimed'; // Déjà récupéré
         clickable = false;
@@ -5917,20 +6022,6 @@ function renderCalendar() {
       dayState = 'not-available'; // Pas de connexion ce jour
       clickable = false;
       tokenInfo = '';
-    }
-    
-    // Pour le dimanche : vérifier le bonus hebdomadaire (priorité sur les jetons journaliers)
-    if (isSunday(i) && allDaysConnected) {
-      if (state.weekBonusClaimed) {
-        dayState = 'bonus-claimed';
-        clickable = false;
-        tokenInfo = '✓ Bonus récupéré';
-      } else {
-        // Bonus disponible (remplace les jetons journaliers du dimanche)
-        dayState = 'bonus-available';
-        clickable = true;
-        tokenInfo = '🪙 +3 bonus';
-      }
     }
     
     days.push({
@@ -5990,11 +6081,10 @@ function renderCalendar() {
       return;
     }
     
-    // Vérifier que le jour est dans la semaine actuelle
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    // Vérifier que le jour est dans la semaine actuelle (heure de Paris)
+    const today = getDateInParis();
     const currentWeekStart = getWeekStartDate(today);
-    const currentWeekStartStr = currentWeekStart.toISOString().split('T')[0];
+    const currentWeekStartStr = formatDateYYYYMMDD(currentWeekStart);
     
     if (!isDateInCurrentWeek(dayStr, currentWeekStartStr)) {
       console.warn('Le jour demandé n\'est pas dans la semaine actuelle');
@@ -6002,10 +6092,16 @@ function renderCalendar() {
       return;
     }
     
+    // Filtrer les jours de connexion pour ne garder que ceux de la semaine actuelle
+    const connectionDaysThisWeek = filterDatesByCurrentWeek(
+      state.connectionDays || [],
+      currentWeekStartStr
+    );
+    
     // Vérifier directement le state actuel (pas seulement le tableau days)
     // Cela évite les problèmes si l'utilisateur clique rapidement plusieurs fois
-    const isConnected = state.connectionDays && state.connectionDays.includes(dayStr);
-    const allDaysConnected = state.connectionDays && state.connectionDays.length === 7;
+    const isConnected = connectionDaysThisWeek.includes(dayStr);
+    const allDaysConnected = connectionDaysThisWeek.length === 7;
     
     // Vérifier si le jour est réclamé (utilise la fonction utilitaire)
     if (isDayClaimed(dayStr, currentWeekStartStr)) {
@@ -6014,11 +6110,8 @@ function renderCalendar() {
       return;
     }
     
-    // Vérifier si c'est le dimanche avec bonus disponible
-    // Le dimanche est le 7ème jour de la semaine (lundi = jour 0, dimanche = jour 6 dans le tableau)
-    const day = new Date(dayStr + 'T00:00:00');
-    const dayOfWeek = day.getDay(); // 0 = dimanche, 1 = lundi, etc.
-    const isSunday = dayOfWeek === 0; // Dimanche = 0
+    // Vérifier si c'est le dimanche avec bonus disponible (utilise la fonction utilitaire)
+    const isSunday = isSundayDate(dayStr);
     
     if (isSunday && allDaysConnected && !state.weekBonusClaimed && !state.profile?.week_bonus_claimed) {
       handleClaimBonus();
@@ -6071,11 +6164,10 @@ async function claimDailyTokens(dayStr) {
     return;
   }
   
-  // Vérifier que le jour est dans la semaine actuelle
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  // Vérifier que le jour est dans la semaine actuelle (heure de Paris)
+  const today = getDateInParis();
   const currentWeekStart = getWeekStartDate(today);
-  const currentWeekStartStr = currentWeekStart.toISOString().split('T')[0];
+  const currentWeekStartStr = formatDateYYYYMMDD(currentWeekStart);
   
   if (!isDateInCurrentWeek(dayStr, currentWeekStartStr)) {
     console.warn('Le jour demandé n\'est pas dans la semaine actuelle');
@@ -6137,8 +6229,20 @@ async function claimDailyTokens(dayStr) {
   }
   
   // ACTIVER LE VERROU : empêcher les appels multiples simultanés
+  // IMPORTANT : Activer le verrou AVANT toute autre opération pour éviter les race conditions
   state.isClaimingTokens = true;
   state.claimingDay = dayStr;
+  
+  // Vérification finale avant de continuer (double vérification pour éviter les race conditions)
+  // Vérifier une dernière fois que le jour n'a pas été réclamé entre-temps
+  if (isDayClaimed(dayStr, currentWeekStartStr)) {
+    console.warn('Jour déjà réclamé (vérification finale), annulation');
+    state.isClaimingTokens = false;
+    state.claimingDay = null;
+    renderCalendar();
+    updateCalendarBadge();
+    return;
+  }
   
   try {
     // IMPORTANT : Mettre à jour le state local IMMÉDIATEMENT pour éviter les doubles clics
@@ -6179,58 +6283,60 @@ async function claimDailyTokens(dayStr) {
     
     if (updateError) {
       console.error('Erreur lors de la réclamation des jetons journaliers:', updateError);
-      // Si la colonne n'existe pas, essayer sans
+      
+      // Annuler les changements locaux immédiatement pour éviter les incohérences
+      state.tokens = (state.tokens || 0) - 2;
+      state.profile.tokens = state.tokens;
+      state.claimedDailyTokens = state.claimedDailyTokens.filter(d => d !== dayStr);
+      if (state.profile.claimed_daily_tokens) {
+        state.profile.claimed_daily_tokens = state.profile.claimed_daily_tokens.filter(d => d !== dayStr);
+      }
+      
+      // Re-rendre le calendrier pour remettre l'état correct
+      renderCalendar();
+      updateCalendarBadge();
+      updateTokensDisplay();
+      
+      // Si la colonne n'existe pas, essayer de sauvegarder uniquement les jetons
       if (updateError.message && updateError.message.includes('claimed_daily_tokens')) {
         console.warn('Colonne claimed_daily_tokens absente dans la base de données. Veuillez exécuter le script SQL add_tokens_columns.sql pour ajouter cette colonne.');
-        console.warn('En attendant, les jetons sont mis à jour mais les données de récupération sont stockées localement uniquement.');
         
         // Mettre à jour uniquement les jetons (sans la colonne claimed_daily_tokens)
         const { error: retryError } = await supabase
           .from('profiles')
-          .update({ tokens: newTokens })
+          .update({ tokens: state.tokens })
           .eq('id', state.user.id);
         
         if (!retryError) {
           // Stocker aussi dans localStorage comme backup (si la colonne n'existe pas)
           try {
-            localStorage.setItem(`claimed_tokens_${state.user.id}`, JSON.stringify(updatedClaimed));
+            const currentClaimed = state.claimedDailyTokens || [];
+            localStorage.setItem(`claimed_tokens_${state.user.id}`, JSON.stringify(currentClaimed));
             console.log('Jetons sauvegardés dans localStorage comme backup');
           } catch (e) {
             console.warn('Impossible de stocker dans localStorage:', e);
           }
           
-          // Animation sur la case du calendrier
-          const dayEl = els.calendarWeek?.querySelector(`[data-day="${dayStr}"]`);
-          if (dayEl) {
-            createTokenClaimAnimation(dayEl, 2);
-          }
-          
-          // Mettre à jour l'affichage
-          updateTokensDisplay();
-          showTokenRewardNotification(2);
+          // Afficher un message d'avertissement à l'utilisateur
+          setMessage('Les jetons ont été ajoutés, mais la sauvegarde complète a échoué. Veuillez contacter le support.', true);
         } else {
           console.error('Erreur lors de la mise à jour des jetons:', retryError);
-          // En cas d'erreur, annuler les changements locaux et recharger depuis Supabase
-          state.tokens = (state.tokens || 0) - 2;
-          state.profile.tokens = state.tokens;
-          state.claimedDailyTokens = state.claimedDailyTokens.filter(d => d !== dayStr);
-          state.profile.claimed_daily_tokens = state.claimedDailyTokens;
+          // Afficher un message d'erreur à l'utilisateur
+          setMessage('Erreur lors de la sauvegarde des jetons. Veuillez réessayer.', true);
           // Recharger depuis Supabase pour récupérer l'état réel
           await fetchProfile();
-          renderCalendar();
-          updateCalendarBadge();
         }
       } else {
-        // En cas d'erreur, annuler les changements locaux et recharger depuis Supabase
-        state.tokens = (state.tokens || 0) - 2;
-        state.profile.tokens = state.tokens;
-        state.claimedDailyTokens = state.claimedDailyTokens.filter(d => d !== dayStr);
-        state.profile.claimed_daily_tokens = state.claimedDailyTokens;
+        // Autre type d'erreur (réseau, permissions, etc.)
+        console.error('Erreur de sauvegarde:', updateError);
+        // Afficher un message d'erreur à l'utilisateur
+        setMessage('Erreur de connexion lors de la sauvegarde. Veuillez réessayer.', true);
         // Recharger depuis Supabase pour récupérer l'état réel
         await fetchProfile();
-        renderCalendar();
-        updateCalendarBadge();
       }
+      
+      // Ne pas continuer après une erreur
+      return;
     } else {
       // Succès : les données sont déjà dans le state local et sauvegardées dans Supabase
       // Ne PAS recharger le profil immédiatement car cela pourrait causer des problèmes de synchronisation
@@ -6273,9 +6379,26 @@ async function handleClaimBonus() {
     return;
   }
   
-  // Vérifier que tous les jours sont connectés
-  if (!state.connectionDays || state.connectionDays.length !== 7) {
-    console.warn('Tous les jours doivent être connectés pour récupérer le bonus');
+  // Trouver la date du dimanche de la semaine actuelle (heure de Paris)
+  const today = getDateInParis();
+  const currentWeekStart = getWeekStartDate(today);
+  const currentWeekStartStr = formatDateYYYYMMDD(currentWeekStart);
+  const sundayStr = getSundayDateOfWeek(currentWeekStartStr);
+  
+  if (!sundayStr) {
+    console.error('Impossible de calculer la date du dimanche');
+    return;
+  }
+  
+  // Filtrer les jours de connexion pour ne garder que ceux de la semaine actuelle
+  const connectionDaysThisWeek = filterDatesByCurrentWeek(
+    state.connectionDays || [],
+    currentWeekStartStr
+  );
+  
+  // Vérifier que tous les jours de la semaine actuelle sont connectés
+  if (connectionDaysThisWeek.length !== 7) {
+    console.warn('Tous les jours de la semaine actuelle doivent être connectés pour récupérer le bonus');
     return;
   }
   
@@ -6290,17 +6413,21 @@ async function handleClaimBonus() {
     return;
   }
   
-  // Trouver la date du dimanche de la semaine
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const currentWeekStart = getWeekStartDate(today);
-  const sunday = new Date(currentWeekStart);
-  sunday.setDate(currentWeekStart.getDate() + 6); // Dimanche est le 7ème jour
-  const sundayStr = sunday.toISOString().split('T')[0];
-  
   // ACTIVER LE VERROU : empêcher les appels multiples simultanés
+  // IMPORTANT : Activer le verrou AVANT toute autre opération pour éviter les race conditions
   state.isClaimingTokens = true;
   state.claimingDay = sundayStr;
+  
+  // Vérification finale avant de continuer (double vérification pour éviter les race conditions)
+  // Vérifier une dernière fois que le bonus n'a pas été réclamé entre-temps
+  if (state.weekBonusClaimed || state.profile?.week_bonus_claimed) {
+    console.warn('Bonus déjà réclamé (vérification finale), annulation');
+    state.isClaimingTokens = false;
+    state.claimingDay = null;
+    renderCalendar();
+    updateCalendarBadge();
+    return;
+  }
   
   try {
     // IMPORTANT : Mettre à jour le state local IMMÉDIATEMENT pour éviter les doubles clics
@@ -6335,6 +6462,16 @@ async function handleClaimBonus() {
         claimed_daily_tokens: updatedClaimed
       })
       .eq('id', state.user.id);
+    
+    // Synchroniser localStorage après une sauvegarde réussie
+    if (!error && state.user) {
+      try {
+        localStorage.setItem(`claimed_tokens_${state.user.id}`, JSON.stringify(updatedClaimed));
+        console.log('localStorage synchronisé après sauvegarde du bonus réussie');
+      } catch (e) {
+        console.warn('Impossible de synchroniser localStorage:', e);
+      }
+    }
     
     if (error) {
       console.error('Erreur lors de la réclamation du bonus:', error);
@@ -6456,18 +6593,38 @@ function createConfettiAnimation(element) {
 function updateCalendarBadge() {
   // Mettre à jour le badge du bouton calendrier (dans le header)
   if (els.calendarBadge) {
-    // Compter les jours avec des jetons disponibles mais non récupérés
+    // Calculer le début de la semaine actuelle pour filtrer les dates
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const currentWeekStart = getWeekStartDate(today);
+    const currentWeekStartStr = formatDateYYYYMMDD(currentWeekStart);
+    
+    // Filtrer les jours de connexion et les jours réclamés pour ne garder que la semaine actuelle
+    const connectionDaysThisWeek = filterDatesByCurrentWeek(
+      state.connectionDays || [],
+      currentWeekStartStr
+    );
+    const claimedDaysThisWeek = filterDatesByCurrentWeek(
+      state.claimedDailyTokens || [],
+      currentWeekStartStr
+    );
+    
+    // Compter les jours avec des jetons disponibles mais non récupérés (seulement pour la semaine actuelle)
     let availableTokensCount = 0;
     
-    if (state.connectionDays && state.claimedDailyTokens) {
-      // Compter les jours connectés mais non récupérés
-      availableTokensCount = state.connectionDays.filter(dayStr => 
-        !state.claimedDailyTokens.includes(dayStr)
+    if (connectionDaysThisWeek.length > 0) {
+      // Compter les jours connectés mais non récupérés dans la semaine actuelle
+      availableTokensCount = connectionDaysThisWeek.filter(dayStr => 
+        !claimedDaysThisWeek.includes(dayStr)
       ).length;
     }
     
+    // Vérifier si le bonus hebdomadaire est disponible (tous les jours de la semaine actuelle connectés)
+    const allDaysConnected = connectionDaysThisWeek.length === 7;
+    const canClaimBonus = allDaysConnected && !state.weekBonusClaimed && !state.profile?.week_bonus_claimed;
+    
     // Ajouter 1 si le bonus hebdomadaire est disponible
-    if (state.canClaimBonus && !state.weekBonusClaimed) {
+    if (canClaimBonus) {
       availableTokensCount += 1;
     }
     
