@@ -303,7 +303,7 @@ function renderThemesSlider() {
           <span class="theme-progress-count">${progress.unlocked}/${progress.total}</span>
         </div>
       </div>
-      ${!progress.isComplete && !isHiddenTheme ? '<span class="theme-cost">1 jeton</span>' : ''}
+      ${!progress.isComplete && !isHiddenTheme ? '<span class="theme-cost">Réponds à une question (1 jeton)</span>' : ''}
     `;
     
     // Attacher l'événement de clic seulement si le thème n'est pas complété et n'est pas "Badges cachés"
@@ -373,6 +373,7 @@ document.addEventListener('DOMContentLoaded', () => {
   attachTokensTooltip();
   // Slider de thèmes initialisé
   attachCalendarListeners();
+  attachProfileBadgesSlideListeners();
   setupPullToRefresh();
   lockOrientation();
   
@@ -408,7 +409,8 @@ function cacheElements() {
   els.settingsToggle = document.getElementById('settings-toggle');
   els.settingsMenu = document.getElementById('settings-menu');
   els.logoutBtn = document.getElementById('logout-btn');
-  els.editProfileBtn = document.getElementById('edit-profile-btn');
+  els.editProfileBtn = document.getElementById('edit-profile-btn-main');
+  els.shareProfileBtn = document.getElementById('share-profile-btn');
   els.profilePrivacyBtn = document.getElementById('profile-privacy-btn');
   els.profilePrivacyIndicator = document.getElementById('profile-privacy-indicator');
   els.profilePanel = document.getElementById('profile-panel');
@@ -1388,6 +1390,7 @@ function scrollToBadgeInProfile(badgeId) {
   setTimeout(() => {
     // Re-rendre les badges pour s'assurer que le badge est affiché
     renderMyBadges();
+    renderAllBadgesInProfile();
     
     // Attendre un peu plus pour que le DOM soit mis à jour
     setTimeout(() => {
@@ -1750,6 +1753,7 @@ function render() {
   }
   renderAllBadges();
   renderMyBadges();
+  renderAllBadgesInProfile();
   // Mettre à jour la roue si elle est visible (ne pas interférer si elle tourne)
   renderThemesSlider();
   // Mettre à jour les statistiques d'amélioration
@@ -2177,6 +2181,7 @@ async function handleImproveBadgeFromWheel() {
   
   // Afficher un message d'instruction
   renderMyBadges();
+  renderAllBadgesInProfile();
 }
 
 // Calcule les statistiques d'amélioration des badges
@@ -2357,6 +2362,7 @@ async function handleSuggestedBadgeClick(badgeId) {
   // Attendre que l'onglet soit visible et les badges rendus
   setTimeout(() => {
     renderMyBadges();
+    renderAllBadgesInProfile();
     // Attendre que les badges soient rendus avant d'ouvrir le modal
     setTimeout(() => {
       const badge = getBadgeById(badgeId);
@@ -2474,6 +2480,7 @@ function showJokerMalusRoulette(unlockedBadges, badgeToLose) {
       await updateCounters(false);
       renderThemesSlider();
       renderMyBadges();
+      renderAllBadgesInProfile();
     }
     
     // Fermer automatiquement après 3 secondes
@@ -2589,6 +2596,7 @@ function handleJokerBonus() {
     
     // Afficher un message d'instruction
     renderMyBadges();
+    renderAllBadgesInProfile();
   });
   
   declineBtn.addEventListener('click', () => {
@@ -3011,6 +3019,7 @@ async function handleBadgeAnswerFromWheel(e) {
     // Mettre à jour le slider et les badges IMMÉDIATEMENT (avant le délai)
     renderThemesSlider();
     renderMyBadges();
+    renderAllBadgesInProfile();
     
     // Le message reste affiché jusqu'à ce que l'utilisateur clique sur le bouton ou ferme manuellement
     // L'utilisateur peut aussi cliquer ailleurs pour fermer (géré par attachBadgeQuestionCloseHandler)
@@ -3276,6 +3285,7 @@ function handleModifyBadgeAnswer(badge) {
         setTimeout(() => {
           closeModifyBadgeOverlay();
           renderMyBadges();
+          renderAllBadgesInProfile();
         }, 2500);
       } else if (newLevelIndex > oldLevelIndex || !oldLevel) {
         // Amélioration ! Mettre à jour
@@ -3432,6 +3442,7 @@ function handleModifyBadgeAnswer(badge) {
         setTimeout(() => {
           closeModifyBadgeOverlay();
           renderMyBadges();
+          renderAllBadgesInProfile();
         }, 2500);
       } else {
         messageEl.textContent = 'Erreur lors de la mise à jour. Veuillez réessayer.';
@@ -3535,6 +3546,7 @@ function renderMyBadges() {
         state.isModifyingBadge = false;
         banner.remove();
         renderMyBadges();
+        renderAllBadgesInProfile();
     });
     }
   } else {
@@ -3719,6 +3731,172 @@ function renderMyBadges() {
       });
 
       els.myBadgesList.appendChild(card);
+    });
+  });
+}
+
+function renderAllBadgesInProfile() {
+  // Affiche tous les badges (sauf cachés) avec leurs différents états
+  if (!els.allBadgesList) {
+    console.error('❌ els.allBadgesList n\'existe pas !');
+    return;
+  }
+  
+  const allBadges = state.badges.slice();
+  
+  if (!allBadges.length) {
+    els.allBadgesList.innerHTML = '<p class="muted">Aucun badge pour le moment. Vérifiez que la table "badges" existe dans Supabase et contient des données.</p>';
+    return;
+  }
+  
+  // Vérifier si au moins un badge fantôme est débloqué
+  const ghostBadges = allBadges.filter(badge => isGhostBadge(badge));
+  const hasUnlockedGhostBadge = ghostBadges.some(badge => state.userBadges.has(badge.id));
+  
+  // Filtrer les badges : inclure "Badges cachés" uniquement si au moins un badge fantôme est débloqué
+  const visibleBadges = allBadges.filter(badge => {
+    const themeName = (badge.theme && String(badge.theme).trim()) ? String(badge.theme).trim() : 'Autres';
+    if (themeName === 'Badges cachés') {
+      return hasUnlockedGhostBadge;
+    }
+    return true;
+  });
+  
+  if (!visibleBadges.length) {
+    els.allBadgesList.innerHTML = '<p class="muted">Aucun badge disponible.</p>';
+    return;
+  }
+  
+  els.allBadgesList.classList.remove('list-mode');
+  els.allBadgesList.classList.add('my-badges-catalog');
+  els.allBadgesList.innerHTML = '';
+  
+  // Regrouper par thème
+  const themeName = (b) => (b.theme && String(b.theme).trim()) ? String(b.theme).trim() : 'Autres';
+  const groups = new Map();
+  visibleBadges.forEach(b => {
+    const t = themeName(b);
+    if (!groups.has(t)) groups.set(t, []);
+    groups.get(t).push(b);
+  });
+  const themes = Array.from(groups.keys()).sort(compareThemesFixed);
+  const sortById = (a, b) => String(a.id).localeCompare(String(b.id), 'fr', { numeric: true, sensitivity: 'base' });
+  
+  themes.forEach((t) => {
+    const themeBadges = groups.get(t) || [];
+    if (themeBadges.length === 0) return;
+    
+    const title = document.createElement('div');
+    title.className = 'section-subtitle theme-title';
+    title.textContent = t;
+    els.allBadgesList.appendChild(title);
+    
+    themeBadges.sort(sortById).forEach(badge => {
+      // Déterminer le statut du badge
+      const unlocked = state.userBadges.has(badge.id);
+      const attempted = state.attemptedBadges.has(badge.id);
+      
+      // Statut : non répondu et non débloqué
+      const isNotAnswered = !attempted && !unlocked;
+      // Statut : répondu mais non débloqué
+      const isAnsweredButLocked = attempted && !unlocked;
+      
+      const levelLabel = state.userBadgeLevels.get(badge.id);
+      const config = parseConfig(badge.answer);
+      const isGhost = isGhostBadge(badge);
+      const userAnswer = state.userBadgeAnswers.get(badge.id);
+      const isBlocked = state.blockedBySuspicions.has(badge.id);
+      
+      const card = document.createElement('article');
+      card.className = 'card-badge clickable compact all-badge-card my-catalog-card';
+      
+      // Ajouter classe pour badge grisé si répondu mais non débloqué
+      if (isAnsweredButLocked) {
+        card.classList.add('badge-answered-locked');
+      }
+      
+      if (isBlocked) {
+        card.classList.add('badge-blocked-by-suspicions');
+      }
+      card.dataset.badgeId = badge.id;
+      
+      // Déterminer l'emoji et le nom à afficher
+      let safeEmoji, safeTitle;
+      if (isNotAnswered) {
+        // Badge jamais répondu : afficher "?????"
+        safeEmoji = '?????';
+        safeTitle = '?????';
+      } else {
+        // Badge répondu ou débloqué : afficher normalement
+        safeEmoji = getBadgeEmoji(badge);
+        const displayName = getBadgeDisplayName(badge, levelLabel);
+        safeTitle = stripEmojis(displayName);
+      }
+      
+      // Déterminer le label : afficher le niveau si débloqué
+      const statusLabel = unlocked ? formatLevelTag(unlocked, levelLabel, config) : '';
+      const statusClass = isMysteryLevel(levelLabel) ? 'mystery' : 'success';
+      const isExpert = isMysteryLevel(levelLabel);
+      
+      if (isExpert && unlocked) {
+        card.classList.add('expert-badge');
+      }
+      
+      // Déterminer le texte à afficher dans les détails
+      let displayText = '';
+      if (isNotAnswered) {
+        displayText = 'Badge jamais découvert';
+      } else if (isAnsweredButLocked) {
+        // Afficher la réponse si répondu mais non débloqué
+        const formattedAnswer = userAnswer ? formatUserAnswer(badge, userAnswer) : null;
+        displayText = formattedAnswer || '';
+      } else if (unlocked) {
+        // Badge débloqué : afficher la réponse ou le texte fantôme
+        const formattedAnswer = userAnswer ? formatUserAnswer(badge, userAnswer) : null;
+        const ghostText = isGhost ? (config?.ghostDisplayText || 'Débloqué automatiquement') : null;
+        displayText = formattedAnswer || ghostText || '';
+      }
+      
+      // Ajouter indicateur "Soupçon" si bloqué
+      const suspicionTag = isBlocked ? '<span class="tag suspicion-tag" style="background: #ef4444; color: white; margin-left: 8px;">Soupçon</span>' : '';
+      
+      card.innerHTML = `
+        ${statusLabel ? `<div class="row level-row">
+          <span class="tag ${statusClass}">${statusLabel}</span>${suspicionTag}
+        </div>` : ''}
+        <div class="badge-compact">
+          <div class="badge-emoji">${safeEmoji}</div>
+          <div class="badge-title">${safeTitle}</div>
+        </div>
+        <div class="all-badge-details hidden">
+          <p class="muted">${displayText || ''}</p>
+        </div>
+      `;
+      
+      const details = card.querySelector('.all-badge-details');
+      
+      card.addEventListener('click', (e) => {
+        const tag = e.target.tagName.toLowerCase();
+        if (tag === 'input' || tag === 'button' || e.target.closest('form')) return;
+        
+        // Fermer tous les autres badges
+        const allCards = els.allBadgesList.querySelectorAll('.my-catalog-card');
+        allCards.forEach(otherCard => {
+          if (otherCard !== card) {
+            const otherDetails = otherCard.querySelector('.all-badge-details');
+            if (otherDetails) {
+              otherDetails.classList.add('hidden');
+              otherCard.classList.remove('expanded');
+            }
+          }
+        });
+        
+        // Ouvrir/fermer le badge cliqué
+        details.classList.toggle('hidden');
+        card.classList.toggle('expanded');
+      });
+      
+      els.allBadgesList.appendChild(card);
     });
   });
 }
@@ -4619,6 +4797,13 @@ function attachProfileListeners() {
       closeProfileDrawer();
     }
   });
+  
+  // Gestion du bouton "Partager mon profil"
+  if (els.shareProfileBtn) {
+    els.shareProfileBtn.addEventListener('click', () => {
+      shareProfile();
+    });
+  }
 
   // Fermer avec la croix
   if (els.profileCloseBtn) {
@@ -4665,6 +4850,52 @@ function attachProfileListeners() {
   }
 
   els.profileForm.addEventListener('submit', handleProfileUpdate);
+}
+
+// Gestion du slide entre "Ma collection" et "Tous les badges"
+function attachProfileBadgesSlideListeners() {
+  const container = document.querySelector('.profile-badges-sections-container');
+  const indicators = document.querySelectorAll('.section-indicator');
+  
+  if (!container || !indicators.length) return;
+  
+  // Fonction pour mettre à jour les indicateurs selon la position de scroll
+  function updateIndicators() {
+    const scrollLeft = container.scrollLeft;
+    const scrollWidth = container.scrollWidth;
+    const containerWidth = container.clientWidth;
+    
+    // Déterminer quelle section est visible (première moitié = collection, deuxième moitié = tous)
+    const scrollPercentage = scrollLeft / (scrollWidth - containerWidth);
+    const isOnCollection = scrollPercentage < 0.5;
+    
+    indicators.forEach((indicator, index) => {
+      if (index === 0) {
+        // Premier indicateur = Ma collection
+        indicator.classList.toggle('active', isOnCollection);
+      } else if (index === 1) {
+        // Deuxième indicateur = Tous les badges
+        indicator.classList.toggle('active', !isOnCollection);
+      }
+    });
+  }
+  
+  // Écouter le scroll
+  container.addEventListener('scroll', updateIndicators);
+  
+  // Mettre à jour au chargement initial
+  updateIndicators();
+  
+  // Permettre de cliquer sur les indicateurs pour naviguer
+  indicators.forEach((indicator, index) => {
+    indicator.addEventListener('click', () => {
+      const sectionWidth = container.scrollWidth / 2;
+      container.scrollTo({
+        left: index * sectionWidth,
+        behavior: 'smooth'
+      });
+    });
+  });
 }
 
 async function handleProfileUpdate(e) {
@@ -4738,6 +4969,63 @@ function setProfileMessage(text, isError = false) {
   if (!els.profileMessage) return;
   els.profileMessage.textContent = text;
   els.profileMessage.classList.toggle('error', isError);
+}
+
+// Fonction pour partager le profil
+function shareProfile() {
+  if (!state.user || !state.profile) {
+    setMessage('Impossible de partager le profil.', true);
+    return;
+  }
+  
+  // Créer l'URL de partage (lien vers le profil dans la communauté)
+  const profileUrl = `${window.location.origin}${window.location.pathname}#community-${state.user.id}`;
+  
+  // Vérifier si l'API Web Share est disponible (mobile)
+  if (navigator.share) {
+    navigator.share({
+      title: `Profil de ${state.profile.username || 'Utilisateur'} sur BadgeLife`,
+      text: `Découvre le profil de ${state.profile.username || 'Utilisateur'} sur BadgeLife !`,
+      url: profileUrl
+    }).catch(err => {
+      // Si l'utilisateur annule, ne rien faire
+      if (err.name !== 'AbortError') {
+        console.error('Erreur lors du partage:', err);
+        copyProfileLink(profileUrl);
+      }
+    });
+  } else {
+    // Fallback : copier le lien dans le presse-papiers
+    copyProfileLink(profileUrl);
+  }
+}
+
+// Fonction pour copier le lien du profil dans le presse-papiers
+function copyProfileLink(url) {
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(url).then(() => {
+      setMessage('Lien du profil copié dans le presse-papiers !', false);
+    }).catch(err => {
+      console.error('Erreur lors de la copie:', err);
+      setMessage('Impossible de copier le lien. Veuillez le copier manuellement.', true);
+    });
+  } else {
+    // Fallback pour les navigateurs plus anciens
+    const textarea = document.createElement('textarea');
+    textarea.value = url;
+    textarea.style.position = 'fixed';
+    textarea.style.opacity = '0';
+    document.body.appendChild(textarea);
+    textarea.select();
+    try {
+      document.execCommand('copy');
+      setMessage('Lien du profil copié dans le presse-papiers !', false);
+    } catch (err) {
+      console.error('Erreur lors de la copie:', err);
+      setMessage('Impossible de copier le lien. Veuillez le copier manuellement.', true);
+    }
+    document.body.removeChild(textarea);
+  }
 }
 
 function updateAvatar(url, targetElement = null) {

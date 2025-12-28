@@ -41,23 +41,16 @@ body {
   margin-top: 24px;
 }
 
-/* Container pour le logo de l'app (remplace l'ancien header) */
+/* Container pour le menu des réglages en haut de la page */
 .app-logo-container {
   display: flex;
   flex-direction: row;
   align-items: flex-start;
-  justify-content: space-between;
+  justify-content: flex-end;
   padding: 12px 16px;
   margin-bottom: 10px;
   width: 100%;
   position: relative;
-}
-
-.app-logo-wrapper {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 0;
 }
 
 /* Actions du header (bouton réglage en haut à droite) */
@@ -81,49 +74,11 @@ body {
   min-width: 200px;
 }
 
-.app-logo-main {
-  width: auto;
-  height: 70px;
-  object-fit: contain;
-  background: transparent !important;
-  border: none !important;
-  display: block;
-  opacity: 1;
-  mix-blend-mode: normal;
-  margin: 0;
-}
-
-.app-tagline-image {
-  width: auto;
-  height: 42px;
-  object-fit: contain;
-  background: transparent !important;
-  border: none !important;
-  display: block;
-  opacity: 1;
-  mix-blend-mode: normal;
-  margin: 0;
-  margin-top: -8px;
-}
-
-/* Responsive pour le logo */
+/* Responsive pour le menu des réglages */
 @media (max-width: 768px) {
   .app-logo-container {
     padding: 10px 12px;
     margin-bottom: 8px;
-  }
-  
-  .app-logo-main {
-    height: 62px;
-  }
-  
-  .app-tagline-image {
-    height: 44px;
-    margin-top: -28px;
-  }
-  
-  .app-logo-wrapper {
-    gap: 0;
   }
   
   .app-header-actions {
@@ -270,20 +225,19 @@ p {
 #profile-panel.profile-drawer {
   position: fixed !important;
   top: 0 !important;
+  left: 0 !important;
   right: 0 !important;
-  left: auto !important;
-  bottom: auto !important;
-  width: 400px !important;
-  max-width: 90vw !important;
+  bottom: 0 !important;
+  width: 100% !important;
+  max-width: 100% !important;
   height: 100vh !important;
   min-height: 100vh !important;
   background: rgba(17, 24, 39, 0.98) !important;
   border: none !important;
-  border-left: 1px solid rgba(6, 182, 212, 0.3) !important;
   border-radius: 0 !important;
-  box-shadow: -4px 0 24px rgba(0, 0, 0, 0.5) !important;
+  box-shadow: none !important;
   z-index: 1000 !important;
-  transform: translateX(100%) !important;
+  transform: translateY(100%) !important;
   transition: transform 0.3s ease-out !important;
   overflow-y: auto !important;
   overflow-x: hidden !important;
@@ -296,12 +250,12 @@ p {
 }
 
 #profile-panel.profile-drawer.hidden {
-  transform: translateX(100%) !important;
+  transform: translateY(100%) !important;
   pointer-events: none;
 }
 
 #profile-panel.profile-drawer:not(.hidden) {
-  transform: translateX(0) !important;
+  transform: translateY(0) !important;
   pointer-events: auto;
 }
 
@@ -851,7 +805,7 @@ button {
 }
 
 .section-description {
-  margin-bottom: 50px;
+  margin-bottom: 30px;
   margin-top: 10px;
   color: rgb(198, 200, 222);
   font-size: 15px;
@@ -3646,6 +3600,11 @@ button {
   position: relative;
 }
 
+/* Bouton réglages dans le header du profil */
+.profile-settings-btn {
+  z-index: 10;
+}
+
 .profile-section-main {
   display: flex;
   align-items: flex-start;
@@ -3697,8 +3656,8 @@ button {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
-  padding: 12px 16px;
+  gap: 1px;
+  padding: 7px 11px;
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 12px;
@@ -3734,13 +3693,108 @@ button {
   opacity: 0.8;
 }
 
-/* Stats badges et skills sous la description */
+/* Boutons d'action du profil (Partager et Modifier) */
+.profile-actions-buttons {
+  display: flex;
+  flex-direction: row;
+  gap: 12px;
+  margin-top: 0;
+  margin-bottom: 16px;
+  width: 100%;
+}
+
+.profile-actions-buttons button {
+  flex: 1;
+  white-space: nowrap;
+  font-size: 14px;
+  font-weight: 500;
+  padding: 12px 16px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+/* Stats badges et skills en dessous des boutons */
 .profile-badge-skill-stats {
   display: flex;
   gap: 16px;
   flex-wrap: wrap;
-  margin-top: 12px;
+  margin-top: 0;
+  margin-bottom: 24px;
+  align-items: center;
+}
+
+/* Indicateurs de position pour les sections */
+.section-indicators {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
   margin-bottom: 20px;
+  padding: 0 18px;
+}
+
+.section-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.2);
+  transition: background 0.3s ease;
+  cursor: pointer;
+}
+
+.section-indicator.active {
+  background: rgba(255, 255, 255, 0.6);
+}
+
+/* Conteneur de slide pour les sections de badges */
+.profile-badges-sections-container {
+  display: flex;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE et Edge */
+}
+
+.profile-badges-sections-container::-webkit-scrollbar {
+  display: none; /* Chrome, Safari, Opera */
+}
+
+.profile-badges-section {
+  flex: 0 0 100%;
+  scroll-snap-align: start;
+  min-width: 100%;
+  padding: 0;
+}
+
+.profile-badges-section h3 {
+  margin: 0 0 8px 0;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text);
+  padding: 0 18px;
+}
+
+.profile-badges-section .section-description {
+  padding: 0 18px;
+  margin-bottom: 16px;
+}
+
+.profile-badges-section .badges-grid {
+  padding: 0 18px;
+}
+
+/* Badge répondu mais non débloqué (grisé) */
+.badge-answered-locked {
+  opacity: 0.5;
+  filter: grayscale(0.7);
+}
+
+.badge-answered-locked .badge-emoji,
+.badge-answered-locked .badge-title {
+  opacity: 0.7;
 }
 
 /* Badge de notification */

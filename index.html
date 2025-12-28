@@ -59,23 +59,12 @@
         </div>
       </div>
       <div class="app-logo-container">
-        <div class="app-logo-wrapper">
-          <img src="./icons/logobadgelifeB.png" alt="BadgeLife" class="app-logo-main">
-          <img src="./icons/tavieenbadge.png" alt="Ta vie en badges" class="app-tagline-image">
-        </div>
         <div class="app-header-actions">
           <div class="settings-wrapper">
             <div class="settings-buttons-row">
-              <button id="calendar-btn" class="ghost icon-btn calendar-btn" aria-label="Tes jours de connexion">
-                📅
-                <span id="calendar-badge" class="calendar-badge hidden">3</span>
-              </button>
-              <button id="settings-toggle" class="ghost icon-btn" aria-label="Réglages">⚙️</button>
             </div>
             <div id="settings-menu" class="settings-menu hidden">
               <a id="admin-link" class="ghost full-width hidden" href="./admin.html">Admin</a>
-              <button id="edit-profile-btn" class="ghost full-width">Modifier mon profil</button>
-              <button id="profile-privacy-btn" class="ghost full-width">Profil: Public</button>
               <button id="logout-btn" class="ghost full-width">Se déconnecter</button>
             </div>
           </div>
@@ -105,6 +94,9 @@
             <div class="avatar-preview">
               <img id="avatar-preview-img" src="./icons/logobl.png" alt="Aperçu" class="logo small">
             </div>
+
+            <label>Visibilité du profil</label>
+            <button id="profile-privacy-btn" type="button" class="ghost full-width" style="margin-bottom: 16px;">Profil: Public</button>
 
             <button type="submit" class="primary">Enregistrer</button>
             <p id="profile-message" class="message"></p>
@@ -145,21 +137,46 @@
               <small>abonnements</small>
             </div>
           </div>
-          <!-- Bouton calendrier déplacé dans le header -->
+          <!-- Bouton réglages en haut à droite -->
+          <button id="settings-toggle" class="ghost icon-btn profile-settings-btn" aria-label="Réglages" style="position: absolute; top: 20px; right: 20px;">⚙️</button>
         </div>
-        <h3>Ma collection</h3>
-        <p class="muted section-description first">Découvre tous les badges que tu as débloqués.</p>
+        <div class="profile-actions-buttons">
+          <button id="edit-profile-btn-main" class="ghost">Modifier</button>
+          <button id="share-profile-btn" class="ghost">Partager mon profil</button>
+        </div>
         <div class="profile-badge-skill-stats">
           <div class="profile-stat">
             <span id="profile-section-badge-count">0<span class="badge-total">/ 0</span></span>
-            <small>badges</small>
+            <small>badges obtenus</small>
           </div>
           <div class="profile-stat">
             <span id="profile-section-skill-count">0</span>
-            <small>skills</small>
+            <small> points de skills</small>
           </div>
         </div>
-        <div id="my-badges-list" class="grid badges-grid"></div>
+        
+        <!-- Indicateurs de position pour les sections -->
+        <div class="section-indicators">
+          <span class="section-indicator active" data-section="collection"></span>
+          <span class="section-indicator" data-section="all"></span>
+        </div>
+        
+        <!-- Conteneur de slide pour les sections de badges -->
+        <div class="profile-badges-sections-container">
+          <!-- Section Ma collection -->
+          <div class="profile-badges-section" id="my-collection-section">
+            <h3>Ma collection</h3>
+            <p class="muted section-description first">Découvre tous les badges que tu as débloqués.</p>
+            <div id="my-badges-list" class="grid badges-grid"></div>
+          </div>
+          
+          <!-- Section Tous les badges -->
+          <div class="profile-badges-section" id="all-badges-section">
+            <h3>Tous les badges</h3>
+            <p class="muted section-description first">Découvre tous les badges disponibles dans le jeu.</p>
+            <div id="all-badges-list" class="grid badges-grid"></div>
+          </div>
+        </div>
       </section>
 
       <section id="all-badges" class="tab-content hidden">
@@ -168,13 +185,19 @@
             <h2 class="section-title">Badges à débloquer</h2>
             <p class="muted section-description" style="margin-bottom: 40px;">Choisis un thème pour répondre à une question d'un badge aléatoire et débloque le pour compléter ta collection et augmenter tes skills !</p>
           </div>
-          <!-- Compteur de jetons en haut à droite -->
-          <div id="tokens-counter" class="tokens-counter clickable" title="Clique pour plus d'infos">
-            <span class="token-emoji">🪙</span>
-            <span id="tokens-count" class="tokens-count">0</span>
-            <!-- Infobulle des jetons -->
-            <div id="tokens-tooltip" class="tokens-tooltip hidden">
-              <p>Obtient des jetons dans le calendrier. Utilise-les pour sélectionner un thème et débloquer de nouveaux badges !</p>
+          <!-- Bouton calendrier et compteur de jetons en haut à droite -->
+          <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 12px;">
+            <button id="calendar-btn" class="ghost icon-btn calendar-btn" aria-label="Tes jours de connexion" style="position: relative;">
+              📅
+              <span id="calendar-badge" class="calendar-badge hidden">3</span>
+            </button>
+            <div id="tokens-counter" class="tokens-counter clickable" title="Clique pour plus d'infos">
+              <span class="token-emoji">🪙</span>
+              <span id="tokens-count" class="tokens-count">0</span>
+              <!-- Infobulle des jetons -->
+              <div id="tokens-tooltip" class="tokens-tooltip hidden">
+                <p>Obtient des jetons dans le calendrier et utilise-les pour débloquer de nouveaux badges !</p>
+              </div>
             </div>
           </div>
         </div>
@@ -225,7 +248,7 @@
             </div>
           </div>
           
-          <button id="improve-badge-btn" class="primary">Améliore un badge (5 jetons)</button>
+          <button id="improve-badge-btn" class="primary">Améliore un autre badge (5 jetons)</button>
         </div>
 
         <!-- Modal pour afficher la question du badge -->
