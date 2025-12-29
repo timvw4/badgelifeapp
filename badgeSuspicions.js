@@ -25,15 +25,16 @@ export async function suspectBadge(supabase, suspiciousUserId, userId, badgeId) 
   
   try {
     // Vérifier si l'utilisateur a déjà soupçonné ce badge
+    // Utiliser .maybeSingle() au lieu de .single() pour éviter l'erreur 406 quand aucun résultat
     const { data: existing, error: checkError } = await supabase
       .from('badge_suspicions')
-      .select('id')
+      .select('*')
       .eq('user_id', userId)
       .eq('badge_id', badgeId)
       .eq('suspicious_user_id', suspiciousUserId)
-      .single();
+      .maybeSingle();
     
-    if (checkError && checkError.code !== 'PGRST116') {
+    if (checkError) {
       console.error('Erreur lors de la vérification du soupçon existant:', checkError);
       return { success: false, error: checkError.message };
     }
@@ -167,15 +168,16 @@ export async function getSuspicionCount(supabase, userId, badgeId) {
  */
 export async function hasSuspected(supabase, suspiciousUserId, userId, badgeId) {
   try {
+    // Utiliser .maybeSingle() au lieu de .single() pour éviter l'erreur quand aucun résultat
     const { data, error } = await supabase
       .from('badge_suspicions')
-      .select('id')
+      .select('*')
       .eq('user_id', userId)
       .eq('badge_id', badgeId)
       .eq('suspicious_user_id', suspiciousUserId)
-      .single();
+      .maybeSingle();
     
-    if (error && error.code !== 'PGRST116') {
+    if (error) {
       console.error('Erreur lors de la vérification du soupçon:', error);
       return false;
     }
@@ -199,9 +201,10 @@ export async function checkAndBlockBadge(supabase, userId, badgeId) {
     const suspicionCount = await getSuspicionCount(supabase, userId, badgeId);
     
     // Vérifier si le badge existe dans user_badges
+    // Note: user_badges n'a pas de colonne 'id', on utilise user_id et badge_id comme clé composite
     const { data: badgeData, error: fetchError } = await supabase
       .from('user_badges')
-      .select('id, is_blocked_by_suspicions')
+      .select('is_blocked_by_suspicions')
       .eq('user_id', userId)
       .eq('badge_id', badgeId)
       .single();

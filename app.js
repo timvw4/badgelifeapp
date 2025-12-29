@@ -5315,16 +5315,23 @@ async function fetchPublicUserBadges(userId, isPrivate = false) {
   
   // Essaye d'abord une vue publique, sinon retombe sur user_badges
   // Inclure is_blocked_by_suspicions pour savoir si un badge est bloqué
+  // Note: public_user_badges_min peut ne pas avoir is_blocked_by_suspicions
   const sources = [
-    { table: 'public_user_badges_min', fields: 'badge_id,level,success,user_answer,is_blocked_by_suspicions' },
-    { table: 'user_badges', fields: 'badge_id,level,success,user_answer,is_blocked_by_suspicions' },
+    { table: 'public_user_badges_min', fields: 'badge_id,level,success,user_answer', hasBlockedColumn: false },
+    { table: 'user_badges', fields: 'badge_id,level,success,user_answer,is_blocked_by_suspicions', hasBlockedColumn: true },
   ];
   for (const src of sources) {
     const { data, error } = await supabase
       .from(src.table)
       .select(src.fields)
       .eq('user_id', userId);
-    if (!error) return data ?? [];
+    if (!error) {
+      // Si la vue n'a pas la colonne is_blocked_by_suspicions, ajouter une valeur par défaut
+      if (!src.hasBlockedColumn && Array.isArray(data)) {
+        return data.map(row => ({ ...row, is_blocked_by_suspicions: false }));
+      }
+      return data ?? [];
+    }
   }
   return [];
 }

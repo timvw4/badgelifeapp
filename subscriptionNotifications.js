@@ -14,6 +14,18 @@ async function createNotification(supabase, userId, type, data = {}, showBadge =
   try {
     console.log(`📝 Création notification ${type}:`, { userId, type, data, showBadge });
     
+    // Vérifier la session utilisateur pour diagnostiquer les problèmes RLS
+    const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+    if (sessionError) {
+      console.error('❌ Erreur lors de la récupération de la session:', sessionError);
+    } else {
+      console.log('🔐 Session utilisateur:', {
+        hasSession: !!sessionData?.session,
+        userId: sessionData?.session?.user?.id,
+        email: sessionData?.session?.user?.email
+      });
+    }
+    
     // Vérifier les doublons selon le type
     const duplicateCheck = await checkDuplicateNotification(supabase, userId, type, data);
     if (duplicateCheck.exists) {
@@ -30,6 +42,7 @@ async function createNotification(supabase, userId, type, data = {}, showBadge =
     };
     
     console.log('📝 Données à insérer:', notificationData);
+    console.log('🔍 Tentative d\'insertion avec session:', !!sessionData?.session);
     
     const { data: notification, error } = await supabase
       .from('notifications')
@@ -88,6 +101,8 @@ async function checkDuplicateNotification(supabase, userId, type, data) {
     }
     
     // Pour les soupçons, vérifier par badge et utilisateur soupçonneur
+    // CORRIGÉ : Vérifie TOUTES les notifications (lues ou non) pour éviter les doublons
+    // même si une notification précédente a été lue
     if (type === 'suspicion_individual') {
       const { count } = await supabase
         .from('notifications')
@@ -95,13 +110,15 @@ async function checkDuplicateNotification(supabase, userId, type, data) {
         .eq('user_id', userId)
         .eq('type', type)
         .eq('badge_id', data.badge_id)
-        .eq('suspicious_user_id', data.suspicious_user_id)
-        .eq('is_read', false); // Seulement les non lues
+        .eq('suspicious_user_id', data.suspicious_user_id);
+        // ✅ CORRIGÉ : Vérifie toutes les notifications, pas seulement les non lues
       
       return { exists: (count || 0) > 0 };
     }
     
-    // Pour les blocages, vérifier par badge (une seule notification de blocage par badge)
+    // Pour les blocages, vérifier par badge (une seule notification de blocage non lue par badge)
+    // Note : Si toutes les notifications sont lues, on permet une nouvelle notification (re-blocage)
+    // Cela permet d'informer l'utilisateur si un badge est re-bloqué après déblocage
     if (type === 'suspicion_blocked') {
       const { count } = await supabase
         .from('notifications')
@@ -109,15 +126,18 @@ async function checkDuplicateNotification(supabase, userId, type, data) {
         .eq('user_id', userId)
         .eq('type', type)
         .eq('badge_id', data.badge_id)
-        .eq('is_read', false); // Seulement les non lues
+        .eq('is_read', false); // Seulement les non lues (permet re-blocage si toutes lues)
       
       return { exists: (count || 0) > 0 };
     }
     
     return { exists: false };
   } catch (err) {
-    console.error('Erreur lors de la vérification des doublons:', err);
-    return { exists: false }; // En cas d'erreur, on continue (mieux vaut un doublon qu'une notification manquée)
+    console.error('❌ Erreur lors de la vérification des doublons:', err);
+    console.error('Détails:', { userId, type, data });
+    // En cas d'erreur, on continue (mieux vaut un doublon qu'une notification manquée)
+    // Mais on log plus d'informations pour le débogage
+    return { exists: false };
   }
 }
 
