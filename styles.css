@@ -31,6 +31,40 @@ body {
   min-height: 100vh;
 }
 
+/* Image de fond pour la page de connexion - prend toute la page */
+body.auth-page {
+  background-image: url('./icons/background.png') !important;
+  background-size: cover !important;
+  background-position: center center !important;
+  background-repeat: no-repeat !important;
+  background-attachment: fixed !important;
+  background-color: var(--bg) !important;
+  min-height: 100vh;
+  /* Forcer le rendu sur Safari */
+  -webkit-background-size: cover !important;
+}
+
+/* Overlay sombre pour améliorer la lisibilité du contenu */
+body.auth-page::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(15, 23, 42, 0.6);
+  z-index: 0;
+  pointer-events: none;
+}
+
+/* S'assurer que le contenu est au-dessus de l'overlay */
+body.auth-page .page {
+  position: relative;
+  z-index: 1;
+}
+
 .page {
   max-width: 1100px;
   margin: 0 auto;
@@ -113,39 +147,41 @@ body {
   flex-direction: column;
   align-items: center;
   gap: 8px;
+  background: transparent;
+  /* S'assurer qu'il n'y a pas de motif en damier visible */
 }
 
 .hero .logo {
-  width: auto;
-  height: 200px;
+  width: auto !important;
+  height: auto !important;
+  max-width: 100%;
+  max-height: 300px;
   object-fit: contain;
-  background: transparent !important;
+  background: none !important;
+  background-color: transparent !important;
   border: none !important;
   display: block;
   opacity: 1;
   mix-blend-mode: normal;
-}
-
-.hero .app-tagline-image {
-  width: auto;
-  height: 180px;
-  object-fit: contain;
-  background: transparent !important;
-  border: none !important;
-  display: block;
-  opacity: 1;
-  mix-blend-mode: normal;
-  margin-top: -75px;
+  /* Assurer que le fond transparent de l'image PNG est préservé */
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: crisp-edges;
+  /* Forcer le rendu de la transparence PNG */
+  -webkit-background-size: auto;
+  background-size: auto;
+  /* Préfixes Safari pour forcer le rendu correct et éviter le motif en damier */
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+  /* Forcer l'accélération matérielle sur Safari */
+  will-change: transform;
 }
 
 /* Responsive pour le hero */
 @media (max-width: 768px) {
   .hero .logo {
-    height: 160px;
-  }
-  
-  .hero .app-tagline-image {
-    height: 100px;
+    max-height: 200px;
   }
 }
 
@@ -1817,11 +1853,11 @@ button {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 6px;
-    padding: 8px 14px;
+    gap: 4px;
+    padding: 5px 10px;
     background: linear-gradient(135deg, rgba(251, 191, 36, 0.9), rgba(249, 115, 22, 0.9));
     border: 1px solid rgba(251, 191, 36, 0.5);
-    border-radius: 10px;
+    border-radius: 8px;
     margin: 1px 0 0 0;
     animation: tokenAppear 0.5s ease-out;
     cursor: pointer;
@@ -1890,11 +1926,11 @@ button {
   }
 
   .tokens-counter .token-emoji {
-    font-size: 18px;
+    font-size: 14px;
   }
 
   .tokens-count {
-    font-size: 16px;
+    font-size: 13px;
     font-weight: 700;
     color: #0b1120;
   }
@@ -2192,15 +2228,15 @@ button {
   .token-reward-notification {
     position: fixed;
     top: 20px;
-    right: 20px;
+    left: 20px;
     background: linear-gradient(135deg, rgba(6, 182, 212, 0.95), rgba(139, 92, 246, 0.95));
     border: 1px solid rgba(6, 182, 212, 0.5);
     border-radius: 12px;
-    padding: 16px 24px;
+    padding: 11px 19px;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
     z-index: 1000;
     opacity: 0;
-    transform: translateX(100%);
+    transform: translateX(-100%);
     transition: all 0.3s ease-out;
   }
 

@@ -1,13 +1,13 @@
 // App front-end de BadgeLife
 // Utilise Supabase (base de données + auth) et une UI 100% front.
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm';
-import { SUPABASE_URL, SUPABASE_ANON_KEY, ADMIN_USER_IDS } from './config.js';
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 import { isMysteryLevel } from './badgeCalculations.js';
-import { parseBadgeAnswer, parseConfig, safeSupabaseSelect, pseudoToEmail, isAdminUser } from './utils.js';
+import { parseConfig, safeSupabaseSelect, pseudoToEmail, isAdminUser } from './utils.js';
 import * as Subscriptions from './subscriptions.js';
 import * as SubscriptionUI from './subscriptionUI.js';
 import * as NotificationUI from './notificationUI.js';
-import { createDailyTokensNotification, createSundayBonusNotification } from './subscriptionNotifications.js';
+import { createDailyTokensNotification, createSundayBonusNotification } from './notifications.js';
 import * as BadgeSuspicions from './badgeSuspicions.js';
 
 // Nom du bucket d'avatars dans Supabase Storage
@@ -46,7 +46,6 @@ const state = {
   claimedDailyTokens: [], // Array des dates où les jetons journaliers ont été récupérés
   weekBonusClaimed: false, // Si le bonus hebdomadaire a été récupéré cette semaine
   badgeQuestionAnswered: false, // Flag pour indiquer si une réponse a été donnée au badge de la roue
-  wheelBadgeIds: null, // Signature des badges dans la roue (pour éviter de remélanger inutilement) - DEPRECATED, utiliser wheelThemeIds
   wheelThemeIds: null, // Signature des thèmes dans la roue (pour éviter de remélanger inutilement)
   wheelOrder: [], // Ordre des éléments dans la roue
   isClaimingTokens: false, // Verrou pour empêcher les appels multiples simultanés à claimDailyTokens
@@ -1041,7 +1040,6 @@ function resetState() {
   state.selectedIsJoker = false;
   state.isModifyingBadge = false;
   state.jokerType = null;
-  state.wheelBadgeIds = null;
   state.wheelOrder = [];
   // Vider les listes
   if (els.myBadgesList) els.myBadgesList.innerHTML = '';
@@ -1534,9 +1532,6 @@ function showSignupTokensNotification() {
 function updateTokensDisplay() {
   if (!els.tokensCount) return;
   els.tokensCount.textContent = state.tokens || 0;
-  
-  // Mettre à jour la pastille sur le bouton de l'onglet roue
-  updateWheelBadge();
 }
 
 async function fetchBadges() {
@@ -5754,9 +5749,11 @@ function toggleViews(authenticated) {
   if (authenticated) {
     els.authView.classList.add('hidden');
     els.appView.classList.remove('hidden');
+    document.body.classList.remove('auth-page');
   } else {
     els.authView.classList.remove('hidden');
     els.appView.classList.add('hidden');
+    document.body.classList.add('auth-page');
   }
 }
 
@@ -7180,11 +7177,6 @@ function updateCalendarBadge() {
       els.calendarBadge.classList.add('hidden');
     }
   }
-}
-
-// Fonction supprimée - la pastille sur le bouton roue n'est plus utilisée
-function updateWheelBadge() {
-  // Fonction désactivée - la pastille a été supprimée
 }
 
 // Ouvre le panneau latéral du calendrier

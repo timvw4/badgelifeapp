@@ -1,7 +1,7 @@
 // Module de gestion des soupçons de badges
 // Logique métier pure (pas de UI)
 import * as Subscriptions from './subscriptions.js';
-import { createSuspicionNotification, createBlockedBadgeNotification } from './subscriptionNotifications.js';
+import { createSuspicionNotification, createBlockedBadgeNotification } from './notifications.js';
 
 /**
  * Soupçonner un badge d'un utilisateur

@@ -1,14 +1,24 @@
-// Module UI pour les notifications unifiées
-// Gère le rendu et les interactions utilisateur pour tous les types de notifications
-import * as NotificationService from './subscriptionNotifications.js';
+// Module UI pour les notifications
+// Gère uniquement l'affichage et les interactions utilisateur
+import * as Notifications from './notifications.js';
 
 let supabaseClient = null;
 let currentUserId = null;
 
 /**
+ * Ferme le modal et marque toutes les notifications comme lues
+ */
+async function closeModalAndMarkAsRead() {
+  const notificationsModal = document.getElementById('notifications-modal');
+  if (notificationsModal) {
+    notificationsModal.classList.add('hidden');
+  }
+  await markAllNotificationsAsReadInternal();
+  await refreshNotificationBadge();
+}
+
+/**
  * Initialise le module avec les dépendances nécessaires
- * @param {Object} supabase - Client Supabase
- * @param {string} userId - ID de l'utilisateur actuel
  */
 export function initNotificationUI(supabase, userId) {
   supabaseClient = supabase;
@@ -26,16 +36,6 @@ export function initNotificationUI(supabase, userId) {
   const notificationsModalClose = document.getElementById('notifications-modal-close');
   const notificationsModal = document.getElementById('notifications-modal');
   
-  // Fonction pour fermer le modal et marquer toutes les notifications comme lues
-  const closeModalAndMarkAsRead = async () => {
-    if (notificationsModal) {
-      notificationsModal.classList.add('hidden');
-    }
-    // Marquer toutes les notifications non lues comme lues quand on ferme le modal
-    await markAllNotificationsAsRead();
-    await refreshNotificationBadge();
-  };
-  
   if (notificationsModalClose) {
     notificationsModalClose.addEventListener('click', closeModalAndMarkAsRead);
   }
@@ -52,23 +52,16 @@ export function initNotificationUI(supabase, userId) {
 
 /**
  * Affiche la pastille de notification selon le nombre de notifications non lues
- * @param {number} count - Nombre de notifications non lues (avec show_badge = true)
  */
 export function renderNotificationBadge(count) {
   const indicator = document.getElementById('notification-indicator');
   
-  if (!indicator) {
-    console.warn('⚠️ Élément notification-indicator non trouvé dans le DOM');
-    return;
-  }
+  if (!indicator) return;
   
-  // Afficher ou masquer la pastille rouge selon s'il y a des notifications
   if (count > 0) {
     indicator.classList.remove('hidden');
-    console.log('🔴 Pastille de notification affichée (', count, 'notification(s) non lue(s))');
   } else {
     indicator.classList.add('hidden');
-    console.log('⚪ Pastille de notification masquée (aucune notification non lue)');
   }
 }
 
@@ -87,33 +80,22 @@ export async function showNotificationsModal() {
   list.innerHTML = '<p class="muted">Chargement...</p>';
   
   try {
-    console.log('📋 Chargement des notifications pour user:', currentUserId);
-    const notifications = await NotificationService.getNotifications(supabaseClient, currentUserId);
-    
-    console.log('📋 Notifications récupérées:', notifications.length, notifications);
+    const notifications = await Notifications.getNotifications(supabaseClient, currentUserId);
     
     if (notifications.length === 0) {
-      console.log('📋 Aucune notification trouvée');
       list.innerHTML = '<p class="muted">Aucune notification pour le moment.</p>';
       return;
     }
     
     list.innerHTML = '';
     
-    notifications.forEach((notification, index) => {
-      console.log(`📋 Rendu notification ${index + 1}/${notifications.length}:`, notification);
+    notifications.forEach((notification) => {
       const item = renderNotificationItem(notification);
       if (item) {
         list.appendChild(item);
-        console.log(`✅ Notification ${index + 1} ajoutée au DOM`);
-      } else {
-        console.error(`❌ Erreur: renderNotificationItem a retourné null pour la notification ${index + 1}`);
       }
     });
     
-    console.log('📋 Total d\'éléments dans la liste:', list.children.length);
-    
-    // Rafraîchir le badge après avoir chargé les notifications
     await refreshNotificationBadge();
   } catch (err) {
     console.error('❌ Erreur lors du chargement des notifications:', err);
@@ -123,26 +105,16 @@ export async function showNotificationsModal() {
 
 /**
  * Formate le texte d'une notification selon son type
- * @param {Object} notification - Notification à formater
- * @returns {string} - Texte formaté
  */
 function formatNotificationText(notification) {
   switch (notification.type) {
-    case 'subscription':
-      return `${notification.follower_username || 'Quelqu\'un'} s'est abonné à toi`;
-    
-    case 'unsubscription':
-      return `${notification.follower_username || 'Quelqu\'un'} s'est désabonné de toi`;
-    
     case 'suspicion_individual':
       return `${notification.suspicious_username || 'Un utilisateur'} a soupçonné ton badge "${notification.badge_name || 'ce badge'}".`;
     
     case 'suspicion_blocked':
       if (notification.badge_owner_id && notification.badge_owner_id !== notification.user_id) {
-        // Notification pour un soupçonneur
         return `Le badge "${notification.badge_name || 'ce badge'}" de ${notification.owner_username || 'un utilisateur'} a été bloqué suite à vos soupçons.`;
       } else {
-        // Notification pour le propriétaire
         return `Trop d'amis te soupçonnent de mentir pour le badge "${notification.badge_name || 'ce badge'}".`;
       }
     
@@ -159,15 +131,10 @@ function formatNotificationText(notification) {
 
 /**
  * Affiche une notification dans la liste
- * @param {Object} notification - Notification à afficher
- * @returns {HTMLElement} - Élément DOM de la notification
  */
 function renderNotificationItem(notification) {
   try {
-    console.log('🎨 Rendu de la notification:', notification.type, notification);
-    
     if (!notification || !notification.type) {
-      console.error('❌ Notification invalide:', notification);
       return null;
     }
     
@@ -177,22 +144,9 @@ function renderNotificationItem(notification) {
     item.setAttribute('data-notification-id', notification.id || '');
     
     const text = formatNotificationText(notification);
-    console.log('🎨 Texte formaté:', text);
-    
-    // Pour les notifications d'abonnement/désabonnement, afficher l'avatar
-    let avatarHtml = '';
-    if ((notification.type === 'subscription' || notification.type === 'unsubscription')) {
-      const avatarUrl = notification.follower_avatar_url || './icons/logobl.png';
-      avatarHtml = `
-        <div class="notification-avatars" style="display: flex; align-items: center; margin-right: 12px;">
-          <img src="${avatarUrl}" alt="Avatar" class="logo tiny avatar" style="border: 2px solid var(--bg);">
-        </div>
-      `;
-    }
     
     item.innerHTML = `
       <div class="notification-content">
-        ${avatarHtml}
         <div class="notification-text">
           <p style="margin: 0; font-size: 14px;">${text}</p>
         </div>
@@ -203,48 +157,21 @@ function renderNotificationItem(notification) {
       handleNotificationClick(notification);
     });
     
-    console.log('✅ Élément de notification créé:', item);
     return item;
   } catch (err) {
-    console.error('❌ Erreur lors du rendu de la notification:', err, notification);
+    console.error('❌ Erreur lors du rendu de la notification:', err);
     return null;
   }
 }
 
 /**
  * Gère le clic sur une notification selon son type
- * @param {Object} notification - Notification cliquée
  */
 async function handleNotificationClick(notification) {
-  // Marquer la notification comme lue si elle ne l'est pas déjà
-  if (notification.id && !notification.is_read) {
-    await NotificationService.markNotificationAsRead(supabaseClient, notification.id);
-    const item = document.querySelector(`[data-notification-id="${notification.id}"]`);
-    if (item) {
-      item.classList.add('read');
-      notification.is_read = true;
-    }
-  }
-  
-  // Fermer le modal de notifications
-  const modal = document.getElementById('notifications-modal');
-  if (modal) {
-    modal.classList.add('hidden');
-  }
-  
-  // Actions spécifiques selon le type
+  // Actions spécifiques selon le type (avant de fermer le modal)
   switch (notification.type) {
-    case 'subscription':
-    case 'unsubscription':
-      // Ouvrir le profil de l'utilisateur
-      if (notification.follower_id && window.showCommunityProfile) {
-        await openUserProfile(notification.follower_id);
-      }
-      break;
-    
     case 'suspicion_individual':
     case 'suspicion_blocked':
-      // Ouvrir le profil et afficher le badge soupçonné
       let targetUserId = notification.user_id;
       if (notification.badge_owner_id && notification.badge_owner_id !== notification.user_id) {
         targetUserId = notification.badge_owner_id;
@@ -256,17 +183,16 @@ async function handleNotificationClick(notification) {
     
     case 'daily_tokens':
     case 'sunday_bonus':
-      // Pour les notifications de connexion, ne rien faire (juste fermer le modal)
+      // Ne rien faire
       break;
   }
   
-  // Mettre à jour le badge de notification
-  await refreshNotificationBadge();
+  // Fermer le modal et marquer toutes les notifications comme lues
+  await closeModalAndMarkAsRead();
 }
 
 /**
  * Ouvre le profil d'un utilisateur
- * @param {string} userId - ID de l'utilisateur
  */
 async function openUserProfile(userId) {
   if (!window.showCommunityProfile) return;
@@ -298,18 +224,14 @@ async function openUserProfile(userId) {
 
 /**
  * Ouvre le profil d'un utilisateur et met en évidence un badge spécifique
- * @param {string} userId - ID de l'utilisateur
- * @param {string} badgeId - ID du badge à mettre en évidence
  */
 async function openUserProfileWithBadge(userId, badgeId) {
   await openUserProfile(userId);
   
-  // Attendre que le profil soit chargé, puis scroller vers le badge
   setTimeout(() => {
     const badgeElement = document.querySelector(`[data-badge-id="${badgeId}"]`);
     if (badgeElement) {
       badgeElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      // Ajouter un effet visuel pour mettre en évidence le badge
       badgeElement.style.transition = 'box-shadow 0.3s ease';
       badgeElement.style.boxShadow = '0 0 20px rgba(99, 102, 241, 0.5)';
       setTimeout(() => {
@@ -320,22 +242,19 @@ async function openUserProfileWithBadge(userId, badgeId) {
 }
 
 /**
- * Marque toutes les notifications comme lues
+ * Marque toutes les notifications comme lues (fonction interne pour UI)
  */
-async function markAllNotificationsAsRead() {
+async function markAllNotificationsAsReadInternal() {
   if (!supabaseClient || !currentUserId) return;
   
   try {
-    const result = await NotificationService.markAllNotificationsAsRead(supabaseClient, currentUserId);
+    const result = await Notifications.markAllNotificationsAsRead(supabaseClient, currentUserId);
     
     if (result.success) {
-      // Si le modal est ouvert, rafraîchir l'affichage pour mettre à jour les styles visuels
       const modal = document.getElementById('notifications-modal');
       if (modal && !modal.classList.contains('hidden')) {
         await showNotificationsModal();
       }
-    } else {
-      console.error('Erreur lors du marquage des notifications comme lues:', result.error);
     }
   } catch (err) {
     console.error('Erreur lors du marquage des notifications comme lues:', err);
@@ -348,40 +267,31 @@ async function markAllNotificationsAsRead() {
 export async function refreshNotificationBadge() {
   if (!supabaseClient || !currentUserId) return;
   
-  const count = await NotificationService.getUnreadNotificationsCount(supabaseClient, currentUserId);
+  const count = await Notifications.getUnreadNotificationsCount(supabaseClient, currentUserId);
   renderNotificationBadge(count);
 }
 
 /**
  * Configure l'écoute Realtime pour les notifications
- * @returns {Function} - Fonction pour arrêter l'écoute
  */
 export function setupRealtimeNotificationListener() {
   if (!supabaseClient || !currentUserId) return () => {};
   
-  return NotificationService.setupRealtimeNotifications(
+  return Notifications.setupRealtimeNotifications(
     supabaseClient,
     currentUserId,
     async (payload) => {
-      console.log('🔄 Événement Realtime reçu, mise à jour de la pastille...', payload.eventType);
-      
-      // Toujours rafraîchir le badge pour tous les types d'événements
-      // INSERT : nouvelle notification → pastille doit apparaître
-      // UPDATE : notification marquée comme lue → pastille doit disparaître si plus de notifications non lues
-      // DELETE : notification supprimée → pastille doit se mettre à jour
       await refreshNotificationBadge();
       
-      // Si le modal est ouvert, rafraîchir la liste pour afficher les changements
       const modal = document.getElementById('notifications-modal');
       if (modal && !modal.classList.contains('hidden')) {
-        console.log('📋 Modal ouvert, rafraîchissement de la liste...');
         await showNotificationsModal();
       }
     }
   );
 }
 
-// Export de toutes les fonctions sous un objet
+// Export de toutes les fonctions UI
 export const NotificationUI = {
   initNotificationUI,
   renderNotificationBadge,
