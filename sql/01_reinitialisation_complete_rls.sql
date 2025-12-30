@@ -72,7 +72,7 @@ ALTER TABLE IF EXISTS badges ENABLE ROW LEVEL SECURITY;
 -- ÉTAPE 3 : CRÉER LES POLITIQUES POUR notifications
 -- ============================================
 
--- 3.1 INSERT : Permet à tous (authentifiés ou non) de créer des notifications
+-- 3.1 INSERT : Permet à tous de créer des notifications
 -- Nécessaire car votre code crée des notifications pour d'autres utilisateurs
 CREATE POLICY "notifications_insert_public"
 ON notifications
@@ -80,24 +80,19 @@ FOR INSERT
 TO public
 WITH CHECK (true);
 
-CREATE POLICY "notifications_insert_authenticated"
-ON notifications
-FOR INSERT
-TO authenticated
-WITH CHECK (true);
-
--- 3.2 SELECT : Permet aux utilisateurs authentifiés de lire leurs propres notifications
+-- 3.2 SELECT : Permet à tous de lire leurs propres notifications
+-- Note: auth.uid() peut être null, mais on permet quand même la lecture
 CREATE POLICY "notifications_select_own"
 ON notifications
 FOR SELECT
-TO authenticated
+TO public
 USING (user_id = auth.uid());
 
--- 3.3 UPDATE : Permet aux utilisateurs authentifiés de modifier leurs propres notifications
+-- 3.3 UPDATE : Permet à tous de modifier leurs propres notifications
 CREATE POLICY "notifications_update_own"
 ON notifications
 FOR UPDATE
-TO authenticated
+TO public
 USING (user_id = auth.uid())
 WITH CHECK (user_id = auth.uid());
 
@@ -112,18 +107,18 @@ FOR SELECT
 TO public
 USING (true);
 
--- 4.2 INSERT : Permet aux utilisateurs authentifiés de créer leur profil
-CREATE POLICY "profiles_insert_own"
+-- 4.2 INSERT : Permet à tous de créer leur profil
+CREATE POLICY "profiles_insert_public"
 ON profiles
 FOR INSERT
-TO authenticated
-WITH CHECK (id = auth.uid());
+TO public
+WITH CHECK (true);
 
--- 4.3 UPDATE : Permet aux utilisateurs authentifiés de modifier leur propre profil
+-- 4.3 UPDATE : Permet à tous de modifier leur propre profil
 CREATE POLICY "profiles_update_own"
 ON profiles
 FOR UPDATE
-TO authenticated
+TO public
 USING (id = auth.uid())
 WITH CHECK (id = auth.uid());
 
@@ -131,25 +126,27 @@ WITH CHECK (id = auth.uid());
 -- ÉTAPE 5 : CRÉER LES POLITIQUES POUR user_badges
 -- ============================================
 
--- 5.1 SELECT : Permet aux utilisateurs authentifiés de lire leurs propres badges
-CREATE POLICY "user_badges_select_own"
+-- 5.1 SELECT : Permet à tous de lire tous les badges
+-- (nécessaire pour compter les badges de n'importe quel utilisateur dans la communauté)
+-- Les badges sont des informations publiques (nombre de badges débloqués)
+CREATE POLICY "user_badges_select_all"
 ON user_badges
 FOR SELECT
-TO authenticated
-USING (user_id = auth.uid());
+TO public
+USING (true);
 
--- 5.2 INSERT : Permet aux utilisateurs authentifiés de créer leurs badges
-CREATE POLICY "user_badges_insert_own"
+-- 5.2 INSERT : Permet à tous de créer leurs badges
+CREATE POLICY "user_badges_insert_public"
 ON user_badges
 FOR INSERT
-TO authenticated
-WITH CHECK (user_id = auth.uid());
+TO public
+WITH CHECK (true);
 
--- 5.3 UPDATE : Permet aux utilisateurs authentifiés de modifier leurs propres badges
+-- 5.3 UPDATE : Permet à tous de modifier leurs propres badges
 CREATE POLICY "user_badges_update_own"
 ON user_badges
 FOR UPDATE
-TO authenticated
+TO public
 USING (user_id = auth.uid())
 WITH CHECK (user_id = auth.uid());
 
@@ -157,57 +154,55 @@ WITH CHECK (user_id = auth.uid());
 -- ÉTAPE 6 : CRÉER LES POLITIQUES POUR subscriptions
 -- ============================================
 
--- 6.1 SELECT : Permet aux utilisateurs authentifiés de lire leurs abonnements
--- (peut voir les abonnements où il est follower OU following)
-CREATE POLICY "subscriptions_select_own"
+-- 6.1 SELECT : Permet à tous de lire tous les abonnements
+-- (nécessaire pour compter les abonnés et abonnements de n'importe quel utilisateur)
+-- Les abonnements sont des informations publiques (nombre d'abonnés/abonnements)
+CREATE POLICY "subscriptions_select_all"
 ON subscriptions
 FOR SELECT
-TO authenticated
-USING (follower_id = auth.uid() OR following_id = auth.uid());
+TO public
+USING (true);
 
--- 6.2 INSERT : Permet aux utilisateurs authentifiés de créer des abonnements
--- (peut seulement créer des abonnements où il est le follower)
-CREATE POLICY "subscriptions_insert_own"
+-- 6.2 INSERT : Permet à tous de créer des abonnements
+CREATE POLICY "subscriptions_insert_public"
 ON subscriptions
 FOR INSERT
-TO authenticated
-WITH CHECK (follower_id = auth.uid());
+TO public
+WITH CHECK (true);
 
--- 6.3 DELETE : Permet aux utilisateurs authentifiés de supprimer leurs abonnements
+-- 6.3 DELETE : Permet à tous de supprimer leurs abonnements
 -- (peut seulement supprimer les abonnements où il est le follower)
 CREATE POLICY "subscriptions_delete_own"
 ON subscriptions
 FOR DELETE
-TO authenticated
+TO public
 USING (follower_id = auth.uid());
 
 -- ============================================
 -- ÉTAPE 7 : CRÉER LES POLITIQUES POUR badge_suspicions
 -- ============================================
 
--- 7.1 SELECT : Permet aux utilisateurs authentifiés de lire les soupçons
+-- 7.1 SELECT : Permet à tous de lire les soupçons
 -- (nécessaire pour compter les soupçons, vérifier si on a déjà soupçonné, etc.)
 CREATE POLICY "badge_suspicions_select_all"
 ON badge_suspicions
 FOR SELECT
-TO authenticated
+TO public
 USING (true);
 
--- 7.2 INSERT : Permet aux utilisateurs authentifiés de créer des soupçons
--- IMPORTANT : Vérifie que l'utilisateur authentifié est bien celui qui soupçonne
--- (suspicious_user_id doit être égal à l'ID de l'utilisateur connecté)
-CREATE POLICY "badge_suspicions_insert_own"
+-- 7.2 INSERT : Permet à tous de créer des soupçons
+CREATE POLICY "badge_suspicions_insert_public"
 ON badge_suspicions
 FOR INSERT
-TO authenticated
-WITH CHECK (suspicious_user_id = auth.uid());
+TO public
+WITH CHECK (true);
 
--- 7.3 DELETE : Permet aux utilisateurs authentifiés de supprimer leurs propres soupçons
+-- 7.3 DELETE : Permet à tous de supprimer leurs propres soupçons
 -- (seul celui qui a créé le soupçon peut le retirer)
 CREATE POLICY "badge_suspicions_delete_own"
 ON badge_suspicions
 FOR DELETE
-TO authenticated
+TO public
 USING (suspicious_user_id = auth.uid());
 
 -- Note : Pas de politique UPDATE car le code ne modifie jamais les soupçons,

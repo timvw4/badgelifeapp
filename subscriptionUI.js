@@ -188,6 +188,38 @@ export function setupRealtimeSubscriptions() {
               console.log('✅ Compteurs mis à jour après réessai');
             }, 100);
           }
+          
+          // Mettre à jour aussi les compteurs du profil communautaire si le modal est ouvert
+          const communityModal = document.getElementById('community-profile-modal');
+          if (communityModal && !communityModal.classList.contains('hidden')) {
+            const profileUserId = communityModal.dataset.userId;
+            if (profileUserId) {
+              // Vérifier si l'événement concerne le profil affiché dans le modal
+              const eventConcernsProfile = 
+                (payload.eventType === 'INSERT' && newData && 
+                 (newData.following_id === profileUserId || newData.follower_id === profileUserId)) ||
+                (payload.eventType === 'DELETE' && oldData && 
+                 (oldData.following_id === profileUserId || oldData.follower_id === profileUserId));
+              
+              if (eventConcernsProfile) {
+                console.log('🔄 Mise à jour des compteurs du profil communautaire:', profileUserId);
+                
+                const profileFollowersCount = await Subscriptions.getFollowersCount(supabaseClient, profileUserId);
+                const profileSubscriptionsCount = await Subscriptions.getSubscriptionsCount(supabaseClient, profileUserId);
+                const isSubscribed = await Subscriptions.isSubscribed(supabaseClient, currentUserId, profileUserId);
+                const isOwnProfile = profileUserId === currentUserId;
+                
+                await renderCommunityProfileSubscription(
+                  profileUserId,
+                  isOwnProfile,
+                  profileFollowersCount,
+                  profileSubscriptionsCount,
+                  isSubscribed
+                );
+                console.log('✅ Compteurs du profil communautaire mis à jour');
+              }
+            }
+          }
           }, delay);
         } else {
           console.log('⚠️ Événement ne nous concerne pas, ignoré');
@@ -225,13 +257,27 @@ export async function renderCommunityProfileSubscription(profileId, isOwnProfile
   const followersStat = document.getElementById('community-profile-followers-stat');
   const subscriptionsStat = document.getElementById('community-profile-subscriptions-stat');
   
+  console.log('📊 renderCommunityProfileSubscription appelé:', {
+    profileId,
+    isOwnProfile,
+    followersCount,
+    subscriptionsCount,
+    isSubscribed
+  });
+  
   // Afficher les stats
   if (followersCountEl) {
     followersCountEl.textContent = followersCount || 0;
+    console.log('✅ Nombre d\'abonnés affiché:', followersCount || 0);
+  } else {
+    console.warn('⚠️ Élément community-profile-followers-count non trouvé');
   }
   
   if (subscriptionsCountEl) {
     subscriptionsCountEl.textContent = subscriptionsCount || 0;
+    console.log('✅ Nombre d\'abonnements affiché:', subscriptionsCount || 0);
+  } else {
+    console.warn('⚠️ Élément community-profile-subscriptions-count non trouvé');
   }
   
   // Gérer le bouton s'abonner/se désabonner

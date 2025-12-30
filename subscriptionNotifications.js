@@ -43,11 +43,12 @@ async function createNotification(supabase, userId, type, data = {}, showBadge =
     
     console.log('📝 Données à insérer:', notificationData);
     console.log('🔍 Tentative d\'insertion avec session:', !!sessionData?.session);
+    console.log('🔍 show_badge sera:', showBadge, 'pour le type:', type);
     
     const { data: notification, error } = await supabase
       .from('notifications')
       .insert(notificationData)
-      .select('id')
+      .select('id, show_badge, is_read, type')
       .single();
     
     if (error) {
@@ -55,7 +56,12 @@ async function createNotification(supabase, userId, type, data = {}, showBadge =
       return { success: false, error: error.message };
     }
     
-    console.log(`✅ Notification ${type} créée avec succès:`, notification.id);
+    console.log(`✅ Notification ${type} créée avec succès:`, {
+      id: notification.id,
+      type: notification.type,
+      show_badge: notification.show_badge,
+      is_read: notification.is_read
+    });
     return { success: true, notificationId: notification.id };
   } catch (err) {
     console.error(`❌ Erreur lors de la création de la notification ${type}:`, err);
@@ -86,6 +92,8 @@ async function checkDuplicateNotification(supabase, userId, type, data) {
     }
     
     // Pour les abonnements/désabonnements, vérifier par follower et jour
+    // CORRIGÉ : Vérifie seulement les notifications non lues pour permettre de nouvelles notifications
+    // si la précédente a été lue (comme pour les notifications de jetons)
     if (type === 'subscription' || type === 'unsubscription') {
       const today = new Date().toISOString().split('T')[0];
       const { count } = await supabase
@@ -94,6 +102,7 @@ async function checkDuplicateNotification(supabase, userId, type, data) {
         .eq('user_id', userId)
         .eq('type', type)
         .eq('follower_id', data.follower_id)
+        .eq('is_read', false) // ✅ CORRIGÉ : Seulement les non lues (permet nouvelle notification si lue)
         .gte('created_at', `${today}T00:00:00Z`)
         .lt('created_at', `${today}T23:59:59Z`);
       
@@ -390,9 +399,10 @@ export async function getUnreadNotificationsCount(supabase, userId) {
   try {
     console.log('🔢 Comptage des notifications non lues pour user:', userId);
     
-    const { count, error } = await supabase
+    // Récupérer les notifications pour vérifier quelles sont comptées
+    const { data: notifications, error } = await supabase
       .from('notifications')
-      .select('*', { count: 'exact', head: true })
+      .select('id, type, is_read, show_badge')
       .eq('user_id', userId)
       .eq('is_read', false)
       .eq('show_badge', true); // Seulement celles qui doivent afficher la pastille
@@ -406,8 +416,15 @@ export async function getUnreadNotificationsCount(supabase, userId) {
       return 0;
     }
     
-    console.log('🔢 Nombre de notifications non lues:', count || 0);
-    return count || 0;
+    const count = notifications?.length || 0;
+    console.log('🔢 Nombre de notifications non lues:', count);
+    console.log('🔢 Détail des notifications non lues:', notifications?.map(n => ({
+      id: n.id,
+      type: n.type,
+      is_read: n.is_read,
+      show_badge: n.show_badge
+    })));
+    return count;
   } catch (err) {
     console.error('❌ Exception lors du comptage des notifications:', err);
     return 0;

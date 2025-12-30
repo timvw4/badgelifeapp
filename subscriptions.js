@@ -68,19 +68,22 @@ export async function unsubscribeFromUser(supabase, followerId, followingId) {
  */
 export async function getSubscriptionsCount(supabase, userId) {
   try {
+    console.log('🔢 getSubscriptionsCount appelé pour userId:', userId);
     const { count, error } = await supabase
       .from('subscriptions')
       .select('*', { count: 'exact', head: true })
       .eq('follower_id', userId);
     
     if (error) {
-      console.error('Erreur lors du comptage des abonnements:', error);
+      console.error('❌ Erreur lors du comptage des abonnements:', error);
       return 0;
     }
     
-    return count || 0;
+    const result = count || 0;
+    console.log('✅ Nombre d\'abonnements récupéré:', result, 'pour userId:', userId);
+    return result;
   } catch (err) {
-    console.error('Erreur lors du comptage des abonnements:', err);
+    console.error('❌ Exception lors du comptage des abonnements:', err);
     return 0;
   }
 }
@@ -93,19 +96,22 @@ export async function getSubscriptionsCount(supabase, userId) {
  */
 export async function getFollowersCount(supabase, userId) {
   try {
+    console.log('🔢 getFollowersCount appelé pour userId:', userId);
     const { count, error } = await supabase
       .from('subscriptions')
       .select('*', { count: 'exact', head: true })
       .eq('following_id', userId);
     
     if (error) {
-      console.error('Erreur lors du comptage des abonnés:', error);
+      console.error('❌ Erreur lors du comptage des abonnés:', error);
       return 0;
     }
     
-    return count || 0;
+    const result = count || 0;
+    console.log('✅ Nombre d\'abonnés récupéré:', result, 'pour userId:', userId);
+    return result;
   } catch (err) {
-    console.error('Erreur lors du comptage des abonnés:', err);
+    console.error('❌ Exception lors du comptage des abonnés:', err);
     return 0;
   }
 }
@@ -119,14 +125,15 @@ export async function getFollowersCount(supabase, userId) {
  */
 export async function isSubscribed(supabase, followerId, followingId) {
   try {
+    // Utiliser .maybeSingle() au lieu de .single() pour éviter l'erreur 406 quand aucun résultat
     const { data, error } = await supabase
       .from('subscriptions')
       .select('id')
       .eq('follower_id', followerId)
       .eq('following_id', followingId)
-      .single();
+      .maybeSingle();
     
-    if (error && error.code !== 'PGRST116') {
+    if (error) {
       console.error('Erreur lors de la vérification d\'abonnement:', error);
       return false;
     }
@@ -244,6 +251,77 @@ export async function isMutuallySubscribed(supabase, userId1, userId2) {
 }
 
 /**
+ * Obtenir la liste des amis mutuels (utilisateurs mutuellement abonnés)
+ * @param {Object} supabase - Client Supabase
+ * @param {string} userId - ID de l'utilisateur
+ * @returns {Promise<Array>} - Liste des profils amis mutuels avec leur date d'abonnement mutuel
+ */
+export async function getMutualFriends(supabase, userId) {
+  try {
+    // Récupérer tous les utilisateurs que l'utilisateur suit
+    const { data: subscriptions, error: subError } = await supabase
+      .from('subscriptions')
+      .select(`
+        following_id,
+        created_at,
+        profiles:following_id (
+          id,
+          username,
+          avatar_url,
+          skill_points,
+          rank,
+          badge_count,
+          is_private
+        )
+      `)
+      .eq('follower_id', userId);
+    
+    if (subError) {
+      console.error('Erreur lors de la récupération des abonnements:', subError);
+      return [];
+    }
+    
+    // Récupérer tous les utilisateurs qui suivent l'utilisateur
+    const { data: followers, error: folError } = await supabase
+      .from('subscriptions')
+      .select(`
+        follower_id,
+        created_at
+      `)
+      .eq('following_id', userId);
+    
+    if (folError) {
+      console.error('Erreur lors de la récupération des abonnés:', folError);
+      return [];
+    }
+    
+    // Créer un Set des IDs des abonnés pour une recherche rapide
+    const followerIds = new Set((followers || []).map(f => f.follower_id));
+    
+    // Filtrer pour ne garder que les amis mutuels (ceux que l'utilisateur suit ET qui suivent l'utilisateur)
+    const mutualFriends = (subscriptions || [])
+      .filter(sub => followerIds.has(sub.following_id))
+      .map(sub => {
+        // Trouver la date d'abonnement la plus récente entre les deux abonnements
+        const followerSub = followers.find(f => f.follower_id === sub.following_id);
+        const mutualDate = new Date(sub.created_at) > new Date(followerSub.created_at) 
+          ? sub.created_at 
+          : followerSub.created_at;
+        
+        return {
+          ...sub.profiles,
+          mutual_subscription_date: mutualDate
+        };
+      });
+    
+    return mutualFriends;
+  } catch (err) {
+    console.error('Erreur lors de la récupération des amis mutuels:', err);
+    return [];
+  }
+}
+
+/**
  * Vérifier si un utilisateur peut voir les badges d'un autre utilisateur
  * @param {Object} supabase - Client Supabase
  * @param {string} viewerId - ID de l'utilisateur qui regarde
@@ -276,6 +354,7 @@ export const Subscriptions = {
   isMutuallySubscribed,
   getSubscriptions,
   getFollowers,
+  getMutualFriends,
   canViewBadges
 };
 

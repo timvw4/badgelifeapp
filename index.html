@@ -294,22 +294,29 @@
             <input id="community-search" type="search" placeholder="Recherche un utilisateur..." aria-label="Rechercher un utilisateur">
           </div>
           <div class="community-filter-buttons">
-            <button id="community-filter-all" class="community-filter-btn active">Tout le monde</button>
-            <button id="community-filter-top" class="community-filter-btn">Top profil</button>
+            <button id="community-filter-all" class="community-filter-btn active">Tous</button>
+            <button id="community-filter-top" class="community-filter-btn">Top profils</button>
+            <button id="community-filter-friends" class="community-filter-btn">Amis</button>
           </div>
           <p id="community-filter-description" class="muted community-filter-description">Affiche tous les utilisateurs de l'application.</p>
           <div id="community-list" class="list"></div>
         </div>
         <div id="community-ideas-panel" class="community-subtab-content hidden">
           <p class="muted section-description community">Partage tes idées de badges à la comunauté et vote pour élire les meilleures idées de badges qui pourraient peut-être faire partie de la collection.</p>
-          <form id="idea-form" class="auth-form form-compact">
+          <div style="display: flex; justify-content: center; margin-bottom: 20px;">
+            <button id="idea-form-toggle" class="primary">+ Propose une idée</button>
+          </div>
+          <form id="idea-form" class="auth-form form-compact hidden">
             <label for="idea-title">Nom du badge</label>
             <input id="idea-title" type="text" maxlength="80" required placeholder="Ex: Explorateur nocturne">
             <label for="idea-emoji">Emoji</label>
             <input id="idea-emoji" type="text" maxlength="10" placeholder="Ex: 🚀">
             <label for="idea-description">Description</label>
             <textarea id="idea-description" rows="2" maxlength="300" required placeholder="Décris l'idée en quelques lignes."></textarea>
-            <button type="submit" class="primary">Proposer</button>
+            <div style="display: flex; gap: 8px; margin-top: 8px;">
+              <button type="submit" class="primary">Proposer</button>
+              <button type="button" id="idea-form-cancel" class="idea-cancel-btn">Annuler</button>
+            </div>
             <p id="idea-message" class="message"></p>
           </form>
           <div class="ideas-separator">

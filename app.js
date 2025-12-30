@@ -52,7 +52,8 @@ const state = {
   isClaimingTokens: false, // Verrou pour empêcher les appels multiples simultanés à claimDailyTokens
   claimingDay: null, // Jour en cours de réclamation (pour éviter les doubles clics)
   modifyBadgeCost: null, // Coût en jetons de la modification en cours (2 pour joker, 5 pour section amélioration)
-  communityFilterMode: 'all', // 'all' pour tout le monde, 'top' pour top 5
+  communityFilterMode: 'all', // 'all' pour tous, 'top' pour top profil, 'friends' pour mes potes
+  mutualFriends: [], // Liste des amis mutuels
 };
 
 const els = {};
@@ -457,8 +458,11 @@ function cacheElements() {
   els.communityTabShare = document.getElementById('community-tab-share');
   els.communityFilterAll = document.getElementById('community-filter-all');
   els.communityFilterTop = document.getElementById('community-filter-top');
+  els.communityFilterFriends = document.getElementById('community-filter-friends');
   els.communityFilterDescription = document.getElementById('community-filter-description');
   els.ideaForm = document.getElementById('idea-form');
+  els.ideaFormToggle = document.getElementById('idea-form-toggle');
+  els.ideaFormCancel = document.getElementById('idea-form-cancel');
   els.ideaTitle = document.getElementById('idea-title');
   els.ideaEmoji = document.getElementById('idea-emoji');
   els.ideaDescription = document.getElementById('idea-description');
@@ -872,13 +876,14 @@ function attachCommunitySearchListener() {
 }
 
 function attachCommunityFilterListeners() {
-  if (!els.communityFilterAll || !els.communityFilterTop || !els.communityFilterDescription) return;
+  if (!els.communityFilterAll || !els.communityFilterTop || !els.communityFilterFriends || !els.communityFilterDescription) return;
   
-  // Gestionnaire pour le bouton "Tout le monde"
+  // Gestionnaire pour le bouton "Tous"
   els.communityFilterAll.addEventListener('click', () => {
     state.communityFilterMode = 'all';
     els.communityFilterAll.classList.add('active');
     els.communityFilterTop.classList.remove('active');
+    els.communityFilterFriends.classList.remove('active');
     els.communityFilterDescription.textContent = 'Affiche tous les utilisateurs de l\'application.';
     // Récupérer la valeur de recherche actuelle
     const searchTerm = els.communitySearch ? els.communitySearch.value || '' : '';
@@ -890,7 +895,26 @@ function attachCommunityFilterListeners() {
     state.communityFilterMode = 'top';
     els.communityFilterTop.classList.add('active');
     els.communityFilterAll.classList.remove('active');
-    els.communityFilterDescription.textContent = 'Affiche les 5 profils avec le rang le plus élevé.';
+    els.communityFilterFriends.classList.remove('active');
+    els.communityFilterDescription.textContent = 'Affiche les 5 profils avec le plus grand nombre de badges.';
+    // Récupérer la valeur de recherche actuelle
+    const searchTerm = els.communitySearch ? els.communitySearch.value || '' : '';
+    renderCommunityFiltered(searchTerm);
+  });
+  
+  // Gestionnaire pour le bouton "Mes potes"
+  els.communityFilterFriends.addEventListener('click', async () => {
+    state.communityFilterMode = 'friends';
+    els.communityFilterFriends.classList.add('active');
+    els.communityFilterAll.classList.remove('active');
+    els.communityFilterTop.classList.remove('active');
+    els.communityFilterDescription.textContent = 'Affiche tes amis mutuellement abonnés.';
+    
+    // Charger les amis mutuels si ce n'est pas déjà fait
+    if (!state.mutualFriends || state.mutualFriends.length === 0) {
+      await loadMutualFriends();
+    }
+    
     // Récupérer la valeur de recherche actuelle
     const searchTerm = els.communitySearch ? els.communitySearch.value || '' : '';
     renderCommunityFiltered(searchTerm);
@@ -925,6 +949,36 @@ function attachIdeaListeners() {
     els.ideaForm.addEventListener('submit', (e) => {
       e.preventDefault();
       submitIdea();
+    });
+  }
+  
+  // Gestionnaire pour le bouton qui affiche le formulaire
+  if (els.ideaFormToggle) {
+    els.ideaFormToggle.addEventListener('click', () => {
+      if (els.ideaForm) {
+        els.ideaForm.classList.remove('hidden');
+        els.ideaFormToggle.classList.add('hidden');
+      }
+    });
+  }
+  
+  // Gestionnaire pour le bouton annuler
+  if (els.ideaFormCancel) {
+    els.ideaFormCancel.addEventListener('click', () => {
+      if (els.ideaForm) {
+        els.ideaForm.classList.add('hidden');
+        if (els.ideaFormToggle) {
+          els.ideaFormToggle.classList.remove('hidden');
+        }
+        // Réinitialiser le formulaire
+        if (els.ideaTitle) els.ideaTitle.value = '';
+        if (els.ideaEmoji) els.ideaEmoji.value = '';
+        if (els.ideaDescription) els.ideaDescription.value = '';
+        if (els.ideaMessage) {
+          els.ideaMessage.textContent = '';
+          els.ideaMessage.classList.remove('error');
+        }
+      }
     });
   }
 }
@@ -1616,7 +1670,7 @@ async function fetchCommunity() {
   const { data, error } = await safeSupabaseSelect(
     supabase,
     'profiles',
-    'id,username,badge_count,avatar_url,skill_points,rank,is_private',
+    'id,username,badge_count,avatar_url,skill_points,rank,is_private,created_at',
     'id,username,badge_count,avatar_url,skill_points,rank',
     (query) => query.order('skill_points', { ascending: false })
   );
@@ -1722,7 +1776,49 @@ async function fetchCommunity() {
   }
 
   state.communityProfiles = profiles;
+  
+  // Recharger les amis mutuels si le mode actuel est "friends"
+  if (state.communityFilterMode === 'friends') {
+    await loadMutualFriends();
+  }
+  
   renderCommunityFiltered('');
+}
+
+// Fonction pour charger les amis mutuels
+async function loadMutualFriends() {
+  if (!state.user || !state.user.id) {
+    state.mutualFriends = [];
+    return;
+  }
+  
+  try {
+    const mutualFriends = await Subscriptions.getMutualFriends(supabase, state.user.id);
+    
+    // Enrichir les amis mutuels avec les données complètes des profils de la communauté
+    const enrichedFriends = mutualFriends.map(friend => {
+      // Trouver le profil complet dans state.communityProfiles
+      const fullProfile = state.communityProfiles.find(p => p.id === friend.id);
+      if (fullProfile) {
+        return {
+          ...fullProfile,
+          mutual_subscription_date: friend.mutual_subscription_date
+        };
+      }
+      // Si le profil n'est pas dans la communauté, utiliser les données de base
+      return {
+        ...friend,
+        badge_count: friend.badge_count || 0,
+        mystery_count: 0,
+        is_private: friend.is_private || false
+      };
+    });
+    
+    state.mutualFriends = enrichedFriends;
+  } catch (error) {
+    console.error('Erreur lors du chargement des amis mutuels:', error);
+    state.mutualFriends = [];
+  }
 }
 
 async function fetchIdeaVotes() {
@@ -3940,8 +4036,20 @@ function renderCommunity(profiles) {
     return;
   }
   els.communityList.innerHTML = '';
-  profiles.forEach(profile => {
+  
+  // Vérifier si on est en mode "Top profil" pour afficher le classement
+  const showRanking = state.communityFilterMode === 'top';
+  
+  profiles.forEach((profile, index) => {
     const avatarUrl = profile.avatar_url || './icons/logobl.png';
+    
+    // Créer un conteneur pour le numéro et la carte si on est en mode classement
+    let container;
+    if (showRanking) {
+      container = document.createElement('div');
+      container.className = 'ranking-item-container';
+    }
+    
     const item = document.createElement('div');
     item.className = 'list-item';
     item.dataset.userId = profile.id || '';
@@ -3958,6 +4066,7 @@ function renderCommunity(profiles) {
     const rankText = formatRankText(displayRank);
     const rankStyle = rankMeta.isGold ? '' : `style="color: ${rankMeta.color} !important"`;
     const rankClass = rankMeta.isGold ? 'rank-gold' : 'muted';
+    
     item.innerHTML = `
       <div class="community-profile-header">
         <img src="${avatarUrl}" alt="Avatar" class="logo small avatar">
@@ -3969,26 +4078,64 @@ function renderCommunity(profiles) {
       <span class="pill">${profile.badge_count ?? 0} badge(s)</span>
     `;
     item.addEventListener('click', () => showCommunityProfile(item.dataset));
-    els.communityList.appendChild(item);
+    
+    // Si on est en mode classement, créer le numéro et l'ajouter au conteneur
+    if (showRanking) {
+      const rankingNumber = document.createElement('span');
+      const position = index + 1;
+      rankingNumber.className = 'ranking-number';
+      rankingNumber.textContent = position;
+      container.appendChild(rankingNumber);
+      container.appendChild(item);
+      els.communityList.appendChild(container);
+    } else {
+      els.communityList.appendChild(item);
+    }
   });
 }
 
 function renderCommunityFiltered(term = '') {
   const lower = term.trim().toLowerCase();
-  const list = state.communityProfiles || [];
+  let list = [];
+  
+  // Sélectionner la liste source selon le mode
+  if (state.communityFilterMode === 'friends') {
+    // Mode "Mes potes" : utiliser la liste des amis mutuels
+    list = state.mutualFriends || [];
+  } else {
+    // Mode "Tous" ou "Top profil" : utiliser la liste complète de la communauté
+    list = state.communityProfiles || [];
+  }
+  
+  // Appliquer le filtre de recherche
   let filtered = lower
     ? list.filter(p => (p.username || '').toLowerCase().includes(lower))
     : list;
   
-  // Appliquer le mode de filtrage
+  // Appliquer le mode de filtrage et le tri
   if (state.communityFilterMode === 'top') {
-    // Mode "Top profil" : limiter à 5 utilisateurs avec le rang le plus élevé
-    // Trier par skill_points pour s'assurer qu'on garde les meilleurs
+    // Mode "Top profil" : trier par nombre de badges (du plus grand au plus petit) et limiter à 5
     filtered = filtered
-      .sort((a, b) => (b.skill_points || 0) - (a.skill_points || 0))
+      .sort((a, b) => (b.badge_count || 0) - (a.badge_count || 0))
       .slice(0, 5);
+  } else if (state.communityFilterMode === 'friends') {
+    // Mode "Mes potes" : trier du moins récent au plus récent (par date d'abonnement mutuel)
+    filtered = filtered
+      .sort((a, b) => {
+        const dateA = a.mutual_subscription_date ? new Date(a.mutual_subscription_date).getTime() : 0;
+        const dateB = b.mutual_subscription_date ? new Date(b.mutual_subscription_date).getTime() : 0;
+        return dateA - dateB; // Du moins récent au plus récent
+      });
+  } else {
+    // Mode "Tous" : trier du plus récent au moins récent (par date de création)
+    filtered = filtered
+      .sort((a, b) => {
+        // Trier par date de création décroissante (plus récent en premier)
+        const dateA = a.created_at ? new Date(a.created_at).getTime() : 0;
+        const dateB = b.created_at ? new Date(b.created_at).getTime() : 0;
+        return dateB - dateA; // Du plus récent au moins récent
+      });
   }
-  // Mode "Tout le monde" : afficher tous les utilisateurs (pas de limitation)
   
   renderCommunity(filtered);
 }
@@ -4068,6 +4215,15 @@ async function submitIdea() {
   els.ideaTitle.value = '';
   if (els.ideaEmoji) els.ideaEmoji.value = '';
   els.ideaDescription.value = '';
+  
+  // Cacher le formulaire et réafficher le bouton après soumission réussie
+  if (els.ideaForm) {
+    els.ideaForm.classList.add('hidden');
+  }
+  if (els.ideaFormToggle) {
+    els.ideaFormToggle.classList.remove('hidden');
+  }
+  
   if (data && data.length) {
     state.ideas = [data[0], ...state.ideas];
     renderIdeas();
@@ -5331,6 +5487,18 @@ async function fetchPublicUserBadges(userId, isPrivate = false) {
         return data.map(row => ({ ...row, is_blocked_by_suspicions: false }));
       }
       return data ?? [];
+    } else {
+      // Si l'erreur est 404 (vue/table n'existe pas) ou PGRST116 (table non trouvée), 
+      // continuer silencieusement vers la source suivante
+      // Sinon, logger l'erreur pour le débogage
+      const isNotFoundError = error.code === 'PGRST116' || 
+                             error.message?.includes('does not exist') ||
+                             error.message?.includes('Could not find the table') ||
+                             error.status === 404;
+      if (!isNotFoundError) {
+        console.warn(`⚠️ Erreur lors de l'accès à ${src.table}:`, error.message);
+      }
+      // Continuer vers la source suivante si c'est une erreur "non trouvé"
     }
   }
   return [];

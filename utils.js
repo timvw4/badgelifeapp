@@ -1,18 +1,16 @@
-// Module utilitaire partagé pour les fonctions communes
-// Utilisé par app.js et admin.js pour éviter la duplication de code
+// Fonctions utilitaires partagées
 import { ADMIN_USER_IDS } from './config.js';
 
 /**
- * Convertit un pseudo en email valide pour Supabase
- * @param {string} pseudo - Le pseudo à convertir
- * @returns {string} - L'email généré (format: pseudo@badgelife.dev)
+ * Convertit un pseudo en email (alias factice mais valide pour Supabase Auth)
+ * @param {string} pseudo - Le pseudo de l'utilisateur
+ * @returns {string} - Email généré à partir du pseudo
  */
 export function pseudoToEmail(pseudo) {
-  if (!pseudo) return '';
+  if (!pseudo || typeof pseudo !== 'string') return 'user@badgelife.dev';
   const cleaned = pseudo
-    .trim()
     .toLowerCase()
-    .replace(/\s+/g, '-')
+    .trim()
     .replace(/[^a-z0-9._-]/g, '');
   return `${cleaned || 'user'}@badgelife.dev`;
 }
@@ -34,72 +32,58 @@ export function isAdminUser(user) {
  */
 export function parseBadgeAnswer(answer) {
   if (!answer) return null;
-  if (typeof answer === 'string') {
-    try {
-      return JSON.parse(answer);
-    } catch (_) {
-      return null;
-    }
+  if (typeof answer === 'object') return answer;
+  if (typeof answer !== 'string') return null;
+  try {
+    return JSON.parse(answer);
+  } catch (e) {
+    return null;
   }
-  return answer || null;
 }
 
 /**
- * Effectue une requête SELECT Supabase avec fallback automatique si certaines colonnes n'existent pas
- * Cette fonction simplifie la gestion des colonnes optionnelles en faisant automatiquement un retry
- * @param {Object} supabase - Instance Supabase client
- * @param {string} table - Nom de la table
- * @param {string} columns - Colonnes à sélectionner (format Supabase)
- * @param {string} fallbackColumns - Colonnes de fallback si les premières échouent
- * @param {Function} queryBuilder - Fonction qui construit la requête (reçoit le query builder et doit retourner la requête)
- * @returns {Promise<{data: any, error: any}>} - Résultat de la requête
- */
-export async function safeSupabaseSelect(supabase, table, columns, fallbackColumns, queryBuilder = null) {
-  // Construire la requête avec les colonnes principales
-  let query = supabase.from(table).select(columns);
-  
-  // Appliquer le query builder si fourni
-  if (queryBuilder && typeof queryBuilder === 'function') {
-    query = queryBuilder(query);
-  }
-  
-  let { data, error } = await query;
-  
-  // Si erreur liée à des colonnes manquantes, retry avec fallback
-  if (error && error.message && fallbackColumns) {
-    const errorMsg = error.message.toLowerCase();
-    // Liste des colonnes optionnelles communes
-    const optionalColumns = ['emoji', 'is_private', 'tokens', 'last_token_date', 'connection_days', 
-                             'week_start_date', 'week_bonus_available', 'week_bonus_claimed', 
-                             'claimed_daily_tokens', 'description', 'expert_name'];
-    
-    const hasOptionalColumn = optionalColumns.some(col => errorMsg.includes(col));
-    
-    if (hasOptionalColumn) {
-      // Retry avec les colonnes de fallback
-      let retryQuery = supabase.from(table).select(fallbackColumns);
-      
-      // Réappliquer le query builder
-      if (queryBuilder && typeof queryBuilder === 'function') {
-        retryQuery = queryBuilder(retryQuery);
-      }
-      
-      const retry = await retryQuery;
-      if (!retry.error) {
-        return { data: retry.data, error: null };
-      }
-    }
-  }
-  
-  return { data, error };
-}
-
-/**
- * Parse une configuration de badge (alias pour parseBadgeAnswer pour compatibilité)
- * @param {string|Object} answer - La réponse à parser
+ * Parse la configuration d'un badge (alias pour parseBadgeAnswer)
+ * @param {string|Object} answer - La configuration à parser
  * @returns {Object|null} - L'objet parsé ou null si erreur
  */
 export function parseConfig(answer) {
   return parseBadgeAnswer(answer);
+}
+
+/**
+ * Effectue un SELECT Supabase avec gestion automatique des colonnes optionnelles
+ * Si la première requête échoue (colonne manquante), essaie avec les colonnes de fallback
+ * @param {Object} supabase - Client Supabase
+ * @param {string} table - Nom de la table
+ * @param {string} selectWithOptional - Colonnes à sélectionner (peut inclure des colonnes optionnelles)
+ * @param {string} selectFallback - Colonnes de fallback (sans les colonnes optionnelles)
+ * @param {Function} queryBuilder - Fonction pour construire la requête (optionnel)
+ * @returns {Promise<{data: any, error: any}>} - Résultat de la requête Supabase
+ */
+export async function safeSupabaseSelect(supabase, table, selectWithOptional, selectFallback, queryBuilder = null) {
+  // Essayer d'abord avec toutes les colonnes (y compris optionnelles)
+  let query = supabase.from(table).select(selectWithOptional);
+  if (queryBuilder) {
+    query = queryBuilder(query);
+  }
+  const { data, error } = await query;
+  
+  // Si succès, retourner le résultat
+  if (!error) {
+    return { data, error: null };
+  }
+  
+  // Si erreur et qu'on a un fallback, essayer avec les colonnes de fallback
+  if (selectFallback && selectFallback !== selectWithOptional) {
+    let fallbackQuery = supabase.from(table).select(selectFallback);
+    if (queryBuilder) {
+      fallbackQuery = queryBuilder(fallbackQuery);
+    }
+    const { data: fallbackData, error: fallbackError } = await fallbackQuery;
+    return { data: fallbackData, error: fallbackError };
+  }
+  
+  // Sinon, retourner l'erreur originale
+  return { data, error };
 }
 
