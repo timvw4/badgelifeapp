@@ -33,15 +33,32 @@ body {
 
 /* Image de fond pour la page de connexion - prend toute la page */
 body.auth-page {
-  background-image: url('./icons/background.png') !important;
-  background-size: cover !important;
-  background-position: center center !important;
-  background-repeat: no-repeat !important;
-  background-attachment: fixed !important;
   background-color: var(--bg) !important;
   min-height: 100vh;
+  position: relative;
+}
+
+/* Image de fond via ::after pour meilleur contrôle sur Safari */
+body.auth-page::after {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100vw;
+  height: 100vh;
+  background-image: url('./icons/background.png');
+  background-size: cover;
+  background-position: center center;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+  z-index: -2;
+  pointer-events: none;
   /* Forcer le rendu sur Safari */
-  -webkit-background-size: cover !important;
+  -webkit-background-size: cover;
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
 }
 
 /* Overlay sombre pour améliorer la lisibilité du contenu */
@@ -54,8 +71,8 @@ body.auth-page::before {
   bottom: 0;
   width: 100vw;
   height: 100vh;
-  background: rgba(15, 23, 42, 0.6);
-  z-index: 0;
+  background: rgba(21, 34, 64, 0.598);
+  z-index: -1;
   pointer-events: none;
 }
 
@@ -63,6 +80,77 @@ body.auth-page::before {
 body.auth-page .page {
   position: relative;
   z-index: 1;
+}
+
+/* Conteneur pour le logo sur la page de connexion - fond transparent */
+body.auth-page .hero .logo-auth-wrapper {
+  display: inline-block;
+  position: relative;
+  /* Le conteneur s'adapte à la taille de l'image */
+  line-height: 0;
+  /* Fond transparent pour laisser l'image s'afficher avec son fond transparent */
+  background: transparent;
+  background-color: transparent;
+  /* S'assurer que le fond est visible */
+  overflow: visible;
+}
+
+/* Style simplifié pour le logo sur la page de connexion */
+body.auth-page .hero .logo {
+  /* Dimensions simples - l'image garde ses proportions naturelles */
+  width: auto !important;
+  height: auto !important;
+  max-width: 100% !important;
+  max-height: 500px !important;
+  /* Affichage simple */
+  display: block !important;
+  /* Pas de fond sur l'image elle-même - le fond est sur le conteneur */
+  background: none !important;
+  background-color: transparent !important;
+  border: none !important;
+  /* S'assurer qu'aucun autre style ne surcharge */
+  min-width: auto !important;
+  min-height: auto !important;
+  position: relative;
+  z-index: 1;
+}
+
+/* Responsive pour le logo sur la page de connexion */
+@media (max-width: 768px) {
+  body.auth-page .hero .logo {
+    max-height: 350px !important;
+  }
+}
+
+/* Texte animé "Ta vie en badge" sous le logo */
+body.auth-page .hero .tagline-animated {
+  margin-top: 16px;
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text);
+  text-align: center;
+  opacity: 0;
+  animation: fadeInUp 1s ease-out 0.5s forwards;
+}
+
+/* Animation pour le texte */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Responsive pour le texte animé */
+@media (max-width: 768px) {
+  body.auth-page .hero .tagline-animated {
+    font-size: 18px;
+    margin-top: 12px;
+  }
 }
 
 .page {
@@ -147,28 +235,43 @@ body.auth-page .page {
   flex-direction: column;
   align-items: center;
   gap: 8px;
+  /* Utiliser l'image de fond du body pour éviter le motif en damier */
   background: transparent;
-  /* S'assurer qu'il n'y a pas de motif en damier visible */
+  position: relative;
+  z-index: 2;
+  /* S'assurer que le fond est visible derrière le logo */
+  overflow: visible;
 }
 
-.hero .logo {
+/* Positionner le hero en haut de la page pour la page d'authentification */
+body.auth-page .hero {
+  margin-top: -100px;
+  margin-bottom: 0;
+  padding-top: 20px;
+}
+
+/* Style pour le logo dans hero - NE PAS appliquer sur la page de connexion */
+/* Utiliser :not() pour exclure la page de connexion */
+body:not(.auth-page) .hero .logo {
+  /* Forcer les dimensions automatiques pour surcharger le style général .logo */
   width: auto !important;
   height: auto !important;
+  min-width: auto !important;
+  min-height: auto !important;
   max-width: 100%;
   max-height: 300px;
+  /* Préserver les proportions de l'image */
   object-fit: contain;
-  background: none !important;
-  background-color: transparent !important;
+  aspect-ratio: auto;
   border: none !important;
   display: block;
   opacity: 1;
   mix-blend-mode: normal;
+  position: relative;
+  z-index: 3;
   /* Assurer que le fond transparent de l'image PNG est préservé */
   image-rendering: -webkit-optimize-contrast;
   image-rendering: crisp-edges;
-  /* Forcer le rendu de la transparence PNG */
-  -webkit-background-size: auto;
-  background-size: auto;
   /* Préfixes Safari pour forcer le rendu correct et éviter le motif en damier */
   -webkit-transform: translateZ(0);
   transform: translateZ(0);
@@ -176,6 +279,11 @@ body.auth-page .page {
   backface-visibility: hidden;
   /* Forcer l'accélération matérielle sur Safari */
   will-change: transform;
+  /* S'assurer que l'image est au-dessus de tout */
+  isolation: isolate;
+  /* Forcer le rendu correct de la transparence sur Safari */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 /* Responsive pour le hero */
@@ -222,8 +330,8 @@ body.auth-page .page {
 }
 
 .logo.small {
-  width: 42px;
-  height: 42px;
+  width: 96px;
+  height: 96px;
 }
 
 .avatar-preview {
@@ -343,10 +451,94 @@ p {
 }
 
 .profile-drawer-content {
-  padding: 20px;
+  padding: 24px 20px 80px 20px;
   flex: 1;
   overflow-y: auto;
   background: transparent;
+  /* Assure que le contenu peut être scrollé jusqu'en bas pour voir le bouton */
+}
+
+/* Styles pour le formulaire de profil */
+.profile-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.profile-form-section {
+  margin-bottom: 32px;
+  padding-bottom: 24px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.profile-form-section:last-of-type {
+  border-bottom: none;
+  margin-bottom: 0;
+  padding-bottom: 0;
+}
+
+.profile-section-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0 0 20px 0;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(6, 182, 212, 0.2);
+}
+
+.profile-form-section label {
+  display: block;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text);
+  margin-bottom: 8px;
+  margin-top: 16px;
+}
+
+.profile-form-section label:first-child {
+  margin-top: 0;
+}
+
+.profile-form-section small.muted {
+  display: block;
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 6px;
+  line-height: 1.4;
+}
+
+.readonly-input {
+  background: rgba(255, 255, 255, 0.03) !important;
+  color: var(--muted) !important;
+  cursor: not-allowed;
+  opacity: 0.8;
+}
+
+.readonly-input:focus {
+  outline: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+.profile-form-actions {
+  margin-top: 32px;
+  padding-top: 24px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.profile-form-actions .primary {
+  width: 100%;
+  margin-bottom: 12px;
+}
+
+.avatar-preview {
+  margin-top: 16px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 20px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
 }
 
 /* Infobulle pour le champ pseudo */
@@ -735,9 +927,105 @@ p {
   color: #22c55e;
 }
 
+/* Conteneur des boutons d'authentification */
+.auth-buttons-container {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 20px;
+  z-index: 10;
+}
+
+/* Boutons d'action d'authentification */
+.auth-action-btn {
+  width: 100%;
+  padding: 14px 20px;
+  border-radius: 50px;
+  border: none;
+  background: rgba(148, 163, 184, 0.2);
+  color: var(--text);
+  font-weight: 600;
+  font-size: 16px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.auth-action-btn:hover {
+  background: rgba(148, 163, 184, 0.3);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.auth-action-btn:active {
+  transform: translateY(0);
+}
+
+/* Card du formulaire d'authentification */
+#auth-form-card {
+  position: fixed;
+  bottom: 180px;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: 600px;
+  width: calc(100% - 40px);
+  z-index: 20;
+}
+
+.auth-form-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text);
+  font-size: 24px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  z-index: 1;
+}
+
+.auth-form-close:hover {
+  background: rgba(255, 255, 255, 0.2);
+  transform: scale(1.1);
+}
+
+#auth-form-card.hidden {
+  display: none;
+}
+
+#auth-form-card:not(.hidden) {
+  animation: slideUpFromBottom 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+@keyframes slideUpFromBottom {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(50px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
 .auth-form {
   display: grid;
   gap: 10px;
+}
+
+.auth-form.hidden {
+  display: none;
 }
 
 label {
@@ -813,6 +1101,197 @@ button {
 
 .hidden {
   display: none !important;
+}
+
+/* Loader de connexion */
+.login-loader {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100vw;
+  height: 100vh;
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.98), rgba(17, 24, 39, 0.95));
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.login-loader::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: radial-gradient(circle, rgba(6, 182, 212, 0.1) 0%, transparent 70%);
+  animation: loaderBgRotate 20s linear infinite;
+}
+
+@keyframes loaderBgRotate {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+.login-loader.visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.login-loader-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 28px;
+  transform: scale(0.85) translateY(10px);
+  opacity: 0;
+  transition: all 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+  position: relative;
+  z-index: 1;
+}
+
+.login-loader.visible .login-loader-content {
+  transform: scale(1) translateY(0);
+  opacity: 1;
+}
+
+.login-loader.zooming-out {
+  opacity: 0;
+  transition: opacity 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.login-loader.zooming-out .login-loader-content {
+  transform: scale(1.8) translateY(-20px);
+  opacity: 0;
+  transition: all 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.login-spinner {
+  width: 72px;
+  height: 72px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.login-spinner::before {
+  content: '';
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  border: 3px solid transparent;
+  border-top: 3px solid var(--accent);
+  border-right: 3px solid var(--accent-2);
+  border-radius: 50%;
+  animation: loginSpin 1.2s cubic-bezier(0.68, -0.55, 0.265, 1.55) infinite;
+  box-shadow: 0 0 20px rgba(6, 182, 212, 0.3);
+}
+
+.login-spinner::after {
+  content: '';
+  position: absolute;
+  width: 56px;
+  height: 56px;
+  border: 2px solid transparent;
+  border-bottom: 2px solid var(--accent-2);
+  border-left: 2px solid var(--accent);
+  border-radius: 50%;
+  animation: loginSpinReverse 0.9s cubic-bezier(0.68, -0.55, 0.265, 1.55) infinite;
+  opacity: 0.7;
+}
+
+@keyframes loginSpin {
+  0% {
+    transform: rotate(0deg) scale(1);
+  }
+  50% {
+    transform: rotate(180deg) scale(1.05);
+  }
+  100% {
+    transform: rotate(360deg) scale(1);
+  }
+}
+
+@keyframes loginSpinReverse {
+  0% {
+    transform: rotate(360deg) scale(1);
+  }
+  50% {
+    transform: rotate(180deg) scale(0.95);
+  }
+  100% {
+    transform: rotate(0deg) scale(1);
+  }
+}
+
+.login-loader-text {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0;
+  text-align: center;
+  letter-spacing: 0.5px;
+  position: relative;
+  padding: 0 20px;
+}
+
+.login-loader-text::after {
+  content: '';
+  position: absolute;
+  bottom: -8px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--accent), var(--accent-2), transparent);
+  animation: loginTextUnderline 2s ease-in-out infinite;
+}
+
+@keyframes loginTextUnderline {
+  0%, 100% {
+    width: 0;
+    opacity: 0;
+  }
+  50% {
+    width: 60px;
+    opacity: 1;
+  }
+}
+
+/* Animation de zoom pour l'app-view */
+#app-view.zooming-in {
+  animation: zoomInApp 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes zoomInApp {
+  0% {
+    opacity: 0;
+    transform: scale(0.92) translateY(20px);
+    filter: blur(4px);
+  }
+  60% {
+    opacity: 0.8;
+    transform: scale(1.02) translateY(-5px);
+    filter: blur(1px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+    filter: blur(0);
+  }
 }
 
 .message {
@@ -3808,6 +4287,9 @@ button {
   font-size: 20px;
   font-weight: 700;
   color: var(--accent);
+  display: inline-flex;
+  align-items: baseline;
+  flex-wrap: nowrap;
 }
 
 .profile-stat span .badge-total {
@@ -3815,6 +4297,15 @@ button {
   font-weight: 400;
   color: var(--muted);
   margin-left: 1px;
+}
+
+.profile-stat span .skill-pts {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--muted);
+  margin-left: 3px;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .profile-stat small {
@@ -4169,6 +4660,13 @@ button {
   border-radius: 50%;
   border: 2px solid var(--bg);
   z-index: 10;
+}
+
+/* Pastille sur l'icône de la barre de navigation */
+.bottom-nav-icon .notification-indicator {
+  top: 0;
+  right: 0;
+  border: 2px solid var(--bg);
 }
 
 .notification-indicator.hidden {

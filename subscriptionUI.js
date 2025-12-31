@@ -1,6 +1,7 @@
 // Module UI pour les abonnements
 // Gère le rendu et les interactions utilisateur pour les abonnements
 import * as Subscriptions from './subscriptions.js';
+import { createSubscriptionNotification } from './notifications.js';
 
 let supabaseClient = null;
 let currentUserId = null;
@@ -336,6 +337,16 @@ async function handleSubscribeClick(profileId, currentlySubscribed) {
   }
   
   if (result.success) {
+    // Créer une notification pour l'utilisateur qui reçoit l'abonnement (seulement si on s'abonne, pas si on se désabonne)
+    if (!currentlySubscribed) {
+      const notificationResult = await createSubscriptionNotification(supabaseClient, profileId, currentUserId);
+      if (notificationResult.success) {
+        console.log('✅ Notification d\'abonnement créée avec succès:', notificationResult.notificationId);
+      } else {
+        console.error('❌ Erreur lors de la création de la notification d\'abonnement:', notificationResult.error);
+      }
+    }
+    
     // Recharger les stats
     const followersCount = await Subscriptions.getFollowersCount(supabaseClient, profileId);
     const subscriptionsCount = await Subscriptions.getSubscriptionsCount(supabaseClient, profileId);

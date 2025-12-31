@@ -577,15 +577,22 @@ function buildPayloadFromForm() {
       (Number.isFinite(minSkills) && minSkills > 0) ||
       (minRank && minRank.trim().length > 0);
 
-    if (isGhost && hasAnyPrereq) {
+    if (isGhost) {
+      // Toujours marquer comme fantôme si isGhost est vrai
       obj.isGhost = true;
-      obj.requiredBadges = requiredBadges;
-      if (ghostDisplayText) obj.ghostDisplayText = ghostDisplayText;
-      if (prereqMode === 'any') obj.prereqMode = 'any';
-      if (Number.isFinite(minBadges) && minBadges > 0) obj.minBadges = minBadges;
-      if (Number.isFinite(minSkills) && minSkills > 0) obj.minSkills = minSkills;
-      if (minRank && minRank.trim().length > 0) obj.minRank = minRank.trim();
-      // Ajouter skillPoints pour tous les types de badges fantômes
+      
+      // Ajouter les prérequis si définis
+      if (hasAnyPrereq) {
+        if (requiredBadges.length > 0) obj.requiredBadges = requiredBadges;
+        if (ghostDisplayText) obj.ghostDisplayText = ghostDisplayText;
+        if (prereqMode === 'any') obj.prereqMode = 'any';
+        if (Number.isFinite(minBadges) && minBadges > 0) obj.minBadges = minBadges;
+        if (Number.isFinite(minSkills) && minSkills > 0) obj.minSkills = minSkills;
+        if (minRank && minRank.trim().length > 0) obj.minRank = minRank.trim();
+      }
+      
+      // Toujours ajouter skillPoints pour les badges fantômes s'il est défini
+      // (même s'il n'y a pas d'autres prérequis)
       if (ghostSkillPoints) {
         const points = parseInt(ghostSkillPoints, 10);
         if (!isNaN(points) && points > 0) {
@@ -603,7 +610,7 @@ function buildPayloadFromForm() {
 
   if (type === 'text') {
     if (isGhost && requiredBadges.length > 0) {
-      payload.answer = JSON.stringify({
+      const textPayload = {
         type: 'text',
         answer: els.answerText.value.trim(),
         isGhost: true,
@@ -612,7 +619,39 @@ function buildPayloadFromForm() {
         ...(displayPrefix ? { displayPrefix } : {}),
         ...(displaySuffix ? { displaySuffix } : {}),
         ...(blockedMessage ? { blockedMessage } : {}),
-      });
+      };
+      // Ajouter skillPoints pour les badges fantômes de type text
+      if (ghostSkillPoints) {
+        const points = parseInt(ghostSkillPoints, 10);
+        if (!isNaN(points) && points > 0) {
+          textPayload.skillPoints = points;
+        }
+      }
+      payload.answer = JSON.stringify(textPayload);
+    } else if (isGhost) {
+      // Badge fantôme sans requiredBadges mais avec d'autres prérequis (minBadges, minSkills, minRank)
+      const textPayload = {
+        type: 'text',
+        answer: els.answerText.value.trim(),
+        isGhost: true,
+        ...(ghostDisplayText ? { ghostDisplayText } : {}),
+        ...(displayPrefix ? { displayPrefix } : {}),
+        ...(displaySuffix ? { displaySuffix } : {}),
+        ...(blockedMessage ? { blockedMessage } : {}),
+      };
+      // Ajouter les prérequis si définis
+      if (Number.isFinite(minBadges) && minBadges > 0) textPayload.minBadges = minBadges;
+      if (Number.isFinite(minSkills) && minSkills > 0) textPayload.minSkills = minSkills;
+      if (minRank && minRank.trim().length > 0) textPayload.minRank = minRank.trim();
+      if (prereqMode === 'any') textPayload.prereqMode = 'any';
+      // Ajouter skillPoints pour les badges fantômes de type text
+      if (ghostSkillPoints) {
+        const points = parseInt(ghostSkillPoints, 10);
+        if (!isNaN(points) && points > 0) {
+          textPayload.skillPoints = points;
+        }
+      }
+      payload.answer = JSON.stringify(textPayload);
     } else if (blockedMessage) {
       // Badge texte normal avec message personnalisé
       payload.answer = JSON.stringify({

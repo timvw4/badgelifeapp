@@ -1,0 +1,28 @@
+{
+  "name": "badgelife",
+  "version": "1.0.0",
+  "description": "BadgeLife - Ta vie en badge",
+  "main": "index.html",
+  "scripts": {
+    "build": "echo 'Build completed'",
+    "serve": "npx http-server . -p 8080",
+    "sync:ios": "npx cap sync ios",
+    "open:ios": "npx cap open ios",
+    "run:ios": "npx cap run ios"
+  },
+  "keywords": [
+    "badges",
+    "gamification",
+    "mobile"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@capacitor/cli": "^8.0.0",
+    "@capacitor/core": "^8.0.0",
+    "@capacitor/ios": "^8.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3"
+  }
+}

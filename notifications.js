@@ -77,6 +77,8 @@ async function checkDuplicateNotification(supabase, userId, type, data) {
       if (data.suspicious_user_id) query = query.eq('suspicious_user_id', data.suspicious_user_id);
     } else if (type === 'suspicion_blocked') {
       if (data.badge_id) query = query.eq('badge_id', data.badge_id);
+    } else if (type === 'subscription') {
+      if (data.follower_id) query = query.eq('follower_id', data.follower_id);
     }
     
     const { count } = await query;
@@ -121,11 +123,45 @@ export async function createDailyTokensNotification(supabase, userId, dayStr, am
 /**
  * Créer une notification de bonus dimanche
  */
-export async function createSundayBonusNotification(supabase, userId, dayStr) {
+export async function createSundayBonusNotification(supabase, userId, dayStr, amount = 3) {
   return await createNotification(supabase, userId, 'sunday_bonus', {
     day_str: dayStr,
-    token_amount: 3
+    token_amount: amount
   }, true);
+}
+
+/**
+ * Créer une notification d'abonnement
+ * Utilise une fonction SQL avec SECURITY DEFINER pour contourner RLS
+ * @param {Object} supabase - Client Supabase
+ * @param {string} followingId - ID de l'utilisateur qui reçoit la notification (celui qui est suivi)
+ * @param {string} followerId - ID de l'utilisateur qui s'abonne (celui qui suit)
+ * @returns {Promise<{success: boolean, error?: string, notificationId?: string}>}
+ */
+export async function createSubscriptionNotification(supabase, followingId, followerId) {
+  console.log('🔔 Création d\'une notification d\'abonnement:', {
+    followingId,
+    followerId
+  });
+  
+  try {
+    // Utiliser la fonction SQL qui contourne RLS de manière sécurisée
+    const { data, error } = await supabase.rpc('create_subscription_notification', {
+      p_following_id: followingId,
+      p_follower_id: followerId
+    });
+    
+    if (error) {
+      console.error('❌ Erreur lors de la création de la notification d\'abonnement:', error);
+      return { success: false, error: error.message };
+    }
+    
+    console.log('✅ Notification d\'abonnement créée:', data);
+    return { success: true, notificationId: data };
+  } catch (err) {
+    console.error('❌ Exception lors de la création de la notification d\'abonnement:', err);
+    return { success: false, error: err.message };
+  }
 }
 
 // ============================================
@@ -151,6 +187,7 @@ export async function getNotifications(supabase, userId) {
         suspicion_count,
         day_str,
         token_amount,
+        follower_id,
         badges:badge_id (
           name
         ),
@@ -158,6 +195,9 @@ export async function getNotifications(supabase, userId) {
           username
         ),
         owner_profiles:badge_owner_id (
+          username
+        ),
+        follower_profiles:follower_id (
           username
         )
       `)
@@ -186,7 +226,9 @@ export async function getNotifications(supabase, userId) {
       owner_username: notif.owner_profiles?.username || null,
       suspicion_count: notif.suspicion_count,
       day_str: notif.day_str,
-      token_amount: notif.token_amount
+      token_amount: notif.token_amount,
+      follower_id: notif.follower_id,
+      follower_username: notif.follower_profiles?.username || null
     }));
   } catch (err) {
     console.error('❌ Erreur lors de la récupération des notifications:', err);

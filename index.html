@@ -14,19 +14,26 @@
   <link rel="apple-touch-icon" href="/icons/logobl.png">
 </head>
 <body>
+  <!-- Loader de connexion -->
+  <div id="login-loader" class="login-loader hidden">
+    <div class="login-loader-content">
+      <div class="login-spinner"></div>
+      <p class="login-loader-text">Connexion en cours...</p>
+    </div>
+  </div>
+  
   <div class="page">
     <section id="auth-view" class="panel">
       <div class="hero">
-        <img src="./icons/logotexte.png" alt="BadgeLife" class="logo">
-      </div>
-      <div class="card">
-        <div class="tabs small">
-          <button class="tab-button active" data-auth-tab="login">Connexion</button>
-          <button class="tab-button" data-auth-tab="signup">Créer un compte</button>
+        <div class="logo-auth-wrapper">
+          <img src="./icons/logotexte.png" alt="BadgeLife" class="logo">
         </div>
-        <form id="login-form" class="auth-form" autocomplete="on">
-          <label for="login-username">Pseudo</label>
-          <input id="login-username" type="text" required placeholder="Ex: LunaCoder">
+      </div>
+      <div id="auth-form-card" class="card hidden">
+        <button id="auth-form-close" class="auth-form-close" aria-label="Fermer">×</button>
+        <form id="login-form" class="auth-form hidden" autocomplete="on">
+          <label for="login-username">Pseudo ou Email</label>
+          <input id="login-username" type="text" required placeholder="Ex: LunaCoder ou email@exemple.com">
           <label for="login-password">Mot de passe</label>
           <input id="login-password" type="password" required placeholder="••••••••">
           <button type="submit" class="primary">Se connecter</button>
@@ -34,11 +41,17 @@
         <form id="signup-form" class="auth-form hidden" autocomplete="on">
           <label for="signup-username">Pseudo (affiché publiquement)</label>
           <input id="signup-username" type="text" minlength="3" required placeholder="Ex: LunaCoder">
+          <label for="signup-email">Email</label>
+          <input id="signup-email" type="email" required placeholder="email@exemple.com">
           <label for="signup-password">Mot de passe</label>
           <input id="signup-password" type="password" minlength="6" required placeholder="••••••••">
           <button type="submit" class="primary">Créer mon compte</button>
         </form>
         <p id="auth-message" class="message"></p>
+      </div>
+      <div class="auth-buttons-container">
+        <button id="auth-login-btn" class="auth-action-btn" data-auth-tab="login">Connecte-toi</button>
+        <button id="auth-signup-btn" class="auth-action-btn" data-auth-tab="signup">Inscris-toi</button>
       </div>
     </section>
 
@@ -77,28 +90,52 @@
           <button id="profile-close-btn" class="ghost icon-btn" aria-label="Fermer">✕</button>
         </div>
         <div class="profile-drawer-content">
-          <form id="profile-form" class="auth-form">
-            <label for="profile-name">Ton pseudo</label>
-            <div style="position: relative;">
-              <input id="profile-name" type="text" readonly>
-              <div id="profile-name-tooltip" class="profile-name-tooltip hidden">Il n'est pas possible de changer ton nom pseudo.</div>
+          <form id="profile-form" class="profile-form">
+            <div class="profile-form-section">
+              <h4 class="profile-section-title">Informations personnelles</h4>
+              
+              <label for="profile-name">Pseudo</label>
+              <div style="position: relative;">
+                <input id="profile-name" type="text" readonly class="readonly-input">
+                <div id="profile-name-tooltip" class="profile-name-tooltip hidden">Il n'est pas possible de changer ton pseudo.</div>
+              </div>
+
+              <label for="profile-email">Email</label>
+              <input id="profile-email" type="email" readonly class="readonly-input">
+              <small class="muted">Ton email est utilisé pour la connexion et ne peut pas être modifié ici.</small>
             </div>
 
-            <label for="profile-password">Nouveau mot de passe</label>
-            <input id="profile-password" type="password" minlength="6" placeholder="Laisse vide pour ne pas changer">
-
-            <label for="profile-avatar">Photo de profil</label>
-            <input id="profile-avatar" type="file" accept="image/*">
-            <small class="muted">Formats image, taille conseillée &lt; 4 Mo.</small>
-            <div class="avatar-preview">
-              <img id="avatar-preview-img" src="./icons/logobl.png" alt="Aperçu" class="logo small">
+            <div class="profile-form-section">
+              <h4 class="profile-section-title">Sécurité</h4>
+              
+              <label for="profile-password">Nouveau mot de passe</label>
+              <input id="profile-password" type="password" minlength="6" placeholder="Laisse vide pour ne pas changer">
+              <small class="muted">Minimum 6 caractères. Laisse vide si tu ne souhaites pas le modifier.</small>
             </div>
 
-            <label>Visibilité du profil</label>
-            <button id="profile-privacy-btn" type="button" class="ghost full-width" style="margin-bottom: 16px;">Profil: Public</button>
+            <div class="profile-form-section">
+              <h4 class="profile-section-title">Photo de profil</h4>
+              
+              <label for="profile-avatar">Télécharger une nouvelle photo</label>
+              <input id="profile-avatar" type="file" accept="image/*">
+              <small class="muted">Formats supportés : JPG, PNG, GIF. Taille recommandée : moins de 4 Mo.</small>
+              <div class="avatar-preview">
+                <img id="avatar-preview-img" src="./icons/logobl.png" alt="Aperçu" class="logo small">
+              </div>
+            </div>
 
-            <button type="submit" class="primary">Enregistrer</button>
-            <p id="profile-message" class="message"></p>
+            <div class="profile-form-section">
+              <h4 class="profile-section-title">Paramètres de confidentialité</h4>
+              
+              <label>Visibilité du profil</label>
+              <button id="profile-privacy-btn" type="button" class="ghost full-width">Profil: Public</button>
+              <small class="muted">Contrôle qui peut voir ton profil et tes badges.</small>
+            </div>
+
+            <div class="profile-form-actions">
+              <button type="submit" class="primary">Enregistrer les modifications</button>
+              <p id="profile-message" class="message"></p>
+            </div>
           </form>
         </div>
       </div>
@@ -156,11 +193,11 @@
         <div class="profile-badge-skill-stats">
           <div class="profile-stat">
             <span id="profile-section-badge-count">0<span class="badge-total">/ 0</span></span>
-            <small>badges obtenus</small>
+            <small>badges</small>
           </div>
           <div class="profile-stat">
-            <span id="profile-section-skill-count">0</span>
-            <small> points de skills</small>
+            <span id="profile-section-skill-count">0<span class="skill-pts">pts</span></span>
+            <small>skills</small>
           </div>
           <div class="profile-stat">
             <span id="profile-section-completion">0%</span>
@@ -406,8 +443,9 @@
       <!-- Barre de navigation en bas (app mobile) -->
       <nav id="bottom-nav" class="bottom-nav">
         <button class="bottom-nav-item active" data-tab="my-badges" aria-label="Mon profil">
-          <span class="bottom-nav-icon">
+          <span class="bottom-nav-icon" style="position: relative;">
             <img src="./icons/profile.png" alt="Profil" width="24" height="24">
+            <span id="profile-notification-indicator" class="notification-indicator hidden"></span>
           </span>
           <span class="bottom-nav-label">Mon profil</span>
         </button>

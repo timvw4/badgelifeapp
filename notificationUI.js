@@ -52,16 +52,31 @@ export function initNotificationUI(supabase, userId) {
 
 /**
  * Affiche la pastille de notification selon le nombre de notifications non lues
+ * @param {number} count - Nombre de notifications non lues
+ * @param {boolean} hideProfileBadge - Si true, masque seulement la pastille de la barre de navigation
  */
-export function renderNotificationBadge(count) {
+export function renderNotificationBadge(count, hideProfileBadge = false) {
   const indicator = document.getElementById('notification-indicator');
+  const profileIndicator = document.getElementById('profile-notification-indicator');
   
-  if (!indicator) return;
+  // Mettre à jour la pastille du bouton cloche (toujours basée sur le nombre réel)
+  if (indicator) {
+    if (count > 0) {
+      indicator.classList.remove('hidden');
+    } else {
+      indicator.classList.add('hidden');
+    }
+  }
   
-  if (count > 0) {
-    indicator.classList.remove('hidden');
-  } else {
-    indicator.classList.add('hidden');
+  // Mettre à jour la pastille du bouton "Mon profil" dans la barre de navigation
+  if (profileIndicator) {
+    if (hideProfileBadge || count === 0) {
+      // Masquer la pastille de la barre de navigation si demandé ou s'il n'y a plus de notifications
+      profileIndicator.classList.add('hidden');
+    } else {
+      // Afficher seulement si on ne demande pas de la masquer et qu'il y a des notifications
+      profileIndicator.classList.remove('hidden');
+    }
   }
 }
 
@@ -124,6 +139,9 @@ function formatNotificationText(notification) {
     case 'sunday_bonus':
       return `🪙 Tu as obtenu ${notification.token_amount || 3} jetons bonus pour ta semaine complète !`;
     
+    case 'subscription':
+      return `${notification.follower_username || 'Un utilisateur'} s'est abonné à toi.`;
+    
     default:
       return 'Nouvelle notification';
   }
@@ -184,6 +202,13 @@ async function handleNotificationClick(notification) {
     case 'daily_tokens':
     case 'sunday_bonus':
       // Ne rien faire
+      break;
+    
+    case 'subscription':
+      // Ouvrir le profil de l'utilisateur qui s'est abonné
+      if (notification.follower_id) {
+        await openUserProfile(notification.follower_id);
+      }
       break;
   }
   
@@ -262,6 +287,16 @@ async function markAllNotificationsAsReadInternal() {
 }
 
 /**
+ * Obtient le nombre de notifications non lues
+ * @returns {Promise<number>}
+ */
+export async function getUnreadNotificationsCount() {
+  if (!supabaseClient || !currentUserId) return 0;
+  
+  return await Notifications.getUnreadNotificationsCount(supabaseClient, currentUserId);
+}
+
+/**
  * Rafraîchit le badge de notification
  */
 export async function refreshNotificationBadge() {
@@ -297,5 +332,6 @@ export const NotificationUI = {
   renderNotificationBadge,
   showNotificationsModal,
   refreshNotificationBadge,
-  setupRealtimeNotificationListener
+  setupRealtimeNotificationListener,
+  getUnreadNotificationsCount
 };

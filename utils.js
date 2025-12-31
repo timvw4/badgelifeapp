@@ -16,6 +16,18 @@ export function pseudoToEmail(pseudo) {
 }
 
 /**
+ * Valide si une chaîne est un email valide
+ * @param {string} email - L'email à valider
+ * @returns {boolean} - true si l'email est valide
+ */
+export function isValidEmail(email) {
+  if (!email || typeof email !== 'string') return false;
+  // Expression régulière simple pour valider un email
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(email.trim());
+}
+
+/**
  * Vérifie si un utilisateur est un administrateur
  * @param {Object} user - L'objet utilisateur de Supabase
  * @returns {boolean} - true si l'utilisateur est admin

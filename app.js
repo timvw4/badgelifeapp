@@ -3,15 +3,20 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 import { isMysteryLevel } from './badgeCalculations.js';
-import { parseConfig, safeSupabaseSelect, pseudoToEmail, isAdminUser } from './utils.js';
+import { parseConfig, safeSupabaseSelect, pseudoToEmail, isAdminUser, isValidEmail } from './utils.js';
 import * as Subscriptions from './subscriptions.js';
 import * as SubscriptionUI from './subscriptionUI.js';
 import * as NotificationUI from './notificationUI.js';
-import { createDailyTokensNotification, createSundayBonusNotification } from './notifications.js';
+import { createDailyTokensNotification, createSundayBonusNotification, markAllNotificationsAsRead } from './notifications.js';
 import * as BadgeSuspicions from './badgeSuspicions.js';
 
 // Nom du bucket d'avatars dans Supabase Storage
 const AVATAR_BUCKET = 'avatars';
+
+// Configuration des jetons
+const DAILY_TOKENS_AMOUNT = 3; // Nombre de jetons reçus par jour de connexion
+const SUNDAY_BONUS_AMOUNT = 5; // Nombre de jetons bonus reçus le dimanche si tous les jours de la semaine sont connectés
+const SIGNUP_TOKENS_AMOUNT = 3; // Nombre de jetons donnés aux nouveaux utilisateurs lors de l'inscription
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
@@ -342,6 +347,7 @@ function openProfileDrawer() {
   els.profileOverlay.classList.remove('hidden');
   if (state.profile) {
     if (els.profileName) els.profileName.value = state.profile.username || '';
+    if (els.profileEmail) els.profileEmail.value = state.profile.email || '';
     updateAvatar(state.profile.avatar_url);
   }
   if (els.profilePassword) els.profilePassword.value = '';
@@ -396,7 +402,10 @@ document.addEventListener('DOMContentLoaded', () => {
 function cacheElements() {
   els.authView = document.getElementById('auth-view');
   els.appView = document.getElementById('app-view');
+  els.loginLoader = document.getElementById('login-loader');
   els.authMessage = document.getElementById('auth-message');
+  els.authFormCard = document.getElementById('auth-form-card');
+  els.authFormClose = document.getElementById('auth-form-close');
   els.loginForm = document.getElementById('login-form');
   els.signupForm = document.getElementById('signup-form');
   els.profileUsername = document.getElementById('profile-username');
@@ -419,6 +428,7 @@ function cacheElements() {
   els.profileCloseBtn = document.getElementById('profile-close-btn');
   els.profileOverlay = document.getElementById('profile-overlay');
   els.profileName = document.getElementById('profile-name');
+  els.profileEmail = document.getElementById('profile-email');
   els.profilePassword = document.getElementById('profile-password');
   els.profileAvatar = document.getElementById('profile-avatar');
   els.profileMessage = document.getElementById('profile-message');
@@ -500,7 +510,7 @@ const RANKS = [
   { min: 0, name: 'Minimaliste', color: '#9ca3af' },    // Gris neutre
   { min: 15, name: 'Simple', color: '#a8826d' },        // Brun clair
   { min: 30, name: 'Normale', color: '#6366f1' },       // Indigo
-  { min: 60, name: 'Originale', color: '#14b8a6' },     // Teal
+  { min: 60, name: 'Aisée', color: '#14b8a6' },     // Teal
   { min: 100, name: 'Incroyable', color: '#f59e0b' },   // Ambre
   { min: 130, name: 'Rêve', color: null, isGold: true }, // Or (texture)
 ];
@@ -627,34 +637,75 @@ function attachCalendarListeners() {
 function attachAuthTabListeners() {
   document.querySelectorAll('[data-auth-tab]').forEach(btn => {
     btn.addEventListener('click', () => {
-      document.querySelectorAll('[data-auth-tab]').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
       const target = btn.dataset.authTab;
-      if (target === 'login') {
-        els.loginForm.classList.remove('hidden');
-        els.signupForm.classList.add('hidden');
-      } else {
-        els.signupForm.classList.remove('hidden');
+      
+      // Afficher la card du formulaire si elle est cachée
+      if (els.authFormCard && els.authFormCard.classList.contains('hidden')) {
+        els.authFormCard.classList.remove('hidden');
+      }
+      
+      // Cacher le formulaire actuellement visible
+      if (!els.loginForm.classList.contains('hidden')) {
         els.loginForm.classList.add('hidden');
       }
+      if (!els.signupForm.classList.contains('hidden')) {
+        els.signupForm.classList.add('hidden');
+      }
+      
+      // Afficher le formulaire correspondant avec animation
+      setTimeout(() => {
+        if (target === 'login') {
+          els.loginForm.classList.remove('hidden');
+        } else {
+          els.signupForm.classList.remove('hidden');
+        }
+      }, 50);
+      
       setMessage('');
     });
   });
+
+  // Bouton pour fermer le formulaire
+  if (els.authFormClose) {
+    els.authFormClose.addEventListener('click', () => {
+      if (els.authFormCard) {
+        els.authFormCard.classList.add('hidden');
+      }
+      if (els.loginForm) els.loginForm.classList.add('hidden');
+      if (els.signupForm) els.signupForm.classList.add('hidden');
+      setMessage('');
+    });
+  }
 }
 
 function attachFormListeners() {
   els.loginForm.addEventListener('submit', async (e) => {
     e.preventDefault();
-    const username = document.getElementById('login-username').value.trim();
+    const usernameOrEmail = document.getElementById('login-username').value.trim();
     const password = document.getElementById('login-password').value.trim();
-    if (!username) return setMessage('Entre ton pseudo.', true);
+    if (!usernameOrEmail) return setMessage('Entre ton pseudo ou ton email.', true);
     setMessage('Connexion en cours...');
-    const email = pseudoToEmail(username); // alias factice mais valide
+    
+    // Afficher le loader
+    showLoginLoader();
+    
+    // Détecter si c'est un email ou un pseudo
+    let email;
+    if (isValidEmail(usernameOrEmail)) {
+      // C'est un email, l'utiliser directement
+      email = usernameOrEmail;
+    } else {
+      // C'est un pseudo, utiliser le système de compatibilité
+      email = pseudoToEmail(usernameOrEmail);
+    }
+    
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) {
-      // Message plus clair : pas de connexion si le compte n’existe pas.
+      // Cacher le loader en cas d'erreur
+      hideLoginLoader();
+      // Message plus clair : pas de connexion si le compte n'existe pas.
       if (error.message?.toLowerCase().includes('invalid login') || error.message?.toLowerCase().includes('invalid')) {
-        return setMessage('Compte introuvable ou mot de passe incorrect. Crée un compte si c’est ta première fois.', true);
+        return setMessage('Compte introuvable ou mot de passe incorrect. Crée un compte si c\'est ta première fois.', true);
       }
       return setMessage(error.message, true);
     }
@@ -662,19 +713,33 @@ function attachFormListeners() {
     state.user = data.user;
     toggleAdminLink(isAdminUser(state.user));
     setMessage(''); // Effacer le message de connexion
+    
+    // Mettre à jour le texte du loader
+    if (els.loginLoader) {
+      const loaderText = els.loginLoader.querySelector('.login-loader-text');
+      if (loaderText) loaderText.textContent = 'Chargement de ton profil...';
+    }
+    
     await loadAppData();
     setupRealtimeSubscription(); // Démarrer l'écoute Realtime après la connexion
+    
+    // Animation de transition avec zoom/fade
+    await animateLoginTransition();
   });
 
   els.signupForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     const username = document.getElementById('signup-username').value.trim();
+    const emailInput = document.getElementById('signup-email').value.trim();
     const password = document.getElementById('signup-password').value.trim();
+    
     if (username.length < 3) return setMessage('Choisis un pseudo de 3 caractères minimum.', true);
-    const email = pseudoToEmail(username); // alias factice mais valide
+    if (!emailInput) return setMessage('Entre ton email.', true);
+    if (!isValidEmail(emailInput)) return setMessage('Email invalide.', true);
+    
     setMessage('Création du compte...');
 
-    // Vérifie qu’aucun compte n’utilise déjà ce pseudo (empêche doublon pseudo+mot de passe)
+    // Vérifie qu'aucun compte n'utilise déjà ce pseudo
     const { data: existingProfiles, error: profileCheckError } = await supabase
       .from('profiles')
       .select('id')
@@ -686,22 +751,32 @@ function attachFormListeners() {
       return setMessage('Ce pseudo est déjà utilisé. Choisis-en un autre.', true);
     }
 
-    const { data, error } = await supabase.auth.signUp({ email, password });
-    if (error) return setMessage(error.message, true);
+    // Créer le compte avec l'email fourni
+    const { data, error } = await supabase.auth.signUp({ email: emailInput, password });
+    if (error) {
+      // Vérifier si l'email est déjà utilisé
+      if (error.message?.toLowerCase().includes('already registered') || error.message?.toLowerCase().includes('already exists')) {
+        return setMessage('Cet email est déjà utilisé. Connecte-toi ou utilise un autre email.', true);
+      }
+      return setMessage(error.message, true);
+    }
+    
     const userId = data.user?.id;
     if (userId) {
-      // Donner 3 jetons aux nouveaux utilisateurs (heure de Paris)
+      // Donner des jetons aux nouveaux utilisateurs (heure de Paris)
       const today = getDateInParis();
       const currentWeekStart = getWeekStartDate(today);
       const currentWeekStartStr = formatDateYYYYMMDD(currentWeekStart);
       
+      // Créer le profil avec l'email
       await supabase.from('profiles').upsert({ 
         id: userId, 
         username, 
+        email: emailInput,
         badge_count: 0, 
         skill_points: 0, 
         rank: 'Minimaliste',
-        tokens: 3,
+        tokens: SIGNUP_TOKENS_AMOUNT,
         last_token_date: null,
         connection_days: [],
         claimed_daily_tokens: [],
@@ -717,7 +792,7 @@ function attachFormListeners() {
     await loadAppData();
     setupRealtimeSubscription(); // Démarrer l'écoute Realtime après l'inscription
     
-    // Afficher l'infobulle pour les 3 jetons d'inscription
+    // Afficher l'infobulle pour les jetons d'inscription
     showSignupTokensNotification();
   });
 
@@ -746,11 +821,22 @@ function attachNavListeners() {
   
   // Nouveaux boutons de la barre de navigation en bas
   els.bottomNavItems.forEach(btn => {
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', async () => {
       els.bottomNavItems.forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       const tab = btn.dataset.tab;
       showTab(tab);
+      
+      // Si on clique sur "Mon profil", masquer seulement la pastille de la barre de navigation
+      // La pastille du bouton cloche reste visible jusqu'à ce que l'utilisateur ouvre et ferme l'onglet
+      if (tab === 'my-badges' && state.user) {
+        try {
+          const count = await NotificationUI.getUnreadNotificationsCount();
+          NotificationUI.renderNotificationBadge(count, true); // Masquer seulement la pastille de la barre
+        } catch (e) {
+          console.error('Erreur lors de la mise à jour de la pastille:', e);
+        }
+      }
     });
   });
 }
@@ -1244,7 +1330,7 @@ async function fetchProfile() {
   const { data, error } = await safeSupabaseSelect(
     supabase,
     'profiles',
-    'username, badge_count, avatar_url, skill_points, rank, is_private, tokens, last_token_date, connection_days, week_start_date, week_bonus_available, week_bonus_claimed, claimed_daily_tokens',
+    'username, badge_count, avatar_url, skill_points, rank, is_private, tokens, last_token_date, connection_days, week_start_date, week_bonus_available, week_bonus_claimed, claimed_daily_tokens, email',
     'username, badge_count, avatar_url, skill_points, rank',
     (query) => query.eq('id', state.user.id).single()
   );
@@ -1259,13 +1345,13 @@ async function fetchProfile() {
     const currentWeekStart = getWeekStartDate(today);
     const currentWeekStartStr = formatDateYYYYMMDD(currentWeekStart);
     
-    const insertData = { id: state.user.id, username: 'Invité', badge_count: 0, avatar_url: null, skill_points: 0, rank: 'Minimaliste', tokens: 3 };
+    const insertData = { id: state.user.id, username: 'Invité', badge_count: 0, avatar_url: null, skill_points: 0, rank: 'Minimaliste', tokens: SIGNUP_TOKENS_AMOUNT };
     try {
       await supabase.from('profiles').insert({ ...insertData, is_private: false });
-      state.profile = { ...insertData, is_private: false, tokens: 3, last_token_date: null, connection_days: [], claimed_daily_tokens: [], week_start_date: currentWeekStartStr, week_bonus_available: false, week_bonus_claimed: false };
+      state.profile = { ...insertData, is_private: false, tokens: SIGNUP_TOKENS_AMOUNT, last_token_date: null, connection_days: [], claimed_daily_tokens: [], week_start_date: currentWeekStartStr, week_bonus_available: false, week_bonus_claimed: false };
     } catch (e) {
       await supabase.from('profiles').insert(insertData);
-      state.profile = { ...insertData, is_private: false, tokens: 3, last_token_date: null, connection_days: [], claimed_daily_tokens: [], week_start_date: currentWeekStartStr, week_bonus_available: false, week_bonus_claimed: false };
+      state.profile = { ...insertData, is_private: false, tokens: SIGNUP_TOKENS_AMOUNT, last_token_date: null, connection_days: [], claimed_daily_tokens: [], week_start_date: currentWeekStartStr, week_bonus_available: false, week_bonus_claimed: false };
     }
   } else {
     // DEBUG : Afficher les données brutes reçues de Supabase
@@ -1280,7 +1366,7 @@ async function fetchProfile() {
     state.profile = { 
       ...data, 
       is_private: data.is_private ?? false,
-      tokens: data.tokens ?? 3,
+      tokens: data.tokens ?? SIGNUP_TOKENS_AMOUNT,
       last_token_date: data.last_token_date || null,
       connection_days: data.connection_days || [],
       claimed_daily_tokens: data.claimed_daily_tokens || [],
@@ -1327,7 +1413,7 @@ async function checkAndGrantTokens() {
 }
 
 // Affiche une notification quand des jetons sont attribués
-function showTokenRewardNotification(amount = 2, type = 'daily') {
+function showTokenRewardNotification(amount = DAILY_TOKENS_AMOUNT, type = 'daily') {
   // Créer une infobulle temporaire
   const notification = document.createElement('div');
   notification.className = 'token-reward-notification';
@@ -1505,7 +1591,7 @@ function scrollToBadgeInProfile(badgeId) {
   }, 100);
 }
 
-// Affiche une notification pour les 3 jetons d'inscription
+// Affiche une notification pour les jetons d'inscription
 function showSignupTokensNotification() {
   // Créer une infobulle temporaire
   const notification = document.createElement('div');
@@ -1513,7 +1599,7 @@ function showSignupTokensNotification() {
   notification.innerHTML = `
     <div class="token-reward-content">
       <span class="token-emoji">🪙</span>
-      <span>Bienvenue ! Tu as reçu 3 jetons pour t'être inscrit !</span>
+      <span>Bienvenue ! Tu as reçu ${SIGNUP_TOKENS_AMOUNT} jeton${SIGNUP_TOKENS_AMOUNT > 1 ? 's' : ''} pour t'être inscrit !</span>
     </div>
   `;
   document.body.appendChild(notification);
@@ -1936,9 +2022,21 @@ function checkGhostBadgeConditionsForUser(badge, userBadgeIds, userSkillPoints) 
   // 4) Rang minimum
   const minRank = (config.minRank || '').toString().trim();
   if (minRank) {
-    const order = ['Minimaliste', 'Simple', 'Normale', 'Originale', 'Incroyable', 'Rêve'];
+    // Utiliser l'ordre des rangs depuis la constante RANKS pour garantir la cohérence
+    const rankOrder = RANKS.map(r => r.name);
     const currentRank = getRankMeta(userSkillPoints || 0).name;
-    checks.push(order.indexOf(currentRank) >= order.indexOf(minRank));
+    const currentRankIndex = rankOrder.indexOf(currentRank);
+    const minRankIndex = rankOrder.indexOf(minRank);
+    
+    // Vérifier que les deux rangs existent dans la liste
+    if (currentRankIndex === -1 || minRankIndex === -1) {
+      console.warn(`Rang non trouvé: currentRank=${currentRank}, minRank=${minRank}`);
+      // Si le rang n'est pas trouvé, on considère que la condition n'est pas remplie
+      checks.push(false);
+    } else {
+      // Le rang actuel doit être supérieur ou égal au rang minimum requis
+      checks.push(currentRankIndex >= minRankIndex);
+    }
   }
 
   // Sécurité: aucun prérequis défini => jamais débloqué
@@ -3945,11 +4043,12 @@ function renderAllBadgesInProfile() {
       card.dataset.badgeId = badge.id;
       
       // Déterminer l'emoji et le nom à afficher
-      let safeEmoji, safeTitle;
+      let safeEmoji, safeTitle, isMysteryBadge = false;
       if (isNotAnswered) {
-        // Badge jamais répondu : afficher "?????"
-        safeEmoji = '?????';
+        // Badge jamais répondu : afficher "?" en gris pour l'emoji et "?????" pour le nom
+        safeEmoji = '?';
         safeTitle = '?????';
+        isMysteryBadge = true;
       } else {
         // Badge répondu ou débloqué : afficher normalement
         safeEmoji = getBadgeEmoji(badge);
@@ -3969,7 +4068,7 @@ function renderAllBadgesInProfile() {
       // Déterminer le texte à afficher dans les détails
       let displayText = '';
       if (isNotAnswered) {
-        displayText = 'Badge jamais découvert';
+        displayText = 'Badge non découvert';
       } else if (isAnsweredButLocked) {
         // Afficher la réponse si répondu mais non débloqué
         const formattedAnswer = userAnswer ? formatUserAnswer(badge, userAnswer) : null;
@@ -3989,7 +4088,7 @@ function renderAllBadgesInProfile() {
           <span class="tag ${statusClass}">${statusLabel}</span>${suspicionTag}
         </div>` : ''}
         <div class="badge-compact">
-          <div class="badge-emoji">${safeEmoji}</div>
+          <div class="badge-emoji" ${isMysteryBadge ? 'style="color: #9ca3af;"' : ''}>${safeEmoji}</div>
           <div class="badge-title ${isExpert && unlocked ? 'expert-badge-title' : ''}">${safeTitle}</div>
         </div>
         <div class="all-badge-details hidden">
@@ -5242,6 +5341,12 @@ function updateAvatar(url, targetElement = null) {
     if (els.avatarPreviewImg) {
       els.avatarPreviewImg.src = finalUrl;
     }
+    // Mise à jour de l'image dans la section profil principale pour un changement en temps réel
+    if (els.profileSectionAvatar) {
+      els.profileSectionAvatar.src = finalUrl;
+      els.profileSectionAvatar.style.objectFit = 'cover';
+      els.profileSectionAvatar.style.borderRadius = '50%';
+    }
   }
 }
 
@@ -5754,6 +5859,12 @@ function toggleViews(authenticated) {
     els.authView.classList.remove('hidden');
     els.appView.classList.add('hidden');
     document.body.classList.add('auth-page');
+    
+    // Vérifier que l'image de fond se charge (debug)
+    const testImg = new Image();
+    testImg.onload = () => console.log('✅ Image de fond chargée avec succès');
+    testImg.onerror = () => console.error('❌ Erreur lors du chargement de l\'image de fond');
+    testImg.src = './icons/background.png';
   }
 }
 
@@ -5779,6 +5890,64 @@ function toggleAdminLink(show) {
 function setMessage(text, isError = false) {
   els.authMessage.textContent = text;
   els.authMessage.classList.toggle('error', isError);
+}
+
+// Afficher le loader de connexion
+function showLoginLoader() {
+  if (!els.loginLoader) return;
+  els.loginLoader.classList.remove('hidden');
+  // Petit délai pour que l'animation s'affiche
+  setTimeout(() => {
+    els.loginLoader.classList.add('visible');
+  }, 10);
+}
+
+// Cacher le loader de connexion
+function hideLoginLoader() {
+  if (!els.loginLoader) return;
+  els.loginLoader.classList.remove('visible');
+  setTimeout(() => {
+    els.loginLoader.classList.add('hidden');
+  }, 300);
+}
+
+// Animation de transition lors de la connexion
+async function animateLoginTransition() {
+  if (!els.loginLoader || !els.authView || !els.appView) return;
+  
+  // Mettre à jour le texte avec une transition douce
+  const loaderText = els.loginLoader.querySelector('.login-loader-text');
+  if (loaderText) {
+    loaderText.style.opacity = '0';
+    setTimeout(() => {
+      loaderText.textContent = 'Bienvenue !';
+      loaderText.style.opacity = '1';
+    }, 200);
+  }
+  
+  // Attendre un peu pour que l'utilisateur voie le message
+  await new Promise(resolve => setTimeout(resolve, 800));
+  
+  // Préparer l'app-view avant l'animation
+  toggleViews(true);
+  
+  // Petit délai pour que le DOM se mette à jour
+  await new Promise(resolve => setTimeout(resolve, 50));
+  
+  // Animation de zoom/fade simultanée
+  els.loginLoader.classList.add('zooming-out');
+  els.appView.classList.add('zooming-in');
+  
+  // Attendre la fin de l'animation (800ms pour l'animation de zoom)
+  await new Promise(resolve => setTimeout(resolve, 800));
+  
+  // Cacher le loader
+  hideLoginLoader();
+  
+  // Retirer la classe d'animation après un délai
+  setTimeout(() => {
+    els.appView.classList.remove('zooming-in');
+  }, 100);
 }
 
 // Met à jour la jauge de progression des badges
@@ -5913,7 +6082,21 @@ async function updateCounters(syncProfile = false) {
     els.profileSectionBadgeCount.innerHTML = `${badgeCount}<span class="badge-total"> / ${totalBadges}</span>`;
   }
   if (els.profileSectionSkillCount) {
-    els.profileSectionSkillCount.textContent = totalSkillPoints;
+    // Préserver le span "pts" lors de la mise à jour
+    const ptsSpan = els.profileSectionSkillCount.querySelector('.skill-pts');
+    if (ptsSpan) {
+      // Si le span pts existe déjà, mettre à jour seulement le texte avant
+      const textNode = Array.from(els.profileSectionSkillCount.childNodes).find(node => node.nodeType === Node.TEXT_NODE);
+      if (textNode) {
+        textNode.textContent = totalSkillPoints;
+      } else {
+        // Si pas de texte, créer un nouveau nœud texte
+        els.profileSectionSkillCount.insertBefore(document.createTextNode(totalSkillPoints), ptsSpan);
+      }
+    } else {
+      // Si le span pts n'existe pas, créer la structure complète
+      els.profileSectionSkillCount.innerHTML = `${totalSkillPoints}<span class="skill-pts">pts</span>`;
+    }
   }
   if (els.profileSectionCompletion) {
     // Calculer le pourcentage de complétion
@@ -6537,7 +6720,7 @@ function renderCalendar() {
         // Bonus disponible (remplace les jetons journaliers du dimanche)
         dayState = 'bonus-available';
         clickable = true;
-        tokenInfo = '🪙 +3 bonus';
+        tokenInfo = `🪙 +${SUNDAY_BONUS_AMOUNT} bonus`;
       }
     } else if (isConnected) {
       if (isClaimed) {
@@ -6547,7 +6730,7 @@ function renderCalendar() {
       } else {
         dayState = 'available'; // Disponible pour récupération
         clickable = true;
-        tokenInfo = '🪙 +2';
+        tokenInfo = `🪙 +${DAILY_TOKENS_AMOUNT}`;
       }
     } else {
       dayState = 'not-available'; // Pas de connexion ce jour
@@ -6778,7 +6961,7 @@ async function claimDailyTokens(dayStr) {
   try {
     // IMPORTANT : Mettre à jour le state local IMMÉDIATEMENT pour éviter les doubles clics
     // Cela empêche l'utilisateur de cliquer plusieurs fois avant que la sauvegarde soit terminée
-    const newTokens = (state.tokens || 0) + 2;
+    const newTokens = (state.tokens || 0) + DAILY_TOKENS_AMOUNT;
     const updatedClaimed = [...state.claimedDailyTokens, dayStr];
     
     // Mettre à jour le state local AVANT la sauvegarde Supabase
@@ -6816,7 +6999,7 @@ async function claimDailyTokens(dayStr) {
       console.error('Erreur lors de la réclamation des jetons journaliers:', updateError);
       
       // Annuler les changements locaux immédiatement pour éviter les incohérences
-      state.tokens = (state.tokens || 0) - 2;
+      state.tokens = (state.tokens || 0) - DAILY_TOKENS_AMOUNT;
       state.profile.tokens = state.tokens;
       state.claimedDailyTokens = state.claimedDailyTokens.filter(d => d !== dayStr);
       if (state.profile.claimed_daily_tokens) {
@@ -6877,7 +7060,7 @@ async function claimDailyTokens(dayStr) {
       // Animation sur la case du calendrier
       const dayEl = els.calendarWeek?.querySelector(`[data-day="${dayStr}"]`);
       if (dayEl) {
-        createTokenClaimAnimation(dayEl, 2);
+        createTokenClaimAnimation(dayEl, DAILY_TOKENS_AMOUNT);
       }
       
       // Mettre à jour l'affichage
@@ -6885,11 +7068,11 @@ async function claimDailyTokens(dayStr) {
       updateCalendarBadge(); // Mettre à jour la pastille du bouton calendrier
       
       // Afficher une notification
-      showTokenRewardNotification(2);
+      showTokenRewardNotification(DAILY_TOKENS_AMOUNT);
       
       // Créer une notification dans le système unifié
       if (state.user) {
-        await createDailyTokensNotification(supabase, state.user.id, dayStr, 2);
+        await createDailyTokensNotification(supabase, state.user.id, dayStr, DAILY_TOKENS_AMOUNT);
       }
       
       // Ne PAS recharger fetchProfile() ici car :
@@ -7012,7 +7195,7 @@ async function handleClaimBonus() {
     if (error) {
       console.error('Erreur lors de la réclamation du bonus:', error);
       // En cas d'erreur, annuler les changements locaux et recharger depuis Supabase
-      state.tokens = (state.tokens || 0) - 3;
+      state.tokens = (state.tokens || 0) - SUNDAY_BONUS_AMOUNT;
       state.profile.tokens = state.tokens;
       state.canClaimBonus = true;
       state.weekBonusClaimed = false;
@@ -7032,7 +7215,7 @@ async function handleClaimBonus() {
       // Animation sur la case du dimanche
       const sundayEl = els.calendarWeek?.querySelector(`[data-day="${sundayStr}"]`);
       if (sundayEl) {
-        createTokenClaimAnimation(sundayEl, 3);
+        createTokenClaimAnimation(sundayEl, SUNDAY_BONUS_AMOUNT);
         createConfettiAnimation(sundayEl);
       }
       
@@ -7041,11 +7224,11 @@ async function handleClaimBonus() {
       updateCalendarBadge();
       
       // Afficher une notification
-      showTokenRewardNotification(3, 'bonus');
+      showTokenRewardNotification(SUNDAY_BONUS_AMOUNT, 'bonus');
       
       // Créer une notification dans le système unifié
       if (state.user && sundayStr) {
-        await createSundayBonusNotification(supabase, state.user.id, sundayStr);
+        await createSundayBonusNotification(supabase, state.user.id, sundayStr, SUNDAY_BONUS_AMOUNT);
       }
     }
   } finally {
