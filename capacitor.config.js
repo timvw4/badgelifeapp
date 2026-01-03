@@ -1,9 +1,9 @@
-import { CapacitorConfig } from '@capacitor/cli';
+const { CapacitorConfig } = require('@capacitor/cli');
 
-const config: CapacitorConfig = {
+const config = {
   appId: 'com.badgelife.app',
   appName: 'BadgeLife',
-  webDir: '.',
+  webDir: 'www',
   server: {
     androidScheme: 'https',
     iosScheme: 'https'
@@ -21,10 +21,12 @@ const config: CapacitorConfig = {
       androidScaleType: "CENTER_CROP",
       showSpinner: false,
       iosSpinnerStyle: "small",
-      spinnerColor: "#06b6d4"
+      spinnerColor: "#06b6d4",
+      iosSplashResourceName: "Splash",
+      iosSplashStoryboardName: "LaunchScreen"
     }
   }
 };
 
-export default config;
+module.exports = config;
 
